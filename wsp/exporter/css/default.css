@@ -1,0 +1,213 @@
+/*
+ * (C) KCP Technologies 2011
+ */
+.footnote {
+  vertical-align: super;
+  font-size: smaller;
+}
+.footnote a:link {
+  text-decoration: none;
+}
+.external {
+  background-image: url(../images/Icon_External_Link.gif);
+  background-position: right center;
+  background-repeat: no-repeat;
+  padding-right: 15px;
+}
+    
+
+@media screen {
+    body { 
+        background-color: #6c706e; 
+    }
+
+    body.downloads { 
+        background-color: Beige; 
+    }
+
+    article {
+        margin: 1pc 5pc 1pc 17pc;
+        padding: 1pc;
+        background-color: white;
+    }
+
+    .content {
+        position: relative;
+    }
+
+    #toc {
+         position: absolute;
+         left: 1pc;
+         top: 0pc;
+         width: 15pc;
+         height: 40pc;
+         padding: 0;
+         border: thin black solid;
+         background-color: white;
+         overflow: auto;
+    }
+    #toc ul {
+        padding-left: 2em;
+        margin-left: 0;
+    }
+    #toc ul ul {
+        font-size: smaller;
+        margin-left: 0;
+        padding-left: 1em;
+    }
+    
+    .top-logo {
+        margin-left:auto;
+        margin-right:auto;
+    }
+    
+    .uilabel {
+      display:inline-block;
+      background: rgb(239,239,239);
+      margin: 1px;
+      padding: 4px;
+      border-radius: 6px;
+      -moz-border-radius: 6px;
+      -webkit-border-radius: 6px;
+      font-family:sans-serif;
+    } 
+
+}
+@media print {
+    article {
+        margin: 0;
+        padding: 1pc ;
+    }
+    #toc {
+        display: none;
+    }
+    :link {
+        text-decoration: none;
+    }
+    .json-doc {
+        page-break-inside: avoid;
+    }
+    .top-logo {
+        display: none;
+    }
+}
+
+h1 {
+    text-align: center;
+}
+
+h1,h2,h3,h4,h5,ul,ol,dl,p,.interior-block {
+    margin-left: 2pc;
+    margin-right: 2pc;
+}
+
+dt {
+    font-weight: bold;
+}
+
+dt, dd {
+    margin-right: 2pc;
+    margin-bottom: 0.5pc;
+}
+
+
+.version, .author, .copyright, .date, .motto {
+    font-style: italic;
+    font-size: larger;
+    text-align: center;
+}
+
+div.description {
+    margin-left: 2pc;
+}
+div.description:before {
+    content: 'Description: '; 
+    font-weight: bold;
+}
+div.inheritance {
+    margin-left: 2pc;
+}
+div.inheritance:before {
+    content: 'Inheritance: '; 
+    font-weight: bold;
+}
+div.reference-spec {
+    margin-left: 2pc;
+}
+div.reference-spec:before {
+    content: 'Reference Specification: '; 
+    font-weight: bold;
+}
+div.usage {
+    margin-left: 2pc;
+}
+div.usage:before {
+    content: 'Usage: '; 
+    font-weight: bold;
+}
+
+div.existence-rule {
+    margin-left: 2pc;
+}
+div.existence-rule:before {
+    content: 'Existence Rule: '; 
+    font-weight: bold;
+}
+div.example {
+    margin-top: 1pc;
+    margin-left: 2pc;
+}
+
+.json-doc:before {
+    content: '{';
+}
+.json-doc:after {
+    content: '}';
+}
+
+.json-doc {
+    list-style: none;
+    padding: 1pc; 
+    border: thin gray solid;
+    background-color: #eee;
+    margin-top: 1pc;
+    margin-right: 3pc;
+    margin-bottom: 0;
+    margin-left: 2pc;
+    border-radius: 8px;
+    -moz-border-radius: 8px;
+    -webkit-border-radius: 8px;
+    font-family: monospace;
+}
+
+.json-doc .json-doc {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.json-doc li {
+    margin-left: 2pc;
+}
+
+.type,.kind,.genus,.constraint {
+    font-style: italic;
+}
+
+.example {
+    font-family: monospace;
+    display: block;
+    padding: 1em;
+    border: thin #ccc solid;
+/*
+    margin-right: 3pc;
+    margin-left: 3pc;
+*/
+    margin-top: 0.5pc;
+    margin-bottom: 0.5pc;
+    background-color: #eee;
+}
+
+.argument {
+  font-weight: bold;
+}

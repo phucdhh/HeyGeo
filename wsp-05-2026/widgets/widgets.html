@@ -1,0 +1,267 @@
+<div id="widget">
+    <div id="widget_control" class="widget_controlWidth" style="opacity: 1;">
+        <div class="widget_handle"></div> 
+        <!-- Style Widget --> 
+        <button id="widget_StyleButtonID" class="widget_controlButton widgettip"> 
+            <span class="widgettiptext">Style Widget</span> 
+            <img class="widget_controlIcon" src="https://geometricfunctions.org/includes/v4.6/widgets/style-icon.png">
+        </button>
+        <div id="wStyleWidget" class="widget">
+            <div id="wStylePane" class="widgetPane">
+                <div id="widget_pointStyle" class="widgetElem"> <img id="pointStyleCheckbox" class="style_paneCheckbox"
+                        tabindex="0" src="https://geometricfunctions.org/includes/v4.6/widgets/unchecked.png">
+                    <div class="style_paneBackground widget_pointImgWidth"></div> <img
+                        class="style_paneContent widget_pointImgWidth"
+                        src="https://geometricfunctions.org/includes/v4.6/widgets/pointstyle-grid.png">
+                    <div id="pointStyleSelector" class="style_paneSelector">&nbsp;</div>
+                </div>
+                <div id="widget_lineStylePane" class="widgetElem"> <img id="lineStyleCheckbox"
+                        class="style_paneCheckbox" tabindex="0"
+                        src="https://geometricfunctions.org/includes/v4.6/widgets/unchecked.png">
+                    <div class="style_paneBackground widget_lineStyleWidth"></div> <img
+                        class="style_paneContent widget_lineStyleWidth"
+                        src="https://geometricfunctions.org/includes/v4.6/widgets/linestyle-grid.png">
+                    <div id="widget_lineStyleSelector" class="style_paneSelector">&nbsp;</div>
+                </div>
+                <div id="widget_colorPane" class="widgetElem"> <img id="objectColorCheckbox" class="style_paneCheckbox"
+                        tabindex="0" src="https://geometricfunctions.org/includes/v4.6/widgets/unchecked.png"> <img
+                        class="widget_colorIcon"
+                        src="https://geometricfunctions.org/includes/v4.6/widgets/object-icon.png"> <img
+                        id="textColorCheckbox" class="style_paneCheckbox" tabindex="0"
+                        src="https://geometricfunctions.org/includes/v4.6/widgets/unchecked.png"> <img
+                        class="widget_colorIcon"
+                        src="https://geometricfunctions.org/includes/v4.6/widgets/text-icon.png">
+                    <div id="widget_colorGrid" class="style_paneBackground">
+                        <div class="widget_color_column" style="left:0px;">
+                            <div class="block0a"></div>
+                            <div class="block0b"></div>
+                            <div class="block0c"></div>
+                        </div>
+                        <div class="widget_color_column" style="left:27px;">
+                            <div class="block1a"></div>
+                            <div class="block1b"></div>
+                            <div class="block1c"></div>
+                        </div>
+                        <div class="widget_color_column" style="left:54px;">
+                            <div class="block2a"></div>
+                            <div class="block2b"></div>
+                            <div class="block2c"></div>
+                        </div>
+                        <div class="widget_color_column" style="left:81px;">
+                            <div class="block3a"></div>
+                            <div class="block3b"></div>
+                            <div class="block3c"></div>
+                        </div>
+                        <div class="widget_color_column" style="left:108px;">
+                            <div class="block4a"></div>
+                            <div class="block4b"></div>
+                            <div class="block4c"></div>
+                        </div>
+                        <div class="widget_color_column" style="left:135px;">
+                            <div class="block5a"></div>
+                            <div class="block5b"></div>
+                            <div class="block5c"></div>
+                        </div>
+                        <div class="widget_color_column" style="left:162px;">
+                            <div class="block6a"></div>
+                            <div class="block6b"></div>
+                            <div class="block6c"></div>
+                        </div>
+                        <div class="widget_color_column" style="left:189px;">
+                            <div class="block7a"></div>
+                            <div class="block7b"></div>
+                            <div class="block7c"></div>
+                        </div>
+                        <div class="widget_color_column" style="left:216px;">
+                            <div class="block8a"></div>
+                            <div class="block8b"></div>
+                            <div class="block8c"></div>
+                        </div>
+                        <div id="widget_colorSelector" class="style_paneSelector">&nbsp; </div>
+                    </div>
+                </div>
+                <div class="widgetElem wDismissPane"> <img class="wDismissButton confirm_button"
+                        src="https://geometricfunctions.org/includes/v4.6/widgets/confirm.png"> <img
+                        class="wDismissButton cancel_button"
+                        src="https://geometricfunctions.org/includes/v4.6/widgets/cancel.png"> </div>
+            </div>
+        </div> 
+        <!-- Trace Widget --> 
+        <button id="widget_TraceButtonID" class="widget_controlButton widgettip"> 
+            <span class="widgettiptext">Trace Widget</span>
+            <img class="widget_controlIcon" src="https://geometricfunctions.org/includes/v4.6/widgets/trace-icon.png">
+        </button>
+        <div id="wTraceWidget" class="widget">
+            <div id="wTracePrompt" class="widgetPrompt widgetElem" style="display: none;"> Tap an object to turn its
+                tracing on or off.<br>Traced objects glow to show what is being traced. </div>
+            <!-- New trace pane May 2025 -->
+            <div id="wTracePane" class="widgetPane widgetElem" style="display: block;">
+                <div id="wTraceTopRow"> 
+                    <div class="wTraceDropdown hoverParent">
+                        <div class="wTraceDropbtn dragExclude hoverButton">🔽</div>
+                        <div class="wTraceDropdownContent dragExclude hoverContent" style="display: none;"> Save
+                            Traces:<br> <label> <input type="checkbox" id="wPageTraces" checked="true"> Page Traces
+                            </label> <br> <label> <input type="checkbox" id="wUndoRedoTraces" class="syncBox"
+                                    checked="false"> Undo/Redo Traces </label> </div>
+                    </div>
+                </div> 
+                <label> <input type="checkbox" id="wTraceEnabled" checked="true"> Traces Enabled</label> <br> 
+                <label title="" style="color: inherit;"> <input type="checkbox" id="wTraceFading"
+                        checked="true"> Traces Fade </label> <br>
+                <button type="button" id="wEraseTraces"> Erase Traces </button>
+            </div> 
+            <!-- End of modified trace pane May 2026 -->
+        </div> 
+        <!-- Label Widget --> 
+        <button id="widget_LabelButtonID" class="widget_controlButton widgettip"> 
+            <span class="widgettiptext">Label Widget</span> 
+            <img class="widget_controlIcon" src="https://geometricfunctions.org/includes/v4.6/widgets/label-icon.png"> 
+        </button>
+        <div id="wLabelWidget" class="widget" style="display: none;">
+            <div id="wLabelPrompt" class="widgetPrompt widgetElem" style="display: none;">Tap an object or label to show
+                or change <br>the label. Tap again to hide the label. <br>Tap one label, then another, to copy the
+                style. </div>
+            <div id="wLabelPane" class="widgetPane" style="display: none;">
+                <div class="wLabelControls widgetElem">
+                    <div>
+                        <div class="labelCombo labelSizeCombo"> <select class="labelFontSize dragExclude">
+                                <option value=""> </option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                                <option value="12">12</option>
+                                <option value="14">14</option>
+                                <option value="16">16</option>
+                                <option value="18">18</option>
+                                <option value="24">24</option>
+                                <option value="36">36</option>
+                            </select> <input id="wLabelFontSize" class="labelFontSize dragExclude" type="text"
+                                name="labelFontSize" value=""> </div>
+                        <div class="labelCombo labelFontCombo"> <select id="wLabelFont"
+                                class="input labelFont dragExclude">
+                                <optgroup label="Sans Serif">
+                                    <option value="Arial, Helvetica, sans-serif">Arial</option>
+                                    <option value="Comic Sans MS, cursive, sans-serif">Comic Sans MS</option>
+                                    <option value="Impact, Charcoal, sans-serif">Impact</option>
+                                    <option value="Lucida Sans Unicode, Lucida Grande, sans-serif">Lucida Sans Unicode
+                                    </option>
+                                    <option value="Tahoma, Geneva, sans-serif">Tahoma</option>
+                                    <option value="Trebuchet MS, Helvetica, sans-serif">Trebuchet MS</option>
+                                    <option value="Verdana, Geneva, sans-serif">Verdana</option>
+                                </optgroup>
+                                <optgroup label="Serif">
+                                    <option value="Garamond, serif">Garamond</option>
+                                    <option value="Georgia, serif">Georgia</option>
+                                    <option value="Palatino, Palatino Linotype, Book Antiqua, serif">Palatino</option>
+                                    <option value="Times New Roman, Times, serif">Times New Roman</option>
+                                </optgroup>
+                                <optgroup label="Mono-spaced">
+                                    <option value="Courier, Courier New, monospace">Courier</option>
+                                    <option value="Monaco, Lucida Console, monospace">Monaco</option>
+                                </optgroup>
+                            </select> </div>
+                        <div class="wCharDropdown dragExclude hoverParent">
+                            <div class="wCharDropbtn hoverButton">🔽</div>
+                            <div class="wCharDropdownContent hoverContent dragExclude">
+                                <div class="column">
+                                    <div>△</div>
+                                    <div>⟂<title>Perpendicular</title></div>
+                                    <div>‖</div>
+                                    <div>∠</div>
+                                    <div>⊙</div>
+                                    <div>°</div>
+                                    <div>≅</div>
+                                    <div>≈</div>
+                                    <div>≠</div>
+                                    <div>≤</div>
+                                    <div>≥</div>
+                                    <div>∼</div>
+                                </div>
+                                <div class="column">
+                                    <div>π</div>
+                                    <div>θ</div>
+                                    <div>α</div>
+                                    <div>β</div>
+                                    <div>γ</div>
+                                    <div>δ</div>
+                                    <div>ε</div>
+                                    <div>φ</div>
+                                    <div>τ</div>
+                                    <div>Δ</div>
+                                    <div>Σ</div>
+                                    <div>Π</div>
+                                </div>
+                                <div class="column">
+                                    <div>–</div>
+                                    <div>·</div>
+                                    <div>±</div>
+                                    <div>÷</div>
+                                    <div>∫</div>
+                                    <div>•</div>
+                                    <div>→</div>
+                                    <div>⇒</div>
+                                    <div>∴</div>
+                                    <div>∃</div>
+                                    <div>∀</div>
+                                    <div>∞</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div> <span id="wLabelEditLabel">Label: </span><br> <input id="wLabelEditText"
+                            class="dragExclude"><br> </div>
+                    <div id="wShowLabelButton"> <label><input id="wLabelShow" type="checkbox">Show Label</label> &nbsp;
+                        &nbsp; </div>
+                </div>
+                <div id="measureButtons" class="wNameOrigin3 wLabelRadios widgetElem" style="display: none;"> <label
+                        class="radio-inline"> <input type="radio" name="measureStyle" value="auto"> Auto </label> <br>
+                    <label class="radio-inline"> <input type="radio" name="measureStyle" value="manual"> Manual </label>
+                    <br> <label class="radio-inline"> <input type="radio" name="measureStyle" value="none"> None
+                    </label> </div>
+                <div id="paramButtons" class="wNameOrigin2 wLabelRadios widgetElem" style="display: none;"> <label
+                        class="radio-inline"> <input type="radio" name="measureStyle" value="manual"> Manual </label>
+                    <br> <label class="radio-inline"> <input type="radio" name="measureStyle" value="none"> None
+                    </label> </div>
+                <div id="transImageButtons" class="wNameOrigin4 wLabelRadios widgetElem" style="display: none;"> <label
+                        class="radio-inline"> <input type="radio" name="notationStyle" value="prime"> Prime </label>
+                    <br> <label class="radio-inline"> <input type="radio" name="notationStyle" value="shortFn"> Short
+                    </label> <br> <label class="radio-inline"> <input type="radio" name="notationStyle" value="fullFn">
+                        Full </label> <br> <label class="radio-inline"> <input type="radio" name="notationStyle"
+                            value="manual"> Manual </label> </div>
+                <div class="wDismissPane widgetElem"> <img class="wDismissButton confirm_button"
+                        src="https://geometricfunctions.org/includes/v4.6/widgets/confirm.png"> <img
+                        class="wDismissButton cancel_button"
+                        src="https://geometricfunctions.org/includes/v4.6/widgets/cancel.png"> </div>
+            </div>
+        </div> 
+        <!-- Visibility Widget -->
+        <button id="widget_VisibilityButtonID" class="widget_controlButton widgettip">
+            <span class="widgettiptext">Visibility Widget</span> 
+            <img class="widget_controlIcon" src="https://geometricfunctions.org/includes/v4.6/widgets/visibility-icon.png"> 
+        </button>
+        <div id="wVisibilityWidget" class="widget">
+            <div id="wVisibilityPrompt" class="widgetPrompt widgetElem"> Hidden objects appear faded (gray).<br> Tap an
+                object to change its visibility.<br> Tap the visibility icon (<img
+                    src="https://geometricfunctions.org/includes/v4.6/widgets/visibility-icon.png" id="wVisIcon">) when
+                done. </div>
+        </div> 
+        <!-- Delete Widget --> 
+        <button id="widget_DeleteButtonID" class="widget_controlButton widgettip"> 
+            <span class="widgettiptext">Delete Widget</span> 
+            <img class="widget_controlIcon" src="https://geometricfunctions.org/includes/v4.6/widgets/delete-icon.png"> 
+        </button>
+        <div id="wDeleteWidget" class="widget">
+            <div id="wDeletePrompt" class="widgetPrompt widgetElem">Tap an object to delete it <br>along with all the
+                objects <br>that depend on it. </div>
+        </div>
+        <div class="util-popup" id="delete-confirm-modal">
+            <div class="util-popup-content">
+                <div class="util-popup-title">Delete Highlighted Objects?</div>
+                <div class="util-popup-legend">All highlighted objects will be deleted.</div>
+                <div class="clearfix"></div> <input type="button" id="deleteConfirm"
+                    class="close util-popup-button dragExclude" value="Delete"> <input type="button" id="deleteCancel"
+                    class="close util-popup-button dragExclude" value="Cancel">
+                <div class="clearfix"></div>
+            </div>
+        </div>
+    </div>
+</div>

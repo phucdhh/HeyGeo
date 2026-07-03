@@ -1,0 +1,269 @@
+var trianglevar = 
+{
+  "metadata" : {
+    "width" : 164,
+    "height" : 135,
+    "wsp-version" : "4.8.0",
+    "wsp-build-number" : "1077",
+    "wsp-build-stamp" : "stek-MBP-2\/20230622220310",
+    "exporter-version" : "5.10(dev)",
+    "exporter-build" : "3054(dev)",
+    "exporter-debug" : true,
+    "original-document-name" : "Triangle.gsp",
+    "start-page" : "1"
+    },
+  "resources" : {
+    "fontList" : [
+      "\"Times\", sans-serif"
+      ]
+    },
+  "pages" : [
+    {
+      "metadata" : {
+        "title" : "1",
+        "id" : "1",
+        "sketchRect" : {
+          "top" : 0,
+          "left" : 0,
+          "bottom" : 135,
+          "right" : 164
+          }
+        },
+      "preferences" : {
+        "units" : {
+          "length" : "cm",
+          "angle" : "deg"
+          },
+        "precision" : {
+          "length" : 2,
+          "angle" : 2,
+          "scalar" : 2
+          },
+        "colorableComponents" : {
+          "ActionButton" : {
+            "color" : "rgb(255,128,0)"
+            }
+          },
+        "text" : {
+          "mathItalicization" : true,
+          "textTypes" : {
+            "Label" : {
+              "font-family" : "\"Times\", sans-serif"
+              },
+            "Caption" : {
+              "font-family" : "\"Times\", sans-serif"
+              },
+            "Measurement" : {
+              "font-family" : "\"Times\", sans-serif"
+              },
+            "Action" : {
+              "label" : {
+                "font-family" : "\"Arial\", sans-serif"
+                }
+              },
+            "Table" : {
+              "font-family" : "\"Arial\", sans-serif"
+              },
+            "AxisTicksAndOptionalLabel" : {
+              "font-family" : "\"Geneva\", sans-serif"
+              }
+            }
+          }
+        },
+      "objects" : {
+        "1" : {
+          "kind" : "Point",
+          "genus" : "Point",
+          "constraint" : "Free",
+          "geom" : {
+            "loc" : {
+              "x" : 23,
+              "y" : 103
+              }
+            },
+          "debug" : {
+            "exists" : true,
+            "loc" : {
+              "x" : 23,
+              "y" : 103
+              }
+            }
+          },
+        "2" : {
+          "kind" : "Point",
+          "genus" : "Point",
+          "constraint" : "Free",
+          "geom" : {
+            "loc" : {
+              "x" : 143,
+              "y" : 103
+              }
+            },
+          "debug" : {
+            "exists" : true,
+            "loc" : {
+              "x" : 143,
+              "y" : 103
+              }
+            }
+          },
+        "3" : {
+          "kind" : "Point",
+          "genus" : "Point",
+          "constraint" : "Free",
+          "geom" : {
+            "loc" : {
+              "x" : 79,
+              "y" : 23
+              }
+            },
+          "debug" : {
+            "exists" : true,
+            "loc" : {
+              "x" : 79,
+              "y" : 23
+              }
+            }
+          },
+        "4" : {
+          "kind" : "Straight",
+          "genus" : "Segment",
+          "parents" : {
+            "p0" : "1",
+            "p1" : "2"
+            },
+          "constraint" : "Segment",
+          "debug" : {
+            "exists" : true,
+            "p0" : {
+              "x" : 23,
+              "y" : 103
+              },
+            "p1" : {
+              "x" : 143,
+              "y" : 103
+              },
+            "pathPositions" : {
+              "zeroPosition" : {
+                "x" : 23,
+                "y" : 103
+                },
+              "zeroDerivative" : {
+                "x" : 120,
+                "y" : 0
+                },
+              "middlePosition" : {
+                "x" : 83,
+                "y" : 103
+                },
+              "middleDerivative" : {
+                "x" : 120,
+                "y" : 0
+                },
+              "onePosition" : {
+                "x" : 143,
+                "y" : 103
+                },
+              "oneDerivative" : {
+                "x" : 120,
+                "y" : 0
+                }
+              }
+            }
+          },
+        "5" : {
+          "kind" : "Straight",
+          "genus" : "Segment",
+          "parents" : {
+            "p0" : "2",
+            "p1" : "3"
+            },
+          "constraint" : "Segment",
+          "debug" : {
+            "exists" : true,
+            "p0" : {
+              "x" : 143,
+              "y" : 103
+              },
+            "p1" : {
+              "x" : 79,
+              "y" : 23
+              },
+            "pathPositions" : {
+              "zeroPosition" : {
+                "x" : 143,
+                "y" : 103
+                },
+              "zeroDerivative" : {
+                "x" : -64,
+                "y" : -80
+                },
+              "middlePosition" : {
+                "x" : 111,
+                "y" : 63
+                },
+              "middleDerivative" : {
+                "x" : -64,
+                "y" : -80
+                },
+              "onePosition" : {
+                "x" : 79,
+                "y" : 23
+                },
+              "oneDerivative" : {
+                "x" : -64,
+                "y" : -80
+                }
+              }
+            }
+          },
+        "6" : {
+          "kind" : "Straight",
+          "genus" : "Segment",
+          "parents" : {
+            "p0" : "3",
+            "p1" : "1"
+            },
+          "constraint" : "Segment",
+          "debug" : {
+            "exists" : true,
+            "p0" : {
+              "x" : 79,
+              "y" : 23
+              },
+            "p1" : {
+              "x" : 23,
+              "y" : 103
+              },
+            "pathPositions" : {
+              "zeroPosition" : {
+                "x" : 79,
+                "y" : 23
+                },
+              "zeroDerivative" : {
+                "x" : -56,
+                "y" : 80
+                },
+              "middlePosition" : {
+                "x" : 51,
+                "y" : 63
+                },
+              "middleDerivative" : {
+                "x" : -56,
+                "y" : 80
+                },
+              "onePosition" : {
+                "x" : 23,
+                "y" : 103
+                },
+              "oneDerivative" : {
+                "x" : -56,
+                "y" : 80
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  };

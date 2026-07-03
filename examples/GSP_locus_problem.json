@@ -1,0 +1,177 @@
+{
+  "metadata" : {
+    "width" : 780,
+    "height" : 540,
+    "wsp-version" : "4.8.0",
+    "exporter-version" : "5.11",
+    "exporter-build" : "3060",
+    "exporter-debug" : false,
+    "original-document-name" : "Untitled",
+    "start-page" : "1"
+    },
+  "resources" : {
+    "fontList" : [
+      "\"Times New Roman\", serif"
+      ]
+    },
+  "pages" : [
+    {
+      "metadata" : {
+        "title" : "1",
+        "id" : "1",
+        "sketchRect" : {
+          "top" : 0,
+          "left" : 0,
+          "bottom" : 540,
+          "right" : 780
+          }
+        },
+      "preferences" : {
+        "units" : {
+          "length" : "cm",
+          "angle" : "deg"
+          },
+        "precision" : {
+          "length" : 2,
+          "angle" : 2,
+          "scalar" : 2
+          },
+        "colorableComponents" : {
+          "ActionButton" : {
+            "color" : "rgb(255,128,0)"
+            }
+          },
+        "text" : {
+          "mathItalicization" : true,
+          "textTypes" : {
+            "Label" : {
+              "font-family" : "\"Times New Roman\", serif",
+              "font-size" : 18
+              },
+            "Caption" : {
+              "font-family" : "\"Times New Roman\", serif"
+              },
+            "Measurement" : {
+              "font-family" : "\"Times New Roman\", serif"
+              },
+            "Action" : {
+              "label" : {
+                "font-family" : "\"Arial\", sans-serif"
+                }
+              },
+            "Table" : {
+              "font-family" : "\"Arial\", sans-serif"
+              },
+            "AxisTicksAndOptionalLabel" : {
+              "font-family" : "\"Arial\", sans-serif"
+              }
+            }
+          }
+        },
+      "objects" : {
+        "1" : {
+          "kind" : "Point",
+          "genus" : "Point",
+          "constraint" : "Free",
+          "geom" : {
+            "loc" : {
+              "x" : 296,
+              "y" : 183
+              }
+            }
+          },
+        "2" : {
+          "kind" : "Point",
+          "genus" : "Point",
+          "constraint" : "Free",
+          "geom" : {
+            "loc" : {
+              "x" : 391,
+              "y" : 239
+              }
+            }
+          },
+        "3" : {
+          "kind" : "Circle",
+          "genus" : "Circle",
+          "parents" : {
+            "p0" : "1",
+            "p1" : "2"
+            },
+          "constraint" : "CircleFromTwoPoints"
+          },
+        "4" : {
+          "kind" : "Point",
+          "genus" : "Point",
+          "constraint" : "Free",
+          "geom" : {
+            "loc" : {
+              "x" : 105,
+              "y" : 176
+              }
+            }
+          },
+        "5" : {
+          "kind" : "Point",
+          "genus" : "PointOnPath",
+          "parents" : {
+            "path" : "3"
+            },
+          "value" : 0.4870071726142185,
+          "constraint" : "PointOnPath"
+          },
+        "6" : {
+          "kind" : "Straight",
+          "genus" : "Segment",
+          "parents" : {
+            "p0" : "4",
+            "p1" : "5"
+            },
+          "constraint" : "Segment"
+          },
+        "7" : {
+          "kind" : "Point",
+          "genus" : "Midpoint",
+          "parents" : {
+            "path" : "6"
+            },
+          "constraint" : "Midpoint"
+          },
+        "8" : {
+          "kind" : "Straight",
+          "genus" : "Perpendicular",
+          "parents" : {
+            "p0" : "7",
+            "line" : "6"
+            },
+          "constraint" : "Perpendicular"
+          },
+        "9" : {
+          "kind" : "Sampler",
+          "genus" : "Envelope",
+          "parents" : {
+            "drivenObject" : "8",
+            "domainObject" : "3",
+            "driverObject" : "5",
+            "0" : "6",
+            "1" : "7",
+            "2" : "8"
+            },
+          "constraint" : "GeomLocus",
+          "style" : {
+            "color" : "rgb(102,102,179)",
+            "line-style" : "solid",
+            "width" : 3
+            },
+          "numSamples" : 58,
+          "isDiscrete" : false,
+          "showEndpoints" : false,
+          "driverDomain" : {
+            "low" : 0,
+            "high" : 1.0000000000000022
+            }
+          }
+        }
+      }
+    ]
+  }

@@ -1,0 +1,1487 @@
+#widget {
+	position:absolute;
+	display: flex;
+	flex-wrap: nowrap;
+	touch-action: none;
+	box-sizing: border-box;
+	width: max-content;
+	left: 2px;
+	font-size: 14px;
+	z-index: 2; /* stay above the resize button */
+}
+
+#widgetParent {
+	position: relative;
+	height:0;
+	width:100%;
+}
+
+#widget * {
+	box-sizing: border-box;
+}
+
+.widget_controlWidth {
+		width:32px;
+}
+
+#widget_colorPane {
+	width: 256px;
+}
+
+#widget_colorGrid {
+	width: 244px;
+}
+
+#widget_control {
+	float:left;
+	text-align: left;
+	position:relative;
+	margin:0;
+	padding: 0;
+	border: 2px solid black;
+	border-radius: 0 0 5px 5px;
+  border-collapse: unset;	/* sns: Why was this unset? */
+	background-color: #eee;
+	height: max-content;
+	cursor: move;
+	z-index: 2;
+}
+
+.widget_handle {
+	position: relative;
+	top: -10px;
+	margin-bottom:-10px;
+	height: 10px;
+	width: 32px;
+	border: 2px solid black;
+	border-bottom: none;
+	border-radius: 5px 5px 0 0;
+	left: -2px;
+	margin-bottom: -10px;
+	background: repeating-linear-gradient( 50deg, #bbb, #eee 1px, #eee 1px, #bbb 2px );
+}
+
+#widget_control button {
+	outline: 0;
+	padding: 2px 6px;
+	position: relative;
+	z-index: auto;
+}
+
+/* sns: Nick observed "For chrome & safari, browser-generated focus is ugly; replace it with a box-shadow."
+  sns: The rounded outline is a bit clearer, I think, and still reasonably attractive. (undo/redo buttons have similar styles, in wsp-skin-lib.less)
+  TO-DO: COMPARE IN CHROME & SAFARI
+	#widget_control button:focus {
+    box-shadow: 0 0 0 3px lightblue;
+*/
+#widget_control button:focus {
+	outline: solid 3px blue;
+	border-radius: 4px;
+	z-index: 1;
+}
+
+label:has(> input[value="undoredotraces"]) { /* Don't show the Undo/Redo Traces checkbox in the tool library */
+	display: none;
+}
+
+label:has(> input#wUndoRedoTraces) {
+	color: gray;
+}
+
+.wsp-undo-redo button {
+	position: relative;
+	z-index: auto;
+	height: 44px;
+}
+
+.wsp-undo-redo button:focus {
+	outline: solid 3px blue;
+	border-radius: 4px;
+	z-index: 1;
+}
+
+/* Tooltip container */
+.widgettip {
+	position: relative;
+	display: inline-block;
+}
+
+/* Tooltip text */
+.widgettip .widgettiptext {
+	visibility: hidden;
+	background-color: #ddd;
+	color: #444;
+	text-align: center;
+	padding: 5px 0;
+	border-radius: 6px;
+	width: 110px;
+	top: -5px;
+	left: 105%;
+	position: absolute;
+	z-index: 1;
+}
+
+/* Show the widgettip text when you mouse over the widgettip container */
+.widgettip:hover .widgettiptext {
+	visibility: visible;
+}
+
+.widgettip .widgettiptext::after { /* Add an arrow */
+	content: " ";
+	position: absolute;
+	top: 50%;  /* At the top of the widgettip */
+	right: 100%;
+	margin-top: -5px;
+	border-width: 5px;
+	border-style: solid;
+	border-color: transparent #ddd transparent transparent;
+}
+
+.widget_controlButton {
+	width: 28px;
+	height: 23px;
+	border: none;
+	border-top: 2px solid black;
+	border-collapse: collapse;
+	left: 0px;
+	padding-top: 1px;
+	margin: 0 auto;
+	margin-top: 0px;
+	cursor: pointer;
+	background-color: white;
+}
+
+.widget_controlButton.widget_active {
+	background-color: #ffff00;
+}
+
+.widget_controlIcon {
+	width: 16px;
+}
+
+#wContainer {
+	float: left;
+	width: fit-content;
+	height: fit-content;
+}
+
+#widgetPanels {
+	display: none;
+}
+
+#widget_lineStyleSelector {
+	width: 50px;
+}
+
+#widget_colorSelector {
+	height:26px;
+	width:26px;
+	border:1px solid;
+	top: 2px;
+	left: 28px;
+	display: none;
+ }
+
+.widget_colorIcon {
+	height: 18px;
+	padding-bottom:5px;
+}
+
+.widgetElem { /* For full-height widget-pane elements arranged left to right */
+	float: left;
+	position: relative;
+	margin: 0;
+	margin-left: -1px;
+	margin-top: -1px;
+	padding: 5px;
+	padding-top: 0px;
+	border: 1px solid;
+	height: 109px;
+	background-color: #eeeeee;
+	z-index: 1;
+	 /* display: inline-block; ignored due to float */
+	cursor: move;
+}
+
+.wDismissPane {
+	width: 34px;
+}
+
+.widgetDisplay {  /* styles for both prompt and pane */
+	font-size: 16px;
+	font-weight: 200;
+	text-align: left;
+	padding:4px 12px 0px 12px;
+	border: 1px solid;
+	height: 109px;
+	background-color: #eeeeee;
+	margin-left: -1px;
+	cursor: move;
+}
+
+#wStylePane {
+	padding: 0;
+	min-width: 489px;
+}
+
+#widget_lineStylePane {
+	width: 167px;
+}
+
+.widget_pointStyle {
+	width:34px;
+	padding: 5px;
+}
+
+.widget_pointImgWidth {
+	width: 21px;
+}
+.widget_lineStyleWidth {
+	width:154px;
+}
+
+.clearfix::after, .wsp-button-bar::after, div.util-popup-button::after {
+	/*  Use clearfix for any element that needs "clear: both".
+	 *  Always clear after wsp-button-bar and util dialog confirm/cancel button groups
+	 *  This version from https://css-tricks.com/snippets/css/clear-fix/ */
+	content: "";
+	visibility: hidden; 
+	display: block; 
+	height: 0;
+	clear: both;
+}
+
+.style_paneCheckbox {
+	padding:5px;
+	padding-right:0;
+	width:17px;
+	cursor: pointer;
+	position: relative;
+	top: 0;
+	top: 0px
+}
+
+.style_paneBackground {
+	position:absolute;
+	top:20px;
+	left:5px;
+	height:78px;
+	background-color:#ffffff;
+	z-index:2;
+}
+
+.style_paneContent {
+	position:absolute;
+	top:20px;
+	left:5px;
+	height:81px;
+	z-index:4; 
+}
+
+.style_paneSelector {
+	position:absolute;
+	background-color:#ddf;
+	height:19px;
+	width:19px;
+	left:6px;
+	z-index:3;
+	display:none;
+}
+
+#widget_pointStyle {
+	width: 34px;
+}
+
+.widget_color_column {
+	position:absolute;
+	width:27px;
+	height:78px;
+}
+
+.widget_color_column>div {
+	position:relative;
+	margin: 5px;
+	width:20px;
+	height:20px;
+	z-index:4;
+	border: 1px solid black; 
+}
+
+/* Define the colors for the color widget */
+.block0a {background-color: #ffffff;}
+.block0b {background-color: #c0c0c0;}
+.block0c {background-color: #000000;}
+.block1a {background-color: #ff0000;}
+.block1b {background-color: #d85656;}
+.block1c {background-color: #7f0000;}
+.block2a {background-color: #ff7f00;}
+.block2b {background-color: #c0854a;}
+.block2c {background-color: #7f3f00;}
+.block3a {background-color: #ffff00;}
+.block3b {background-color: #d8d856;}
+.block3c {background-color: #7f7f00;}
+.block4a {background-color: #00ff00;}
+.block4b {background-color: #56d856;}
+.block4c {background-color: #007f00;}
+.block5a {background-color: #00ffff;}
+.block5b {background-color: #56d8d8;}
+.block5c {background-color: #007f7f;}
+.block6a {background-color: #0000ff;}
+.block6b {background-color: #5656d8;}
+.block6c {background-color: #00007f;}
+.block7a {background-color: #7f00ff;}
+.block7b {background-color: #8a66d9;}
+.block7c {background-color: #3f007f;}
+.block8a {background-color: #ff00ff;}
+.block8b {background-color: #d856d8;}
+.block8c {background-color: #7f007f;}
+
+/* Label Widget styles */
+#wLabelPane {
+	min-width: 320px;
+	z-index: 1;
+}
+
+#wLabelPrompt {
+	min-width: 275px; /* prevent wrapping during hide/show */
+}
+
+#wLabelEditText {
+	padding: 2px;
+	width: 256px;
+	margin: 2px 0;
+}
+
+#wLabelEditText:disabled {
+	background-color: #eee;
+}
+
+#wLabelEditLabel:disabled {
+	color: gray;
+}
+
+#wShowLabelButton {
+	padding-top: 5px;
+	padding-bottom: 5px;
+}
+
+.wLabelControls {
+	font-size: 14px;
+	padding-top: 5px;
+	min-width: 270px;
+	text-align: left;
+	z-index: 2; /* to be in front of dismissPane */
+}
+
+.wDismissButton {
+	position:relative;
+	width: 24px;
+	cursor: pointer;
+}
+
+.confirm_button {
+	top: 19px;
+}
+
+.cancel_button {
+	top: 35px;
+}
+
+.labelCombo {
+	position:relative;
+	background-color:white;
+	border:solid grey 1px;
+	height:19px;
+	float:left;
+	margin-right: 8px;
+	margin-bottom: 8px;
+}
+
+.labelCombo select {
+	position:absolute;
+	top:0px;
+	left:0px;
+	border:none;
+	margin:0;
+}
+
+.labelCombo input {
+	position:absolute;
+	top:0px;
+	left:0px;
+	padding:1px;
+	border:none;
+}
+
+.labelCombo select:focus, .labelCombo input:focus {
+	outline:none;
+}
+
+.labelSizeCombo {
+	width:48px;
+}
+
+.labelSizeCombo select {
+	width: 48px;
+}
+
+.labelSizeCombo input {
+	width:32px;
+}
+
+.labelFontCombo {
+	width: 176px;
+}
+
+.labelFontCombo select {
+	width: 176px;
+	font-size: 12px;
+}
+
+.labelFontCombo input {
+	width: 160px;
+}
+
+.wTraceDropdown { /* wTraceDropdown is deprecated as of 05/26 */
+
+	display: none;
+}
+
+/* Char & Trace dropdown containers */
+.wCharDropdown, .wTraceDropdown {
+	font: inherit; /* Important for vertical align on mobile phones */
+	margin: 0; /* Important for vertical align on mobile phones */
+	text-align: center;
+	width: 16px;
+	/* border: thin solid gray; */
+	font-size: 13px;
+	position: relative;
+	width: 18px;
+	float: left;
+	z-index:4;
+	}
+
+.wCharDropdown, .wTraceDropdown {
+	text-align: center;
+	/* box-shadow: 1px 1px 1px #888; */
+}
+
+.wCharDropbtn, .wTraceDropbtn {
+	height: 16px;
+}
+
+.wTraceDropdown {
+	float: right;
+}
+
+.wTraceDropbtn {
+	float: right;
+	font-size: 16px;
+	margin: 3px 0px;
+}
+
+/* Char dropdown content (hidden by default) */
+.wCharDropdownContent, .wTraceDropdownContent {
+	display: none;
+	position: absolute;
+	border: 1px solid black;
+	padding: 3px 6px;
+	background-color: #fff;
+	font-size: 14px;
+	top: 0px;
+}
+
+.wCharDropdownContent {
+	width: 80px;
+}
+
+.wTraceDropdownContent {
+	width: max-content;
+	text-align: left;
+	padding: 4px;
+	background-color: #eee;
+}
+
+/* Create three equal columns that float next to each other */
+.column {
+	float: left;
+	width: 33%;
+	padding: 0;
+	line-height: 19px;
+}
+
+/* Style links inside the columns */
+.column div {
+	float: none;
+	color: black;
+	padding: 0;
+	text-decoration: none;
+	display: block;
+	text-align: center;
+}
+
+/* Add a background color on hover */
+.column div:hover {
+	background-color: #ddd;
+}
+
+.wNameOrigin2 {
+	font-size: 14px;
+	padding-top: 18px;
+	line-height: 34px;
+}
+
+.wNameOrigin3 {
+	font-size: 14px;
+	padding-top: 8px;
+	line-height: 30px;
+}
+
+.wNameOrigin4 {
+	font-size: 14px;
+	padding-top: 5px;
+	line-height: 24px;
+}
+
+.wLabelRadios {
+	width:96px;
+	float: left;
+}
+
+#wTracePane {
+	line-height: 22px;
+	font-size: 16px;
+	width: 183px;
+	height: 94px;
+	}
+	
+#wTracePane button {
+	font-family: serif;
+}
+
+#saveTracebutton div {
+	border: none;
+	padding: 2px;
+    /*🔽*/
+}
+
+#saveTraceContent div {
+	display: block;
+	position: absolute;
+	z-index: 1000;
+	opacity: 0;
+	left: 152px;
+	width: 150px;
+}
+
+#wTracePrompt {
+	min-width: 215px; /* prevent wrapping during hide/show */
+	line-height: 36px;
+	padding-top: 15px;
+}
+
+#wTracePane > input {
+  margin-top: 7px;
+}
+
+#wVisibilityPrompt {
+	min-width: 235px;  /* prevent wrapping during hide/show */
+}
+
+#wDeletePrompt {
+	min-width: 155px;  /* prevent wrapping during hide/show */
+}
+
+#wEraseTraces {
+	width: 100%;
+	margin-top: 10px;
+	font-size: 16px;
+	background-color: lightcyan;
+}
+
+/* sns: is wTraceControls obsolete?? 
+.wTraceControls { 
+	line-height: 22px;
+}
+
+.wTraceControls button {
+	margin-top:8px;
+	font-size:14px;
+	font-family:serif;
+}
+*/
+
+#wVisIcon {
+	height: 16px;
+	vertical-align: middle;
+}
+
+/* The sketch_container includes the sketch itself and content immediately below it. */
+/* It's resized, when the sketch is loaded, to the width of the sketch. */
+/* Default content immediately below is a paragraph, a widget button, and the page controls. */
+/* The latter two must have place-holders in the html; otherwise they don't exist. */
+/* The wsp-widgets-button is right of the paragraph because it may appear/disappear from page to page, */
+/* and we don't want the paragraph jumping back and forth when the user changes pages. */
+.sketch_canvas {
+	position: relative;
+	display: inline-block;  /* make sketch_canvas fit content */
+	background-color: #fff;
+}
+.sketch_container {
+	/* No border; border is provided by sketch canvas, button bar, and help */
+	border-collapse: collapse;
+	display:inline-block;
+	position: relative;
+	box-sizing: border-box;
+	font-size:14px;
+	/* Don't hide overflow, or the widget will be cropped if it's moved beyond the border */
+}
+.sketch_container .wsp-button-bar {
+	font-size: 16px;
+	border: 2px solid black;
+	border-collapse: collapse;
+	height: fit-content; /* Hide buttonbar if no content */
+	background-color: #fff;
+}
+
+.sketch_container .wsp-button-bar .wsp-file-name {
+	display: inline-block;
+	padding-left: 0.4rem;
+	padding-top: 0.1rem;
+	margin: 3px 0px;
+	font-family: sans-serif;
+	font-size: 1rem;
+}
+
+.sketch_container .wsp-button-bar .bBarText {
+  display: none; /* content provider controls visibility */ 
+}
+
+.sketch_container .sketch_canvas {
+	border: 2px solid black;
+	vertical-align: top;
+}
+
+.wsp-button-bar p {
+	margin: 2px 8px;
+	float: left;
+}
+
+.wsp-float-right {
+	float: right;
+}
+
+/* FIX THIS... IT MESSES UP THE COUNT FOR DETERMINING SINGLETON
+.wsp-button-bar .wsp-float-right {
+	border-right: 2px solid black;
+	border-collapse: collapse;
+}
+*/
+
+.wsp-button-bar.wsp-buttons-in-bar .wsp-undo-redo-container {
+	float: left;
+	margin-right: 6px; 
+	width: 87px;
+	height: 30px;
+}
+
+/* singleton style currently unimplemented
+.wsp-button-bar.wsp-buttons-in-bar.singleton { 
+	width: fit-content;
+	border-right: 1px;
+}
+
+.wsp-button-bar.wsp-buttons-in-bar.singleton .wsp-undo-redo-container {
+	margin-right: 0;
+}
+*/
+
+.wsp-button-bar :is(button.wsp-undo-button, button.wsp-redo-button, button.wsp-ok-cancel-button) {
+	height: 100%;
+}
+
+.wsp-button-bar button.wsp-undo-button,
+.wsp-button-bar button.wsp-redo-button,
+.wsp-button-bar button.wsp-ok-cancel-button {
+	height: 100%;
+}
+
+.wsp-button-bar button.wsp-undo-button {
+	height: 32px
+}
+
+button.wsp-undo-button:disabled, button.wsp-redo-button:disabled {
+	opacity: 0.4;
+}
+	
+.sketch_container a {
+	cursor: pointer;
+}
+.wsp-widgets-button, .wsp-reset-button {
+	margin: 4px 4px 0px 4px;
+	font-size: 14px;
+	background-color: #fff;
+	cursor: pointer;
+}
+
+.wb_active {
+	background-color: #8888ff;
+	color: white;
+}
+
+.wb_active:hover {
+	color: black;
+}
+
+.wb_target {
+	margin-top: 3px;
+	border: 3px solid blue;
+}
+
+.wb_disabled {
+	opacity: 0.4;
+}
+
+.wsp-reset-button {
+	background-color: #ddf;
+}
+
+#delete-confirm-modal .util-popup-content {
+	width: 300px;
+}
+
+#delete-confirm-modal .util-popup-legend {
+	text-align: center;
+}
+
+.widget {  /* This class is the top-level container for each widget's html */
+	display: none;
+	position: absolute;
+	left: 31px;
+	top: 2px;
+}
+
+/* To show the widget contents, set the .widget to block and then animate-show the pane or prompt.
+ * To hide widget contents, animate-hide the pane or prompt, and then set the .widget to none.
+*/
+.widgetPane {
+	display: none;
+}
+
+.widgetPrompt {
+	display: inline-block;
+	line-height: 32px;
+	white-space: nowrap;
+}
+
+.wsp-page-buttons {
+	display: block;
+    float: right;
+	font-family:"Times New Roman", serif;
+	font-size:18px;
+	line-height: 16px;
+	margin: 3px;
+	border: 1px solid;
+	border-radius: 8px;
+	padding: 1px 2px;
+	cursor: pointer;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+
+.wsp-page-buttons.wsp-page-buttons-inactive {
+	display: none;
+}
+
+.wsp-page-buttons.wsp-page-buttonsActive {
+	display: inline-block;
+}
+
+.wsp-page-btn {
+	display: inline-block;
+	width: 26px;
+	background: no-repeat center/13px 13px;
+	border: none;
+	position:relative;
+	top:-1px;
+}
+
+.wsp-page-btn:disabled {
+	opacity: 0.4;
+}
+
+.wsp-page-prevBtn {
+	background-image: url("left-pointer.png");
+/*  opacity: 0.4;    removed RNJ as part of making these official <buttons> */
+}
+
+.wsp-page-num {
+	top: 1px;
+	position: relative;
+}
+
+.page-popupNum {
+	border: none;
+}
+
+.wsp-page-nextBtn {
+	background-image: url("right-pointer.png");
+}
+
+.wsp-page-popup {
+	position:absolute;
+	line-height: 18px;
+	top: -80px;
+	left:-5px;
+	padding:2px;
+	border:1px solid;
+	margin-top: 1px;
+	z-index:1;
+	background-color:#fff;
+}
+
+/* For elements that toggle on and off when the sketch page switches.
+ * Use .page_toggle.p_3 for elements to appear on page 3.
+ */
+.page_toggle {
+	display: none;
+}
+
+div.page_toggle {
+	clear: both;
+	border-top: 1px solid black;
+}
+
+/* Utility Menu Styles */
+
+button.util-menu-item {
+	height:18px;
+	width:100%;
+	margin: 2px;
+	padding:3px 0;
+	border: none;
+	text-align: left;
+	margin-right: 0px;
+}
+
+button.util-upload, button.util-download {  /* pad left to match unit commands */
+	padding-left: 14px;
+}
+
+.util-menu-container {
+	display: none;
+	position: absolute;
+	left: 0px;
+	width: 96px;
+	background-color: #f1f1f1;
+	border: 2px solid black;
+	border-radius: 4px;
+	font-size: 14px;
+	font-family: sans-serif;
+	z-index: 5;
+	text-align: left;
+	padding: 0 4px;
+	padding-right: 2px;
+}
+
+.util-menu-buffer { /* prevent mouseleave from firing between menu and content, */
+	height: 3px;
+	opacity: 0;
+	width: auto;
+}
+
+.util-menu-container hr {
+	margin: 2px 0;
+}
+
+.wsp-button-bar .util-menu-btn {
+	position: relative;
+	padding: 3px 1px 0px 1px;
+	border: 1px solid black;
+	margin: 2px;
+	float: left;
+}
+
+div.precision-div {  /* contains the drop button and the precision menu */
+	position: relative;
+	background-color: #f1f1f1;
+	}
+
+button.precision-popbutton {
+	width: 100%;
+	text-align: right;
+	padding-left: 8px;
+	padding-right: 0px
+}
+
+div.precision-popup {
+	position : absolute;
+	display: none;
+	border: 2px solid black;
+	padding-bottom: 2px;
+	border-radius: 4px;
+	background-color: #f1f1f1;
+	width: 107px;
+	left: 99px;
+	z-index: 10;
+}
+
+img.util-menu {
+	padding:0;
+	height: 18px;
+	width: 23px;
+}
+
+.util-popup { /* Background for dialog */
+	display: none;
+	position: fixed;
+	z-index: 3;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%; 
+	overflow: auto;
+	background-color: rgb(0,0,0);
+	background-color: rgba(0,0,0,0.2);
+}
+
+.util-popup-content {
+	background-color: #fefefe;
+	margin: 160px auto;
+	padding: 16px;
+	box-shadow: 5px 10px rgba(150,150,150,.7);
+	cursor: move;
+	border: 3px solid black;
+	border-radius: 10px;
+}
+
+#download-modal .util-popup-content {
+	width: 336px;
+	text-align: center;
+}
+
+#download-modal button {
+	float: right;
+	margin: 0 10px;
+}
+
+#downloadCancel {
+	margin-right: 0;
+}
+
+#download-modal label.save-traces {
+	float: left;
+	padding-left: 14px;
+	display: none;
+}
+
+#upload-modal .util-popup-content {
+	width: 544px;
+}
+
+#file-name-input, #downloadLink {
+	display: none;
+}
+
+.util-popup-title {
+	margin: 0 auto;
+	text-align: center;
+	font-size: 24px;
+	line-height: normal;
+	font-weight: 400;
+	margin-bottom: 8px;
+}
+
+span.util-menu {
+	padding: 2px;
+}
+.util-popup-legend {
+	margin: 0;
+}
+
+#util-fname {
+	width:232px;
+	font-size: 16px;
+	border: 1px solid black;
+}
+
+.fname-validity {
+	display: inline-block;
+	width: 16px;
+	padding-right: 0;
+	padding-left: 6px;
+	padding-top: 2px;
+	content: '\u2715';
+	color: red;
+}
+
+.fname-validity.isValid {
+	content: "\u2714";
+	color: green;
+}
+	
+/* Use next two if we ever have auto-validity fixed
+.fname-validity {
+	content: '\2715';
+	color: red;
+}
+
+.fname-validity.valid {
+	content: '\2714';
+	color: green;
+}
+*/
+
+.util-div-fname {
+	padding: 14px 0;
+}
+
+div.util-popup-button {
+	padding: 3px 8px;
+}
+
+input.util-popup-button {
+	border-radius: 6px;
+	font-size: 16px;
+	padding: 0 16px;
+	margin-left: 15px;
+	margin-top: 10px;
+	float: right;
+	cursor: pointer;
+}
+
+input.util-popup-button:focus {
+	background-image: linear-gradient(#59a9fb, #045fff);
+	color:white;
+}
+
+#saveOK:disabled {
+	background-image: none;
+	color: gray;
+}
+
+/* Change color of dropdown links on hover */
+.util-menu-item:hover {background-color: #ddf}
+
+
+ /* Dropdown Button */
+.dropbtn {
+	background-color: #3498DB;
+	color: white;
+	padding: 16px;
+	font-size: 16px;
+	border: none;
+	cursor: pointer;
+}
+
+/* Dropdown button on hover & focus */
+.dropbtn:hover, .dropbtn:focus {
+	background-color: #2980B9;
+}
+
+/* The container <div> - needed to position the dropdown content */
+.dropdown {
+	position: relative;
+	display: inline-block;
+}
+
+/* Dropdown Content (Hidden by Default) */
+.dropdown-content {
+	display: none;
+	position: absolute;
+	background-color: #f1f1f1;
+	min-width: 160px;
+	box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+	z-index: 1;
+}
+
+/* Links inside the dropdown */
+.dropdown-content a {
+	color: black;
+	padding: 12px 16px;
+	text-decoration: none;
+	display: block;
+}
+
+/* Change color of dropdown links on hover */
+.dropdown-content a:hover {background-color: #ddd;}
+
+/* Show the dropdown menu (use JS to add this class to the .dropdown-content container when the user clicks on the dropdown button) */
+.show {display:block;}
+
+
+/* wsp-help styles */
+
+.wsp-tool {
+	position: relative;
+}
+
+.helpDiv {
+	height: fit-content;
+	min-height: 19px;
+	display: none;
+	padding: 8px 5px;
+	border: 2px solid black;
+	border-top: none;
+	border-collapse: collapse;
+	background-color: white;
+}
+
+.helpContainer { /* Guarantee that tool-help visibility changes don't move subsequent content up or down.*/
+	height: fit-content;
+	min-height: 50px;
+	min-width: 100%;
+	display: block;
+	/*background-color: lemonchiffon;*/
+	border: none;
+}
+
+.help-buttons {
+	float: right;
+	margin-right: 6px;
+	margin-left: 4px;
+	padding-top: 0px;
+	padding-bottom: 4px;
+	margin-top: -4px;
+}
+
+/* style the button-bar icon links (accessibility and wsp logo) */
+a.wsp-link-icon {
+	float: left;
+	border: 2px solid black;
+	border-radius: 5px;
+	margin: 1px 2px;
+	padding: 1px;
+	padding-bottom: 0;
+	height: 23px;
+	width: 23px;
+	outline-offset: -1px;
+}
+
+a.wsp-link-icon img {
+	height: 100%;
+	width: 100%;
+	margin: -1px 0px;
+	margin-bottom: -2px;
+}
+
+/* Use the same focus for util menu and button-bar icons */
+button.util-menu-btn:focus, button.util-menu-item:focus,
+button.wsp-reset-button:focus, button.wsp-widgets-button:focus {
+	outline: solid 3px blue;
+	border-radius: 4px;
+}
+
+a.wsp-link-icon:focus {
+	outline: solid 3px blue;
+	border-radius: 4px;
+}
+
+/* style the div containing the logo name */
+/* At some point this will become a link to websketchpad.org.*/
+div.wsp-logo-name {
+	position: absolute;
+	display: none;
+	top: 0px;
+	left: 0px;
+	padding: 3px;
+	border: 2px solid black;
+	background-color: white;
+	content: "Web Sketchpad";
+	color: #2289e5;
+	font-family: Myriad, sans-serif;
+	font-size: 16px;
+}
+
+div.wsp-logo-link {
+	background-color: #2289e5;
+	float: right;
+	width: 32px;
+	height: 22px;
+	margin-left: 3px;
+}
+
+a.wsp-logo-link {
+	color: white;
+	font-size: 20px;
+	background-color: #2289e5;
+}
+
+div.wsp-custom-tip {
+	position: absolute;
+	display: none;
+	top: 0px;
+	left: 0px;
+	padding: 2px;
+	background-color: #dddddd;
+	color: black;
+	font-family: Arial, sans-serif;
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.help-video {
+	border: 2px solid black;
+	border-radius: 5px;
+	background-color: #ccdde4;
+	margin: 0 3px;
+	padding: 0 3px;
+	font-size: 18px;
+}
+
+.tool-help-button {
+	height: 24px;
+	width: 22px;
+	position: absolute;
+	z-index: 5;
+	right: 0px;
+	bottom: 0px;
+	border: 2px solid black;
+	border-radius: 5px;
+	font-size: large;
+	font-weight: 900;
+	padding-left: 3px;
+	padding-top: 1px;
+}
+
+ /* The Modal (background) */
+.tool-help-modal {
+	display: none; /* Hidden by default */
+	position: fixed; /* Stay in place */
+	z-index: 1; /* Sit on top */
+	left: 0;
+	top: 0;
+	width: 100%; /* Full width */
+	height: 100%; /* Full height */
+	overflow: auto; /* Enable scroll if needed */
+	background-color: rgb(0,0,0); /* Fallback color */
+	background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+#tool-help-handle {
+	margin-top: -15px;
+	background-color: gray;
+	margin-left: -10px;
+	margin-right: -10px;
+}
+
+/* Modal Content/Box */
+.tool-help-content {
+	display: none; /* Hidden by default */
+	position: absolute;
+	background-color: #fefefe;
+	padding: 15px 10px;
+	border: 5px solid gray;
+	border-radius: 10px;
+	min-width: 400px;
+	width: fit-content;
+	height: fit-content;
+	text-align: center;
+	line-height: 1.5rem;
+	left: 40%;
+	top: 30%;
+	z-index: 10;
+}
+
+#tool-help-title {
+	font-family: sans-serif;
+	font-weight: 700;
+	color: white;
+	text-align: center;
+	margin-top: -5px;
+}
+
+/* The Close Button */
+.tool-help-close {
+	color: white;
+	float: right;
+	font-size: 28px;
+	font-weight: bold;
+	padding-right: 3px;
+	margin-top: -2px;}
+
+#tool-help-text {
+	width: fit-content;
+	margin: 0 auto;
+	padding-bottom: 8px;
+}
+
+.tool-help-videos {
+	margin: 0 auto;
+	width: fit-content;
+	padding: 8px;
+}
+
+a.vid-btn {
+	display: block;
+	margin: 0 30px;
+	color: rgb(85, 26, 139);
+	text-decoration: underline;
+}
+
+a.vid-btn.visible {
+	display: inline-block;
+}
+
+.tool-help-close:hover,
+.tool-help-close:focus {
+	color: black;
+	text-decoration: none;
+	cursor: pointer;
+}
+/* REMOVE ALL REFERENCES TO EMBED */
+
+/* Modal Video Styles */
+#v-modal, #embed-modal {
+	display: none; /* Hidden by default */
+	position: fixed; /* Stay in place */
+	z-index: 2; /* Sit on top, above the tool-help modal */
+	left: 0;
+	top: 0;
+	width: 100%; /* Full width */
+	height: 100%; /* Full height */
+	overflow: auto; /* Enable scroll if needed */
+	background-color: rgb(0,0,0); /* Fallback color */
+	background-color: rgba(0,0,0,0.6); /* Black w/ opacity */
+}
+
+#v-modal.visible, #embed-modal.visible {
+	display: flex;
+}
+
+/* Modal Content/Box */
+.v-modal-content, .embed-content {
+	background-color: #aaa;
+	top: 150px;
+	margin: 0 auto;
+	height: max-content;
+	padding: 20px;
+	border: 1px solid #888;
+	position: relative;
+}
+
+#embed-content {
+	margin: 0 auto;
+	height: fit-content;
+	padding: 40px;
+}
+
+ /* The Close Button */
+.v-modal-close {
+	background: #606061;
+	color: #FFFFFF;
+	line-height: 25px;
+	position: absolute;
+	right: -12px;
+	text-align: center;
+	top: -10px;
+	width: 24px;
+	text-decoration: none;
+	font-weight: bold;
+	-webkit-border-radius: 12px;
+	-moz-border-radius: 12px;
+	border-radius: 12px;
+	-moz-box-shadow: 1px 1px 3px #000;
+	-webkit-box-shadow: 1px 1px 3px #000;
+	box-shadow: 1px 1px 3px #000;
+}
+
+.v-modal-close:hover,
+.v-modal-close:focus {
+	color: black;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+#v-video {
+	width:800px;
+}
+
+#hintProgressBar {
+	position: absolute;
+	display: block; /* Normally 'none' when inactive. Use block to force sketch to load on init() */
+	margin: 0;
+	top: 50px;
+	left: 50px;
+	width: 60px;
+	height: 60px;
+	z-index: 1;
+}
+
+/* Migrated from toggle-section.css to here
+ */ 
+/* Modal Video Styles */
+#v-modal {
+	display: none; /* Hidden by default */
+	position: fixed; /* Stay in place */
+	z-index: 1; /* Sit on top */
+	left: 0;
+	top: 0;
+	width: 100%; /* Full width */
+	height: 100%; /* Full height */
+	overflow: auto; /* Enable scroll if needed */
+	background-color: rgb(0,0,0); /* Fallback color */
+	background-color: rgba(0,0,0,0.6); /* Black w/ opacity */
+}
+#v-modal.visible {
+	display: flex;
+}
+
+/* Modal Content/Box */
+#v-modal-content {
+	background-color: #aaa;
+	top: 200px;
+	margin: 0 auto;
+	height: max-content;
+	padding: 20px;
+	border: 1px solid #888;
+	position: relative;
+}
+
+ /* The Close Button */
+#v-modal-close {
+	background: #606061;
+	color: #FFFFFF;
+	line-height: 25px;
+	position: absolute;
+	right: -12px;
+	text-align: center;
+	top: -10px;
+	width: 24px;
+	text-decoration: none;
+	font-weight: bold;
+	-webkit-border-radius: 12px;
+	-moz-border-radius: 12px;
+	border-radius: 12px;
+	-moz-box-shadow: 1px 1px 3px #000;
+	-webkit-box-shadow: 1px 1px 3px #000;
+	box-shadow: 1px 1px 3px #000;
+}
+
+#v-modal-close:hover,
+#v-modal-close:focus {
+	color: black;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+#v-video {
+	width:800px;
+}
+
+.play-video {
+	padding-left: 19px;
+	padding-right: 8px;
+	background-image: url(/images/video-icon-16x16.png);
+	background-repeat: no-repeat;
+	background-size: 1rem;
+	border: none;
+	font-size: 16px;
+	font-family: "Times New Roman",serif;
+	margin-top: 3px;
+	color: blue;
+	background-position: 0px 2px;
+	background-color: inherit;
+}

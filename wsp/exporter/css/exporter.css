@@ -1,0 +1,431 @@
+@import url('fonts.css');
+
+.clear {
+  clear:both;
+}
+.success {
+  color:green;
+}
+.error {
+  color:red;
+}
+.loader {
+  margin-top:40px;
+}
+.hidden {
+  display:none;
+}
+ul {
+  list-style-type:none;
+  padding:0;
+  margin:0;
+}
+body {
+  font-family:arial;
+  margin:0;
+  line-height: 1;
+}
+
+#sketch-viewer {
+  display:table-row;
+}
+#sketch-viewer > div {
+  display:table-cell;
+}
+
+#wrapper {
+  min-width:1400px; width: auto !important; width: 100px;
+  margin:0 auto 0 auto;
+  position:relative;
+}
+#collapseViews {
+  width:353px;
+  vertical-align:top;
+  background:#AEBFD6;
+}
+#collapseViews > div:first-child {
+  margin-top:20px;
+}
+#collapseViews > div {
+  background:#293e5d;
+  overflow:hidden;
+  border-radius:2px;
+  width:100%;
+}
+#collapseViews pre {
+  background: transparent;
+}
+#collapseViews > div:not(:first-child) {
+  margin-top:5px;
+}
+#collapseViews > div.opened {
+  background:#2b4776;
+}
+#collapseViews > div.disabled {
+  background:#345281;
+}
+#collapseViews > div.disabled header, #collapseViews > div.disabled .report {
+  font-size:0px;
+}
+#collapseViews header {
+  height:30px;
+  padding:10px 10px 35px 10px;
+  color:white;
+  font-weight:bold;
+  font-size:18px;
+}
+#collapseViews > div:not(.disabled) header:hover {
+  cursor:pointer;
+}
+#collapseViews pre.report {
+  padding:15px 10px 15px 10px;
+/** In case there are too many logs, make sure the test panel doesn't get pushed too far down **/
+  overflow:auto;
+  max-height:385px;
+  color:white;
+  font-size:14px;
+  margin-bottom:0px;
+}
+
+/* debug log - each log statement is a pre in a .report */
+.report pre {
+  color:white;
+  padding: 0px;
+  margin-top:5px;
+  margin-bottom:5px;
+  border: none;
+}
+
+#optionsViewer .report > * {
+  margin-bottom:10px;
+}
+
+.test-icon {
+  width:16px;
+  height:16px;
+  margin-right:10px;
+}
+#collapseViews > div.opened .close-bar {
+  height:28px;
+  width:100%;
+  background-color:#293e5d;
+  background-image:url(../images/close-triangle.png);
+  background-repeat: no-repeat;
+  background-position: 48% 7px
+}
+#collapseViews > div.opened .close-bar:hover {
+  cursor:pointer;
+}
+
+#divider {
+  vertical-align:middle;
+  width:25px;
+  background:#AEBFD6;
+}
+#divider:hover {
+  cursor:pointer;
+}
+
+#sketchShortInfo {
+  display:inline-block;
+  float:left;
+  width:50%;
+  margin-left:80px;
+}
+#sketchView {
+  padding:5px 10px 5px 10px;
+  vertical-align:top;
+  background:#eeeeee;
+  min-width:878px;
+  min-height:632px;
+}
+#sketchWrapper {
+  background: #eeeeee;
+  clear:both;
+  min-width:860px;
+  min-height:548px;
+  margin:0 5px 0 5px;
+  border:dashed 4px #CCC;
+}
+#sketchCanvas {
+  margin:auto;
+  background:white;
+  display: inline-block;
+}
+#sketchCanvas .header, #sketchCanvas .subheader {
+  text-align:center;
+  color:#AAA;
+  margin:0;
+}
+#sketchCanvas .header:hover, #sketchCanvas .subheader:hover {
+  cursor:default;
+}
+#sketchCanvas .header {
+  margin-top:5px;
+  font-size:58px;
+  line-height:normal;
+}
+#sketchCanvas .subheader {
+  font-size:20px;
+  padding:80px 20px 0 20px;
+}
+
+#sketchCanvas .loader {
+  margin:40px auto 0 auto;
+  display:block;
+}
+
+#fileUploadButtonWrapper {
+  margin: 0 0 45px 580px;
+}
+#sketchCanvas #fileUploadButtonWrapper {
+  display:block;
+  margin:0;
+}
+#fileUploadVisibleButton {
+  display: block;
+  margin: 15px auto 0 auto;
+  color: #2f4159;
+  background-color: #DBDEE8;
+  background-image:url(../images/uparrow-small.png);
+  background-size: 12px 12px;
+  background-position: 6px 40%;
+  background-repeat: no-repeat;
+  text-indent: 10px;
+  font-weight: bold;
+  font-size: 11px;
+  border: none;
+  border-radius: 2px;
+  padding: 3px 12px 3px 14px;
+}
+#sketchCanvas #fileUploadVisibleButton {
+  background-color: #C1C1C1;
+  background-image:url(../images/uparrow.png);
+  background-size:32px 32px;
+  background-position:22px 40%;
+  background-repeat:no-repeat;
+  border:none;
+  font-size:23px;
+  height:60px;
+  width:240px;
+  color:white;
+  font-weight: bold;
+  border-radius:8px;
+  text-indent:35px;
+}
+#fileUploadVisibleButton:active {
+  background-color:#9AA0A9;
+}
+#sketchCanvas #fileUploadVisibleButton:active {
+  background:#9F9F9F;
+  background-image:url(../images/uparrow.png);
+  background-size:32px 32px;
+  background-position:22px 40%;
+  background-repeat:no-repeat;
+}
+#fileUploadButton {
+  display:none;
+}
+
+/* IE9 doesn't support file drop */
+html.ie9 #file-drag-prompt, html.ie9 #fileUploadButtonWrapper {
+  visibility: hidden;
+}
+#sketch-viewer {
+  white-space:nowrap;
+  float:left;
+  clear:both;
+  min-height:632px;
+}
+
+#sketchView .sketch-area {
+  background:white;
+  /* These are just initial values which fill space. This element is
+     destroyed when a sketch is created, and its space is dynamically
+     resized. */
+  height: 294px;
+  width: 852px;
+}
+
+.success {
+  color:green;
+}
+.failed {
+  color:red;
+}
+
+#exportMenuButton {
+  float:right;
+  display:inline-block;
+  clear:both;
+  color:#2f4159;
+  font-weight:bold;
+  margin:8px;
+}
+#exportMenuButton button {
+  color:white;
+  font-weight:bold;
+  border-radius:10px;
+  padding:10px;
+  border:#446088;
+  min-width:115px;
+  min-height:35px;
+  cursor:pointer;
+  vertical-align:middle;
+}
+#exportMenuButton button.disabled {
+  background:#EAEAEA;
+  font-size:0px;
+}
+#exportMenuButton button.disabled:hover {
+  cursor:default;
+}
+#exportMenuButton .btn-webpage:not(.disabled) {
+  background:#e2514c;
+}
+#exportMenuButton .btn-webpage:hover:not(.disabled) {
+  background:#CE3E39;
+}
+#exportMenuButton .btn-json:not(.disabled) {
+  background:#22c29c;
+}
+#exportMenuButton .btn-json:hover:not(.disabled) {
+  background:#1EA082;
+}
+
+#export-table {
+  table-layout: fixed;
+  width:550px;
+  margin-bottom:20px;
+}
+#export-table tr.export-major {
+  height:20px;
+}
+#export-table tr.export-minor .well {
+  min-height:95px;
+}
+#export-table .well {
+  padding:5px;
+  border:none;
+}
+
+#varName {
+  margin-left:19px;
+}
+
+#varName input {
+  margin-left:5px;
+  width:160px;
+  text-align:right;
+}
+
+.well.settings {
+  line-height: 23px;
+}
+
+.well.widget {
+  line-height: 20px;
+}
+
+#canvasMeasurements {
+  float:left;
+  display:inline-block;
+  margin:5px 0 0 20px;
+  font-size:10px;
+}
+#sketchControls {
+  float:right;
+  display:inline-block;
+  margin:5px 20px 0;
+}
+#sketchControls button {
+  background:#bbc2cc;
+  border-radius:10px;
+  border:white;
+  min-height:20px;
+  font-size:12px;
+  padding:0 9px 0 9px;
+  color:#2f4159;
+  font-weight:bold;
+}
+#sketchControls button.disabled {
+  background:#EAEAEA;
+  color:#CFCFCF;
+}
+#sketchControls button:not(.disabled):hover {
+  background:#9BA1AA;
+  cursor:pointer;
+}
+#tabs {
+  display:inline-block;
+  margin:0 0 0 378px;
+  width:877px;
+  font-size:14px;
+  float:left;
+  position:relative;
+}
+#tabs > * {
+  float:left;
+}
+#tabs > .scroll-tab {
+  width:25px;
+  font-weight:bold;
+  font-size:18px;
+}
+#tabs #scroll-left img {
+  margin-top:-30px;
+}
+#tabs #scroll-right img {
+  margin: -21px 0 0 2px;
+  position:absolute;
+  right:0;
+}
+#tabs-wrapper {
+  overflow:hidden;
+  white-space:nowrap;
+  width:825px;
+  position:absolute;
+  left:27px;
+  bottom:0;
+}
+#tabs-list {
+  position:relative;
+}
+.tab {
+  padding:10px 15px 6px 15px;
+  border-top-right-radius:10px;
+  border-top-left-radius:10px;
+  border-bottom:none;
+  background:#eeeeee;
+  display:inline-block;
+  margin-top:3px;
+  color:#4b5781;
+  max-width:115px;
+  font-size:12px;
+  font-weight:bold;
+  vertical-align:top;
+  word-break:break-all;
+  white-space:normal;
+}
+.tab:hover {
+  cursor:pointer;
+}
+.tab:not(:first-child) {
+    margin-left:5px;
+}
+.tab:not(.active) {
+  background:#293e5d;
+  color:#97accb;
+}
+
+.browser-warning {
+  font-weight:bold;
+  display:block;
+  text-align:center;
+}
+
+.version {
+  clear:both;
+  padding-top:15px;
+}
+

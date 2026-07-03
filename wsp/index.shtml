@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<!-- This file sets the shortcut icons and loads standard styles and scripts -->
+<link rel="shortcut icon" href="/websketchpad/library/geometricfunctions.org/images/fc-icon16.png">
+<link rel="shortcut icon" href="/websketchpad/library/geometricfunctions.org/images/fc-icon32.png">
+<link rel="shortcut icon" href="/websketchpad/library/geometricfunctions.org/images/fc-icon64.png">
+
+<script charset="utf-8" type="text/javascript" src="/websketchpad/library/geometricfunctions.org/includes/v4.6/js/jquery-2.1.0.js"></script>
+<script charset="utf-8" type="text/javascript" src="/websketchpad/library/geometricfunctions.org/includes/v4.6/js/wsp.js"></script>
+<script charset="utf-8" type="text/javascript" src="/websketchpad/library/geometricfunctions.org/includes/v4.6/widgets/jquery.tiny-draggable.js"></script>
+<link rel="stylesheet" type="text/css" href="/websketchpad/library/geometricfunctions.org/includes/v4.6/widgets/widgets.css" />
+<script charset="utf-8" type="text/javascript" src="/websketchpad/library/geometricfunctions.org/includes/v4.6/js/wsp-runner.js"></script>
+<link rel="stylesheet" type="text/css" href="./tools/tools.css" />
+<script charset="utf-8" type="text/javascript" src="/websketchpad/library/geometricfunctions.org/includes/v4.6/widgets/widgets.js"></script>
+<script charset="utf-8" type="text/javascript" src="./tools/tools.js"></script>
+
+
+<title>Websketch Tool Library</title>
+
+
+	</head>
+  <body style="background-color: #eee;">
+		<br>
+
+		<div class="uTitle">WebSketch Tool Library &nbsp; <span class="uTitleButton"><button type="button" onclick="var el=$('#about'); if (el.css('display')==='none') el.css('display','block'); else el.css('display','none');">About this page</button></span></div>
+		
+		<div id="about" class="uAbout">
+			<div class="uAboutClose"><button type="button" onclick="$('#about').css('display','none');">X</button></div>
+			<div class="lib-about-div">
+				<h3 class="firstPara">Using the tool library</h3>
+				<p>On this web page you can create new sketches or modify existing sketches by adding or removing tools, adding or removing pages, and changing the size of the sketch window. The resulting sketch, saved as a .json document, can then be used on any desired WSP-enabled webpage.</p>
+				<p>Add tools to your sketch by clicking the desired tool icons below the sketch area. Use the scroll bar to see more tools. Reorder or delete tools by using the pane to the left of the sketch window.</p>
+				<p>(Note: The undo/redo history of the sketch is lost when you add, reorder, or delete tools.)</p>
+				<p>Delete the currently-visible page by pressing the Delete Page button, or add a new page by pressing New Page.</p>
+				<h3>Downloading and uploading</h3>
+				<p>When you finish making your changes, save the result by choosing Download from the Utility popup menu (below the bottom-left corner of the sketch).</p>
+				<p>To modify an existing sketch, it must be in the form of a .json document. Choose Upload from the Utility menu and then browse to the .json document you wish to edit.</p>
+			</div>
+		</div>
+
+		<div class="uLeftPane" style="background-color: #fff;">
+			<div id="sizePane" class="uLeftSub">
+				<div>
+					<label for="height">Height:</label>
+					<input type="number" id="height" class="uSizeButton" name="height" min="50" max="2000" onchange="TOOLS.resetSketchWindowSize('libSketch');"/>
+					<span class="validity"></span>
+				</div>
+				<div class="uClear">
+					<label for="width">Width:</label>
+					<input type="number" id="width" class="uSizeButton" name="width" min="50" max="2000" onchange="TOOLS.resetSketchWindowSize('libSketch');"/>
+					<span class="validity"></span>
+				</div>
+			</div>
+			<div id="uPagePane" class="uLeftSub">
+				<input type="button" id="newPage" value="New Page" onclick="TOOLS.insertPage('libSketch', 'new');"/><br>
+				<input type="button" id="newPage" value="Clone Page" onclick="TOOLS.insertPage('libSketch', 'clone');"/><br>
+				<input type="button" id="deletePage" value="Delete Page" onclick="TOOLS.deletePage('libSketch');"/>
+			</div>
+      <div class="uLeftSub">
+			<ul id="uToolList">
+			</ul>
+      </div>
+      <div class="debug uLeftSub">
+<!--        <input type="button" class="debug" value="Check Graph" onclick="if (TOOLS.checkSketchGraph('libSketch', 'verbose')) {$(this).removeAttr ('border'); $(this).removeAttr ('border-width'); $(this).removeAttr ('border-color');} else $(this).css ('border', 'solid 4px red');"/>
+-->
+        <input type="button" class="debug" value="Check Graph" onclick="if (TOOLS.checkSketchGraph('libSketch', 'verbose,topology')) {this.style.removeProperty ('border');} else $(this).css ('border', 'solid 4px red');"/>
+
+        <input type="button" class="debug" style = "font-size: 11.5px" value="Remove Hidden Labels" onclick="TOOLS.removeHiddenLabels('libSketch');"/>
+
+        <div class="uDropDown">
+          <div id="uPrefToggle">Sketch Prefs 🔽</div>
+          <div id="uPrefDiv" style="display: none" onclick="$('#uPrefDiv').hide();">
+            <ul id="uPrefList">
+            </ul>
+          </div>
+        </div>
+      </div>
+		</div>
+		
+		<div style="display: inline-block">
+      <div class="sketch_container" style="background-color: #fff;">
+        <div class="sketch_canvas" id="libSketch" data-url="empty.json" > </div>
+        <div class="button_area">
+          <div class="util-menu-btn"></div>
+          <div class="wsp_logo"></div>
+          <p id="libFileName" style="padding-top:3px;">&nbsp;</p>
+          <div class="page_buttons">
+            <span class="page_btn page_prevBtn">&nbsp;</span><div style="display:inline-block; position:relative;"><span class="page_num"></span></div><span class="page_btn page_nextBtn">&nbsp;</span></span>
+          </div>
+          <button class="widget_button">Widgets</button>
+        </div>
+      </div>
+      <div class="uClear"></div>
+      <div id="utilPrompt" style="font-family: sans-serif; font-size: 1.0rem; padding-left: 0.4rem; margin-top: -10px;">
+        Use the <img src="/websketchpad/library/geometricfunctions.org/includes/v4.6/widgets/utility-icon.png" style="width:20px; height:20px; border: 1px solid black; position: relative; top: 5px;"> commands to upload or download a sketch, or to change unit preferences.</p>
+      </div>
+    </div>
+    
+    <div id="resize" style="position:absolute; z-index: 1; left:900px; top:500px; height: 15px; width: 15px; cursor: move; padding:0;">
+      <img src="./resize.png" width="14px;">
+    </div>
+    
+    
+	<div class="uClear"></div>
+	<br><br>
+	<div id="toolCollection" style="background-color: #fff;">
+		<div class="uLibDirections">Tap a tool to add it to the sketch.</div>
+		<div class="uLibButtons">
+			<button type="button" onclick="TOOLS.loadLibraryTools('basic/*.json');">Basic</button> &nbsp; &nbsp;
+			<button type="button" onclick="TOOLS.loadLibraryTools('hyperbolic/*.json');">Hyperbolic Geometry</button>&nbsp;
+		</div>
+		<div id="toolTable">
+		</div>
+	</div><br>
+	
+	<div class="uClear"></div>
+<!-- This file provides the version info that goes under the sketch.
+-->
+<div class="legal" style="font-size:0.8rem">
+    <div class="version">Release: 2020Q2, Semantic Version: 4.6.2, Build Number: 1047, Build Stamp: stek-macbook-pro/20190813174206
+    </div>
+    <div class="copyright">Web Sketchpad Copyright &copy; 2019 KCP Technologies, a McGraw-Hill Education Company. <br>
+    &ldquo;You may freely use Web Sketchpad in your own Web pages, provided you do so for non-commercial use only&rdquo; [per <a href="http://kcpt.github.io">kcpt.github.io</a>].
+    </div>
+    <div class="version">License: <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons CC-BY-NC-SA 4.0</a>
+    </div>
+</div> <!--legal-->
+
+  </body>
+</html>

@@ -1,0 +1,79 @@
+# ============================================================
+# HeyGeo – .gitignore
+# ============================================================
+
+# ------------------------------------------------------------------
+# macOS
+# ------------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ------------------------------------------------------------------
+# Qt / qmake build artifacts
+# ------------------------------------------------------------------
+# Generated Makefile (re-created by qmake)
+Makefile
+
+# qmake cache/stash
+.qmake.stash
+.qmake.cache
+
+# Qt moc / resource generated files
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# Build directories
+build/
+*.o
+*.a
+*.so
+*.dylib
+
+# macOS app bundle (built artifact – not source)
+heygeo.app/
+
+# Windows build artifacts
+*.exe
+*.dll
+*.lib
+
+# Installation log generated during Qt setup
+aqtinstall.log
+
+# ------------------------------------------------------------------
+# HeyGeoWeb – Next.js / Node.js
+# ------------------------------------------------------------------
+HeyGeoWeb/
+# HeyGeoWeb/node_modules/
+# HeyGeoWeb/.next/
+# HeyGeoWeb/release/
+# HeyGeoWeb/logs/
+# HeyGeoWeb/uploads/
+# HeyGeoWeb/tsconfig.tsbuildinfo
+
+# Sensitive environment variables – DO NOT commit real secrets
+# Keep .env.example (template without real values)
+# HeyGeoWeb/.env
+
+# Prisma generated client (can be regenerated with `prisma generate`)
+# HeyGeoWeb/prisma/generated/
+
+# ------------------------------------------------------------------
+# Editor / IDE
+# ------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ------------------------------------------------------------------
+# Misc
+# ------------------------------------------------------------------
+*.log
+*.sh
