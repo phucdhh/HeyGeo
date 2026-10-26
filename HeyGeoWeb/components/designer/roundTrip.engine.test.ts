@@ -1,0 +1,291 @@
+// @vitest-environment jsdom
+/**
+ * P0.6 — the baseline that says a document survives its own storage.
+ *
+ * Everything else in this folder tests one mechanism. This file asks the
+ * question the user actually experiences: build a construction, save it, open
+ * it again, and is the picture the same? The comparison is made on what the
+ * engine drew — every node in the board container, its geometry attributes and
+ * the text it renders — because two boards whose markup agrees really are the
+ * same drawing, while comparing element lists only proves the JSON survived.
+ *
+ * A model that fails here is not a display bug: it means the document does not
+ * contain enough to rebuild the construction, which is what P0 was for.
+ */
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { applyScene, syncPositions, takeScene } from './sceneModel';
+import type { HeyGeoElement } from './designTypes';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+let JXG: any;
+
+/**
+ * A board with a size. jsdom lays nothing out, so a container left unstyled
+ * reports 0x0, JSXGraph maps every user coordinate to pixel 0 and the drawing
+ * below would compare a board full of zeroes. The inline style is what the
+ * engine reads to decide its pixel size.
+ */
+function newBoard(): any {
+  const div = document.createElement('div');
+  div.style.width = '800px';
+  div.style.height = '600px';
+  document.body.appendChild(div);
+  return JXG.JSXGraph.initBoard(div, {
+    boundingbox: [-8, 8, 8, -8],
+    showCopyright: false,
+    showNavigation: false,
+    axis: false,
+    grid: false,
+  });
+}
+
+beforeAll(() => {
+  const src = readFileSync(resolve(process.cwd(), 'public/vendor/jsxgraph/jsxgraphcore.js'), 'utf8');
+  new Function(src)();
+  JXG = (globalThis as any).JXG;
+  (window as any).matchMedia = vi.fn(() => ({
+    matches: false, addEventListener: () => {}, removeEventListener: () => {},
+  }));
+});
+
+const el = (over: Partial<HeyGeoElement> & { type: string; id: string }): HeyGeoElement => ({
+  parents: [], attrs: {}, ...over,
+});
+
+/**
+ * One of each thing the designer can put on a board, in construction order.
+ * Deliberately includes the two kinds of stored data that used to be code:
+ * a measurement caption with an anchor, and transformed points.
+ */
+const kitchenSink = (): HeyGeoElement[] => [
+  // free points, a vector and a mirror to transform with
+  el({ type: 'point', id: 'A', parents: [-3, 1], attrs: { name: 'A' } }),
+  el({ type: 'point', id: 'B', parents: [2, 4], attrs: { name: 'B' } }),
+  el({ type: 'point', id: 'O', parents: [0, 0], attrs: { name: 'O' } }),
+  el({ type: 'point', id: 'V', parents: [3, -2], attrs: { name: 'V' } }),
+  el({ type: 'segment', id: 'vec', parents: ['O', 'V'], attrs: { strokeColor: '#888888' } }),
+  el({ type: 'line', id: 'mirror', parents: ['A', 'B'], attrs: { dash: 1 } }),
+  // images of A: translate by the marked vector, rotate about O, dilate, reflect
+  el({ type: 'point', id: 'At', parents: ['A'], attrs: { name: "A'", image: { op: 'translate', of: ['O', 'V'] } } }),
+  el({ type: 'point', id: 'Ar', parents: ['A'], attrs: { name: "A''", image: { op: 'rotate', of: ['O'], angle: 90 } } }),
+  el({ type: 'point', id: 'Ad', parents: ['A'], attrs: { name: 'A~', image: { op: 'dilate', of: ['O'], k: 0.5 } } }),
+  el({ type: 'point', id: 'Am', parents: ['A'], attrs: { name: "A'", image: { op: 'reflect', of: ['mirror'] } } }),
+  // derived points
+  el({ type: 'midpoint', id: 'M', parents: ['A', 'B'], attrs: { name: 'M' } }),
+  el({ type: 'circle', id: 'c1', parents: ['O', 'B'], attrs: { strokeColor: '#1e3c96' } }),
+  el({ type: 'glider', id: 'G', parents: [1, 1, 'c1'], attrs: { name: 'G' } }),
+  // curves and areas
+  el({ type: 'segment', id: 's1', parents: ['O', 'M'], attrs: { strokeColor: '#c83c3c', strokeWidth: 2 } }),  el({ type: 'arc', id: 'arc1', parents: ['O', 'B', 'G'], attrs: {} }),
+  el({ type: 'sector', id: 'sec1', parents: ['O', 'B', 'G'], attrs: { fillOpacity: 0.1 } }),
+  el({ type: 'angle', id: 'ang1', parents: ['B', 'O', 'M'], attrs: { name: 'α' } }),
+  el({ type: 'polygon', id: 'pg1', parents: ['A', 'B', 'O'], attrs: { fillOpacity: 0.2 } }),
+  // constructions from the Construct menu
+  el({ type: 'perpendicular', id: 'perp1', parents: ['M', 's1'], attrs: {} }),
+  el({ type: 'parallel', id: 'par1', parents: ['G', 's1'], attrs: {} }),
+  el({ type: 'bisector', id: 'bis1', parents: ['B', 'O', 'M'], attrs: { dash: 2 } }),
+  // functions, a slider and a locus
+  el({ type: 'functiongraph', id: 'f1', parents: ['x*x/3-2', -4, 4], attrs: { strokeColor: '#16a34a' } }),
+  el({ type: 'curve', id: 'para1', parents: ['3*cos(x)', '3*sin(x)', 0, 6.28], attrs: { dash: 2 } }),
+  el({ type: 'slider', id: 'sl1', parents: [[-6, -6], [-2, -6], [0, 10, 4]], attrs: {} }),
+  // The locus needs a traced point that really depends on the driver: JSXGraph
+  // recurses until the stack dies when it does not.
+  el({ type: 'midpoint', id: 'MG', parents: ['B', 'G'], attrs: { name: 'N' } }),
+  el({ type: 'tracecurve', id: 'loc1', parents: ['G', 'MG'], attrs: { strokeColor: '#9333ea', numberpoints: 40 } }),
+  // measurements as data, with a caption that follows its geometry
+  el({
+    type: 'text', id: 'mDist', parents: [0, 6, 'AB'],
+    attrs: {
+      fontSize: 13,
+      measure: { op: 'distance', args: ['A', 'B'], label: 'AB', precision: 2, unit: ' cm' },
+      anchor: { of: ['sAB'], dx: 0, dy: 0.4 },
+    },
+  }),
+  el({
+    type: 'text', id: 'mAng', parents: [4, -6, 'α'],
+    attrs: { fontSize: 13, measure: { op: 'angle', args: ['B', 'O', 'M'], label: 'α', precision: 1, unit: '°' } },
+  }),
+  el({ type: 'segment', id: 'sAB', parents: ['A', 'B'], attrs: { strokeColor: '#1e3c96' } }),
+  el({
+    type: 'text', id: 'mCoord', parents: [-7, 7, 'G'],
+    attrs: { fontSize: 13, measure: { op: 'coordinates', args: ['G'], label: 'G', precision: 2 } },
+  }),
+];
+
+/**
+ * What the engine drew, as data: every node's tag plus the attributes that place
+ * geometry. Generated ids are rewritten because JSXGraph numbers them per board,
+ * and numbers are rounded because a rebuild accumulates float noise.
+ *
+ * Text is included because a measurement caption is part of the drawing: the
+ * engine renders it as an absolutely positioned div beside the svg, so where it
+ * sits and what it says both belong in the comparison.
+ */
+const GEOMETRY = ['cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'width', 'height', 'font-size'];
+const PAINT = ['d', 'points', 'transform', 'visibility', 'display', 'fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'opacity'];
+
+function flattenNumbers(value: string): string {
+  return value
+    .replace(/[-\d]*\.?\d+(?:e[-+]?\d+)?/gi, (m) => {
+      const n = Number(m);
+      return Number.isFinite(n) ? String(Math.round(n * 1000) / 1000) : m;
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Only the declarations that say where a node sits. JSXGraph writes the same
+ * transition boilerplate on every element, and keeping it would make a
+ * difference unreadable without saying anything about the drawing.
+ */
+const PLACED = ['left', 'top', 'width', 'height', 'font-size', 'visibility'];
+
+function placement(style: string): string {
+  return PLACED.map((key) => {
+    const m = new RegExp(`(?:^|;)\\s*${key}:\\s*([^;]+)`).exec(style);
+    return m ? `${key}=${flattenNumbers(m[1])}` : null;
+  })
+    .filter(Boolean)
+    .join(' ');
+}
+
+function drawing(board: any): string[] {
+  const out: string[] = [];
+  const walk = (node: Element) => {
+    const parts: string[] = [node.tagName];
+    for (const attr of GEOMETRY) {
+      const raw = node.getAttribute(attr);
+      if (raw !== null) parts.push(`${attr}=${flattenNumbers(raw)}`);
+    }
+    for (const attr of PAINT) {
+      const raw = node.getAttribute(attr);
+      if (raw !== null) parts.push(`${attr}=${flattenNumbers(raw.replace(/jsxgraph_\d+/g, 'board'))}`);
+    }
+    const style = node.getAttribute('style');
+    if (style !== null) {
+      const placed = placement(style);
+      if (placed) parts.push(placed);
+    }
+    const text = (node.textContent ?? '').trim();
+    if (text && (node.tagName === 'text' || node.tagName === 'tspan' || node.classList.contains('JXGtext'))) {
+      parts.push(`text:${text}`);
+    }
+    out.push(parts.join(' '));
+    for (const child of Array.from(node.children)) walk(child);
+  };
+  // The engine draws geometry into an svg but renders text as absolutely
+  // positioned divs next to it, so the whole container is the picture.
+  walk(board.containerObj);
+  return out;
+}
+
+/** Load a document into a board the way the designer does, and assert it works. */
+function load(board: any, elements: HeyGeoElement[]) {
+  const out = applyScene(board, takeScene(elements, { axis: false, grid: false }));
+  expect(out.errors).toEqual([]);
+  return out;
+}
+
+describe('a saved document rebuilds the same drawing', () => {
+  it('survives save → reload for every element type the designer writes', () => {
+    const first = newBoard();
+    load(first, kitchenSink());
+    first.update();
+
+    // What the designer hands the server after a load: the document applyScene
+    // accepted, with migration already applied.
+    const saved = JSON.parse(JSON.stringify(load(newBoard(), kitchenSink()).elements));
+
+    const second = newBoard();
+    const reloaded = load(second, saved);
+    second.update();
+
+    expect(reloaded.elements.map((e: HeyGeoElement) => e.id)).toEqual(saved.map((e: HeyGeoElement) => e.id));
+
+    // The equality below only means something if the signature is a real
+    // drawing, so pin down that geometry is laid out and a caption is rendered.
+    const drawn = drawing(first);
+    expect(drawn.length).toBeGreaterThan(60);
+    expect(drawn.join('\n')).toMatch(/AB = \d+\.\d+ cm/);
+    expect(drawn.join('\n')).toMatch(/left=\d{2,3}px/);
+
+    expect(drawing(second)).toEqual(drawing(first));
+  });
+
+  it('is unchanged by a second reload, so a save cannot drift', () => {
+    const b1 = newBoard();
+    const pass1 = load(b1, kitchenSink()).elements;
+    b1.update();
+    const after1 = drawing(b1);
+
+    const b2 = newBoard();
+    const pass2 = load(b2, JSON.parse(JSON.stringify(pass1)));
+    b2.update();
+    expect(drawing(b2)).toEqual(after1);
+
+    const b3 = newBoard();
+    load(b3, JSON.parse(JSON.stringify(pass2.elements)));
+    b3.update();
+    expect(drawing(b3)).toEqual(after1);
+  });
+
+  it('keeps a dragged point where it was dragged after a reload', () => {
+    const b = newBoard();
+    const elements = load(b, kitchenSink()).elements;
+    b.update();
+    const beforeDrag = drawing(b);
+    b.objects.A.moveTo([5, -2]);
+    b.update();
+    expect(syncPositions(elements, b)).toBe(true);
+    // the transform images and the distance caption follow the drag
+    const moved = drawing(b);
+    expect(moved).not.toEqual(beforeDrag);
+
+    const reloaded = newBoard();
+    load(reloaded, JSON.parse(JSON.stringify(elements)));
+    reloaded.update();
+    expect(drawing(reloaded)).toEqual(moved);
+    expect(reloaded.objects.At.X()).toBeCloseTo(8);
+    expect(String(reloaded.objects.mDist.plaintext)).toBe(String(b.objects.mDist.plaintext));
+  });
+
+  it('migrates a legacy document once, so the second save is already data', () => {
+    const legacy: HeyGeoElement[] = [
+      el({ type: 'point', id: 'A', parents: [1, 1] }),
+      el({ type: 'point', id: 'B', parents: [4, 5] }),
+      el({
+        type: 'text', id: 'm1', parents: [
+          "function(){return (board.objects['A'].X()+board.objects['B'].X())/2}",
+          "function(){return (board.objects['A'].Y()+board.objects['B'].Y())/2+0.5}",
+          "function(){return 'd = '+Math.sqrt(Math.pow(board.objects['B'].X()-board.objects['A'].X(),2)+Math.pow(board.objects['B'].Y()-board.objects['A'].Y(),2)).toFixed(2)}",
+        ],
+        attrs: {},
+      }),
+      el({
+        type: 'point', id: 'A2', parents: [
+          "function(board){var P=board.objects['A'], A=board.objects['A'], B=board.objects['B']; return P.X()+(B.X()-A.X())}",
+          "function(board){var P=board.objects['A'], A=board.objects['A'], B=board.objects['B']; return P.Y()+(B.Y()-A.Y())}",
+        ],
+        attrs: {},
+      }),
+    ];
+    const b = newBoard();
+    const saved = load(b, legacy).elements;
+    expect(JSON.stringify(saved)).not.toMatch(/function\(/);
+
+    const again = newBoard();
+    const second = load(again, saved).elements;
+    expect(JSON.stringify(second)).not.toMatch(/function\(/);
+    expect(second.find((e) => e.id === 'm1')!.attrs.measure).toBeDefined();
+    expect(second.find((e) => e.id === 'A2')!.attrs.image).toEqual({ op: 'translate', of: ['A', 'B'] });
+    again.update();
+    // A translated by A→B lands on B
+    expect(again.objects.A2.X()).toBeCloseTo(4);
+    expect(again.objects.A2.Y()).toBeCloseTo(5);
+    // and the migrated caption is still drawn, so the model is usable, not just
+    // free of code
+    expect(drawing(again).join('\n')).toMatch(/text:d = \d+\.\d+/);
+  });
+});
