@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   createElement,
-  resolveLegacyCodeParent,
   unresolvedParentId,
   type ElementSpec,
 } from './elementRegistry';
@@ -35,6 +34,21 @@ afterAll(() => {
 const spec = (over: Partial<ElementSpec> & { type: string }): ElementSpec => ({
   id: 'e1', parents: [], attrs: {}, ...over,
 });
+
+// Verbatim shapes from HeyGeoWebExporter: a G_MEASURE caption whose value is an
+// IIFE over board.objects, with centimetres-per-unit (here 2) multiplied in.
+const DESKTOP_DISTANCE =
+  "function(){return 'AB = '+((function(){var bo=board.objects," +
+  "dx=bo['A'].X()-bo['B'].X(),dy=bo['A'].Y()-bo['B'].Y();" +
+  "return Math.sqrt(dx*dx+dy*dy)*2;})()).toFixed(2)+' cm';}";
+
+const DESKTOP_COORDS =
+  "function(){var ox=board.objects['O'].X(),oy=board.objects['O'].Y();" +
+  "var ux=board.objects['U'].X(),uy=board.objects['U'].Y();" +
+  "var sf=Math.sqrt((ux-ox)*(ux-ox)+(uy-oy)*(uy-oy));" +
+  "var x=(board.objects['A'].X()-ox)/sf;" +
+  "var y=(board.objects['A'].Y()-oy)/sf;" +
+  "return 'A = ('+x.toFixed(2)+'; '+y.toFixed(2)+')';}";
 
 // Mirrors the parent resolution in DesignCanvas's loadDataToBoard
 function loader(board: any, elements: ElementSpec[]) {
@@ -192,14 +206,37 @@ describe('registry against the real engine', () => {
     expect(Object.keys(b.objects).length).toBe(before);
   });
 
-  it('rehydrates a legacy measurement against a real point', () => {
+  it('renders a legacy measurement descriptor against a real point', () => {
     const b = newBoard();
     const r = loader(b, [
       spec({ type: 'point', id: 'A', parents: [2, 1] }),
-      spec({ type: 'text', id: 't1', parents: [0, 0, `function(){return board.objects['A'].X()*10}`] }),
+      spec({
+        type: 'text',
+        id: 't1',
+        parents: [0, 0, 'A.x'],
+        attrs: { measure: { op: 'abscissa', args: ['A'], label: 'A.x', precision: 2 } },
+      }),
     ]);
     expect(r.errors).toEqual([]);
     expect(r.loaded).toBe(2);
+    b.update();
+    expect(String((r.elMap.t1 as any).plaintext)).toBe('A.x = 2.00');
+
+    (r.elMap.A as any).setPosition(1, [7, 5]);
+    b.update();
+    expect(String((r.elMap.t1 as any).plaintext)).toBe('A.x = 7.00');
+  });
+
+  it('reports a stored code source it cannot express instead of running it', () => {
+    const b = newBoard();
+    const before = Object.keys(b.objects).length;
+    const out = createElement(b, spec({
+      type: 'text',
+      parents: [0, 0, "function(){return 'x = '+board.objects['A'].X()}"],
+    }));
+    expect(out.obj).toBeNull();
+    expect(out.error).toMatch(/không dựng lại được/);
+    expect(Object.keys(b.objects).length).toBe(before);
   });
 
   it('round-trips a model with ids, references and out-of-order children', () => {
@@ -265,20 +302,181 @@ describe('registry against the real engine', () => {
     expect(curve.Y(0)).toBeCloseTo(0);
   });
 
-  it('renders a desktop-exported measurement caption from a live point', () => {
+  it('renders a desktop-exported distance caption, scale and all', () => {
     const b = newBoard();
     // HeyGeoWebExporter writes measure text as [x, y, functionSource]
     const r = loader(b, [
-      spec({ type: 'point', id: 'A', parents: [2, 1] }),
-      spec({
-        type: 'text',
-        id: 'cap',
-        parents: [0, 0, `function(){var bo=board.objects;return 'A.x = ' + bo['A'].X().toFixed(2);}`],
-      }),
+      spec({ type: 'point', id: 'A', parents: [0, 0] }),
+      spec({ type: 'point', id: 'B', parents: [3, 4] }),
+      spec({ type: 'text', id: 'cap', parents: [1, 6, DESKTOP_DISTANCE] }),
     ]);
     expect(r.errors).toEqual([]);
     b.update();
     const txt = r.elMap.cap as any;
-    expect(String(txt.plaintext)).toContain('A.x = 2.00');
+    expect(String(txt.plaintext)).toBe('AB = 10.00 cm');
+
+    (r.elMap.B as any).setPosition(1, [0, 8]);
+    b.update();
+    expect(String(txt.plaintext)).toBe('AB = 16.00 cm');
+  });
+
+  it('renders a desktop-exported coordinate-system caption', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'O', parents: [0, 0] }),
+      spec({ type: 'point', id: 'U', parents: [2, 0] }),
+      spec({ type: 'point', id: 'A', parents: [2, 1] }),
+      spec({ type: 'text', id: 'cap', parents: [0.5, 0.5, DESKTOP_COORDS] }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    expect(String((r.elMap.cap as any).plaintext)).toBe('A = (1.00; 0.50)');
+  });
+
+  // The five templates DesignCanvas wrote into a transformed point's parents
+  // before transforms.ts existed, quoted verbatim from git HEAD.
+  const legacyPair = (make: (axis: 'X' | 'Y') => string): [string, string] =>
+    [make('X'), make('Y')];
+  const LEGACY = {
+    vector: (src: string, from: string, to: string) =>
+      legacyPair((a) => `function(board){var P=board.objects['${src}'], A=board.objects['${from}'], B=board.objects['${to}']; return P.${a}()+(B.${a}()-A.${a}())}`),
+    offset: (src: string, dx: number, dy: number) =>
+      legacyPair((a) => `function(board){var P=board.objects['${src}']; return P.${a}()+${a === 'X' ? dx : dy}}`),
+    rotate: (src: string, centre: string, deg: number) => {
+      const rad = (deg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      return legacyPair((a) => a === 'X'
+        ? `function(board){var P=board.objects['${src}'], C=board.objects['${centre}']; var dx=P.X()-C.X(), dy=P.Y()-C.Y(); return C.X()+dx*${cos}-dy*${sin}}`
+        : `function(board){var P=board.objects['${src}'], C=board.objects['${centre}']; var dx=P.X()-C.X(), dy=P.Y()-C.Y(); return C.Y()+dx*${sin}+dy*${cos}}`);
+    },
+    dilate: (src: string, centre: string, k: number) =>
+      legacyPair((a) => `function(board){var P=board.objects['${src}'], C=board.objects['${centre}']; return C.${a}()+${k}*(P.${a}()-C.${a}())}`),
+    reflect: (src: string, line: string) =>
+      legacyPair((a) => `function(board){var P=board.objects['${src}'], L=board.objects['${line}']; var p1=L.point1, p2=L.point2; var vx=p2.X()-p1.X(), vy=p2.Y()-p1.Y(); var v2=vx*vx+vy*vy; if(v2<1e-12)return P.${a}(); var wx=P.X()-p1.X(), wy=P.Y()-p1.Y(); var t=(wx*vx+wy*vy)/v2; return 2*(p1.${a}()+t*${a === 'X' ? 'vx' : 'vy'})-P.${a}()}`),
+  };
+
+  const at = (o: any): [number, number] => [o.X(), o.Y()];
+
+  /**
+   * A document that stores the old source is migrated and rebuilt at the same
+   * place the compiled source used to put it — the copy keeps following its
+   * source, its vector, its centre and its mirror.
+   */
+  it('rebuilds a legacy translated copy without running its source', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'V1', parents: [0, 0] }),
+      spec({ type: 'point', id: 'V2', parents: [2, 3] }),
+      spec({ type: 'point', id: 'A', parents: [1, 1] }),
+      spec({ type: 'point', id: 'A2', parents: LEGACY.vector('A', 'V1', 'V2') }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    expect(at(r.elMap.A2)).toEqual([3, 4]);
+
+    (r.elMap.A as any).setPosition(1, [5, 5]);
+    (r.elMap.V2 as any).setPosition(1, [1, 1]);
+    b.update();
+    expect(at(r.elMap.A2)).toEqual([6, 6]);
+  });
+
+  it('rebuilds a legacy copy translated by a number', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [1, 1] }),
+      spec({ type: 'point', id: 'A2', parents: LEGACY.offset('A', 2.5, -1) }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    expect(at(r.elMap.A2)).toEqual([3.5, 0]);
+  });
+
+  it('rebuilds a legacy rotated copy and keeps the angle', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'O', parents: [0, 0] }),
+      spec({ type: 'point', id: 'A', parents: [2, 1] }),
+      spec({ type: 'point', id: 'A2', parents: LEGACY.rotate('A', 'O', 90) }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    expect(at(r.elMap.A2)[0]).toBeCloseTo(-1);
+    expect(at(r.elMap.A2)[1]).toBeCloseTo(2);
+
+    (r.elMap.A as any).setPosition(1, [0, 3]);
+    b.update();
+    expect(at(r.elMap.A2)[0]).toBeCloseTo(-3);
+    expect(at(r.elMap.A2)[1]).toBeCloseTo(0);
+  });
+
+  it('rebuilds a legacy dilated copy about its centre', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'O', parents: [1, 1] }),
+      spec({ type: 'point', id: 'A', parents: [3, 3] }),
+      spec({ type: 'point', id: 'A2', parents: LEGACY.dilate('A', 'O', 0.5) }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    expect(at(r.elMap.A2)).toEqual([2, 2]);
+  });
+
+  it('rebuilds a legacy reflected copy in its mirror', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'L1', parents: [0, 0] }),
+      spec({ type: 'point', id: 'L2', parents: [4, 0] }),
+      spec({ type: 'segment', id: 's1', parents: ['L1', 'L2'] }),
+      spec({ type: 'point', id: 'A', parents: [1, 3] }),
+      spec({ type: 'point', id: 'A2', parents: LEGACY.reflect('A', 's1') }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    expect(at(r.elMap.A2)[0]).toBeCloseTo(1);
+    expect(at(r.elMap.A2)[1]).toBeCloseTo(-3);
+
+    (r.elMap.L2 as any).setPosition(1, [4, 4]);
+    b.update();
+    // mirrored in y = x, the copy swaps its coordinates
+    expect(at(r.elMap.A2)[0]).toBeCloseTo(3);
+    expect(at(r.elMap.A2)[1]).toBeCloseTo(1);
+  });
+
+  it('builds a declarative image point and keeps it out of JSXGraph attrs', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'O', parents: [0, 0] }),
+      spec({ type: 'point', id: 'A', parents: [2, 0] }),
+      spec({
+        type: 'point', id: 'A2', parents: ['A'],
+        attrs: { image: { op: 'rotate', of: ['O'], angle: 180 } },
+      }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    expect(at(r.elMap.A2)[0]).toBeCloseTo(-2);
+    expect(at(r.elMap.A2)[1]).toBeCloseTo(0);
+    expect((r.elMap.A2 as any).visProp.image).toBeUndefined();
+  });
+
+  it('reports an image point whose source is not on the board', () => {
+    const b = newBoard();
+    const out = createElement(b, spec({
+      type: 'point', id: 'A2', parents: ['ghost'],
+      attrs: { image: { op: 'translate', of: [], dx: 1, dy: 1 } },
+    }));
+    expect(out.obj).toBeNull();
+    expect(out.error).toMatch(/không tồn tại/);
+  });
+
+  it('refuses an image point with more than its source as parent', () => {
+    const b = newBoard();
+    const out = createElement(b, spec({
+      type: 'point', id: 'A2', parents: ['A', 'B'],
+      attrs: { image: { op: 'translate', of: [], dx: 1, dy: 1 } },
+    }));
+    expect(out.obj).toBeNull();
+    expect(out.error).toMatch(/cần 1 đối tượng cha/);
   });
 });

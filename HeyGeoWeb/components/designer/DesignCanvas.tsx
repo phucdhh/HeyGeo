@@ -20,6 +20,8 @@ import type {
 } from './designTypes';
 import { emptyData } from './designTypes';
 import { createElement } from './elementRegistry';
+import { anchorClosures, type AnchorSpec, type MeasureSpec } from './measurement';
+import { imageClosures, type ImageSpec } from './transforms';
 import {
   applyScene,
   clearHistory,
@@ -586,6 +588,42 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     selectedRef.current = alive;
     onSelectionChange(alive.map(toSelectedInfo));
     setSelDecorations(computeDecorations(alive, board));
+  }
+
+  // ─── Measurements ─────────────────────────────────────────────────────────
+  /**
+   * A measurement is a text element carrying descriptors: `attrs.measure` says
+   * what to compute and `attrs.anchor` where to put it. The document stays data
+   * — no JavaScript source is stored, so nothing has to be evaluated to open a
+   * file — and the caption keeps following the geometry because the registry
+   * hands JSXGraph closures built from those descriptors.
+   */
+  function addMeasure(
+    id: string,
+    measure: MeasureSpec,
+    anchor: AnchorSpec | null,
+    style: Record<string, unknown>,
+  ): boolean {
+    const board = boardRef.current;
+    if (!board) return false;
+    const [x, y] = anchor
+      ? anchorClosures(board, anchor)
+      : [() => 0, () => 0];
+    const el: HeyGeoElement = {
+      type: 'text',
+      id,
+      parents: [Number(x().toFixed(4)), Number(y().toFixed(4)), measure.label ?? ''],
+      attrs: anchor ? { ...style, anchor, measure } : { ...style, measure },
+    };
+    const { obj, error } = createElement(board, el, {});
+    if (!obj) {
+      onNotifyRef.current?.(error ?? `Không tạo được ${el.type}`);
+      return false;
+    }
+    elementsRef.current.push(el);
+    board.update();
+    onDirty();
+    return true;
   }
 
   // ─── Rebuild board from elements[] ────────────────────────────────────────
@@ -1527,13 +1565,12 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   }, []);
 
   // ─── Transformation engine ────────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function executeTransform(calcCoord: (origPt: any) => {
-    fnX: () => number;
-    fnY: () => number;
-    strX: string;
-    strY: string;
-  }): boolean {
+  /**
+   * Copy the selection through one map. `image` is the declarative description
+   * of that map, so the document stores data and the board gets the closures
+   * transforms.ts builds from it — the same pair for every reload.
+   */
+  function executeTransform(image: ImageSpec): boolean {
     const board = boardRef.current;
     if (!board) return false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1579,7 +1616,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const newObjects: any[] = [];
 
     pointsMap.forEach((origPt) => {
-      const { fnX, fnY, strX, strY } = calcCoord(origPt);
+      const [fnX, fnY] = imageClosures(board, origPt.id, image);
       const newId = nextElId('pt');
       const baseName = origPt.name ? `${origPt.name}'` : '';
       const ptAttrs = {
@@ -1599,8 +1636,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       elementsRef.current.push({
         type: 'point',
         id: newId,
-        parents: [strX, strY],
-        attrs: { ...ptAttrs },
+        parents: [origPt.id],
+        attrs: { ...ptAttrs, image },
       });
       newObjects.push(newPt);
     });
@@ -2268,80 +2305,34 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     },
 
     measureDistance: () => {
-      const board = boardRef.current;
-      if (!board || selectedRef.current.length < 2) return;
+      if (selectedRef.current.length < 2) return;
       saveSnapshot();
       const [a, b] = selectedRef.current;
-      const id = nextElId('meas');
-      try {
-        board.create('text', [
-          () => (a.X() + b.X()) / 2,
-          () => (a.Y() + b.Y()) / 2 + 0.5,
-          () => `d = ${Math.sqrt((b.X()-a.X())**2 + (b.Y()-a.Y())**2).toFixed(3)}`,
-        ], { id, strokeColor: '#c83c3c', fontSize: 14, withLabel: false });
-        elementsRef.current.push({
-          type: 'text', id,
-          parents: [
-            `function(){return (board.objects['${a.id}'].X()+board.objects['${b.id}'].X())/2}`,
-            `function(){return (board.objects['${a.id}'].Y()+board.objects['${b.id}'].Y())/2+0.5}`,
-            `function(){return 'd = '+Math.sqrt(Math.pow(board.objects['${b.id}'].X()-board.objects['${a.id}'].X(),2)+Math.pow(board.objects['${b.id}'].Y()-board.objects['${a.id}'].Y(),2)).toFixed(3)}`,
-          ],
-          attrs: { strokeColor: '#c83c3c', fontSize: 14, withLabel: false },
-        });
-        onDirty();
-      } catch { /**/ }
+      addMeasure(nextElId('meas'),
+        { op: 'distance', args: [a.id, b.id], label: 'd', precision: 3 },
+        { of: [a.id, b.id], dy: 0.5 },
+        { strokeColor: '#c83c3c', fontSize: 14, withLabel: false });
     },
 
     measureLength: () => {
-      const board = boardRef.current;
-      if (!board || selectedRef.current.length < 1) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const seg = selectedRef.current.find((o: any) => o.elType === 'segment' || o.elType === 'line');
       if (!seg) return;
       saveSnapshot();
-      const id = nextElId('len');
-      const p1 = seg.point1, p2 = seg.point2;
-      try {
-        board.create('text', [
-          () => (p1.X() + p2.X()) / 2,
-          () => (p1.Y() + p2.Y()) / 2 + 0.5,
-          () => `L = ${Math.sqrt((p2.X()-p1.X())**2 + (p2.Y()-p1.Y())**2).toFixed(3)}`,
-        ], { id, strokeColor: '#c83c3c', fontSize: 14, withLabel: false });
-        elementsRef.current.push({
-          type: 'text', id,
-          parents: [
-            `function(){return (board.objects['${p1.id}'].X()+board.objects['${p2.id}'].X())/2}`,
-            `function(){return (board.objects['${p1.id}'].Y()+board.objects['${p2.id}'].Y())/2+0.5}`,
-            `function(){return 'L = '+Math.sqrt(Math.pow(board.objects['${p2.id}'].X()-board.objects['${p1.id}'].X(),2)+Math.pow(board.objects['${p2.id}'].Y()-board.objects['${p1.id}'].Y(),2)).toFixed(3)}`,
-          ],
-          attrs: { strokeColor: '#c83c3c', fontSize: 14, withLabel: false },
-        });
-        onDirty();
-      } catch { /**/ }
+      addMeasure(nextElId('len'),
+        { op: 'length', args: [seg.id], label: 'L', precision: 3 },
+        { of: [seg.id], dy: 0.5 },
+        { strokeColor: '#c83c3c', fontSize: 14, withLabel: false });
     },
+
     measureRadius: () => {
-      const board = boardRef.current;
       const sel = selectedRef.current.find((o: { elType: string }) => o.elType === 'circle');
-      if (!board || !sel) return;
+      if (!sel) return;
       saveSnapshot();
-      const id = nextElId('meas');
-      try {
-        board.create('text', [
-          () => sel.center.X() + sel.Radius() * 1.1,
-          () => sel.center.Y(),
-          () => `r = ${sel.Radius().toFixed(3)}`,
-        ], { id, strokeColor: '#c83c3c', fontSize: 14 });
-        elementsRef.current.push({
-          type: 'text', id,
-          parents: [
-            `function(){var c=board.objects['${sel.id}']; return c.center.X()+c.Radius()*1.1}`,
-            `function(){return board.objects['${sel.id}'].center.Y()}`,
-            `function(){return 'r = '+board.objects['${sel.id}'].Radius().toFixed(3)}`,
-          ],
-          attrs: { strokeColor: '#c83c3c', fontSize: 14 },
-        });
-        onDirty();
-      } catch { /**/ }
+      addMeasure(nextElId('meas'),
+        { op: 'radius', args: [sel.id], label: 'r', precision: 3 },
+        { of: [sel.id], radiusFactor: 1.1 },
+        { strokeColor: '#c83c3c', fontSize: 14 });
     },
     measureAngle: () => {
       const board = boardRef.current;
@@ -2358,28 +2349,13 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       } catch { /**/ }
     },
     measureArea: () => {
-      const board = boardRef.current;
       const poly = selectedRef.current.find((o: { elType: string }) => o.elType === 'polygon');
-      if (!board || !poly) return;
+      if (!poly) return;
       saveSnapshot();
-      const id = nextElId('meas');
-      try {
-        board.create('text', [
-          () => poly.vertices.reduce((s: number, v: { X(): number }) => s + v.X(), 0) / poly.vertices.length,
-          () => poly.vertices.reduce((s: number, v: { Y(): number }) => s + v.Y(), 0) / poly.vertices.length,
-          () => `A = ${Math.abs(poly.Area?.() ?? 0).toFixed(3)}`,
-        ], { id, strokeColor: '#c83c3c', fontSize: 14 });
-        elementsRef.current.push({
-          type: 'text', id,
-          parents: [
-            `function(){var p=board.objects['${poly.id}']; return p.vertices.reduce(function(s,v){return s+v.X()},0)/p.vertices.length}`,
-            `function(){var p=board.objects['${poly.id}']; return p.vertices.reduce(function(s,v){return s+v.Y()},0)/p.vertices.length}`,
-            `function(){var p=board.objects['${poly.id}']; return 'A = '+Math.abs(p.Area?p.Area():0).toFixed(3)}`,
-          ],
-          attrs: { strokeColor: '#c83c3c', fontSize: 14 },
-        });
-        onDirty();
-      } catch { /**/ }
+      addMeasure(nextElId('meas'),
+        { op: 'area', args: [poly.id], label: 'A', precision: 3 },
+        { of: [poly.id] },
+        { strokeColor: '#c83c3c', fontSize: 14 });
     },
 
     // ── Transform menu & marks ───────────────────────────────────────────────
@@ -2472,16 +2448,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           onNotifyRef.current?.('Chưa đánh dấu vectơ tịnh tiến. Hãy chọn 2 điểm rồi chọn Mark Vector.');
           return false;
         }
-        const fromPt = board.objects[v.fromId];
-        const toPt   = board.objects[v.toId];
-        if (!fromPt || !toPt) return false;
-
-        return executeTransform((P) => ({
-          fnX: () => P.X() + (toPt.X() - fromPt.X()),
-          fnY: () => P.Y() + (toPt.Y() - fromPt.Y()),
-          strX: `function(board){var P=board.objects['${P.id}'], A=board.objects['${fromPt.id}'], B=board.objects['${toPt.id}']; return P.X()+(B.X()-A.X())}`,
-          strY: `function(board){var P=board.objects['${P.id}'], A=board.objects['${fromPt.id}'], B=board.objects['${toPt.id}']; return P.Y()+(B.Y()-A.Y())}`,
-        }));
+        if (!board.objects[v.fromId] || !board.objects[v.toId]) return false;
+        return executeTransform({ op: 'translate', of: [v.fromId, v.toId] });
       } else {
         let dx = 0, dy = 0;
         if (params.type === 'rect') {
@@ -2492,61 +2460,28 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           dx = params.distance * Math.cos(rad);
           dy = params.distance * Math.sin(rad);
         }
-        return executeTransform((P) => ({
-          fnX: () => P.X() + dx,
-          fnY: () => P.Y() + dy,
-          strX: `function(board){var P=board.objects['${P.id}']; return P.X()+${dx}}`,
-          strY: `function(board){var P=board.objects['${P.id}']; return P.Y()+${dy}}`,
-        }));
+        return executeTransform({ op: 'translate', of: [], dx, dy });
       }
     },
 
     applyRotate: (params) => {
-      const board = boardRef.current;
-      if (!board) return false;
       const cInfo = marksRef.current.center;
-      const centerPt = cInfo ? board.objects[cInfo.id] : null;
+      const centerPt = cInfo ? boardRef.current?.objects[cInfo.id] : null;
       if (!centerPt) {
         onNotifyRef.current?.('Chưa đánh dấu tâm quay. Hãy chọn 1 điểm và chọn Mark Center trước.');
         return false;
       }
-      const rad = (params.angleDeg * Math.PI) / 180;
-      const cos = Math.cos(rad);
-      const sin = Math.sin(rad);
-
-      return executeTransform((P) => ({
-        fnX: () => {
-          const dx = P.X() - centerPt.X();
-          const dy = P.Y() - centerPt.Y();
-          return centerPt.X() + dx * cos - dy * sin;
-        },
-        fnY: () => {
-          const dx = P.X() - centerPt.X();
-          const dy = P.Y() - centerPt.Y();
-          return centerPt.Y() + dx * sin + dy * cos;
-        },
-        strX: `function(board){var P=board.objects['${P.id}'], C=board.objects['${centerPt.id}']; var dx=P.X()-C.X(), dy=P.Y()-C.Y(); return C.X()+dx*${cos}-dy*${sin}}`,
-        strY: `function(board){var P=board.objects['${P.id}'], C=board.objects['${centerPt.id}']; var dx=P.X()-C.X(), dy=P.Y()-C.Y(); return C.Y()+dx*${sin}+dy*${cos}}`,
-      }));
+      return executeTransform({ op: 'rotate', of: [centerPt.id], angle: params.angleDeg });
     },
 
     applyDilate: (params) => {
-      const board = boardRef.current;
-      if (!board) return false;
       const cInfo = marksRef.current.center;
-      const centerPt = cInfo ? board.objects[cInfo.id] : null;
+      const centerPt = cInfo ? boardRef.current?.objects[cInfo.id] : null;
       if (!centerPt) {
         onNotifyRef.current?.('Chưa đánh dấu tâm vị tự. Hãy chọn 1 điểm và chọn Mark Center trước.');
         return false;
       }
-      const k = params.ratio;
-
-      return executeTransform((P) => ({
-        fnX: () => centerPt.X() + k * (P.X() - centerPt.X()),
-        fnY: () => centerPt.Y() + k * (P.Y() - centerPt.Y()),
-        strX: `function(board){var P=board.objects['${P.id}'], C=board.objects['${centerPt.id}']; return C.X()+${k}*(P.X()-C.X())}`,
-        strY: `function(board){var P=board.objects['${P.id}'], C=board.objects['${centerPt.id}']; return C.Y()+${k}*(P.Y()-C.Y())}`,
-      }));
+      return executeTransform({ op: 'dilate', of: [centerPt.id], k: params.ratio });
     },
 
     applyReflect: () => {
@@ -2558,29 +2493,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         onNotifyRef.current?.('Chưa đánh dấu trục đối xứng. Hãy chọn 1 đường thẳng và chọn Mark Mirror trước.');
         return false;
       }
-
-      return executeTransform((P) => ({
-        fnX: () => {
-          const p1 = mirrorLine.point1, p2 = mirrorLine.point2;
-          const vx = p2.X() - p1.X(), vy = p2.Y() - p1.Y();
-          const v2 = vx * vx + vy * vy;
-          if (v2 < 1e-12) return P.X();
-          const wx = P.X() - p1.X(), wy = P.Y() - p1.Y();
-          const t = (wx * vx + wy * vy) / v2;
-          return 2 * (p1.X() + t * vx) - P.X();
-        },
-        fnY: () => {
-          const p1 = mirrorLine.point1, p2 = mirrorLine.point2;
-          const vx = p2.X() - p1.X(), vy = p2.Y() - p1.Y();
-          const v2 = vx * vx + vy * vy;
-          if (v2 < 1e-12) return P.Y();
-          const wx = P.X() - p1.X(), wy = P.Y() - p1.Y();
-          const t = (wx * vx + wy * vy) / v2;
-          return 2 * (p1.Y() + t * vy) - P.Y();
-        },
-        strX: `function(board){var P=board.objects['${P.id}'], L=board.objects['${mirrorLine.id}']; var p1=L.point1, p2=L.point2; var vx=p2.X()-p1.X(), vy=p2.Y()-p1.Y(); var v2=vx*vx+vy*vy; if(v2<1e-12)return P.X(); var wx=P.X()-p1.X(), wy=P.Y()-p1.Y(); var t=(wx*vx+wy*vy)/v2; return 2*(p1.X()+t*vx)-P.X()}`,
-        strY: `function(board){var P=board.objects['${P.id}'], L=board.objects['${mirrorLine.id}']; var p1=L.point1, p2=L.point2; var vx=p2.X()-p1.X(), vy=p2.Y()-p1.Y(); var v2=vx*vx+vy*vy; if(v2<1e-12)return P.Y(); var wx=P.X()-p1.X(), wy=P.Y()-p1.Y(); var t=(wx*vx+wy*vy)/v2; return 2*(p1.Y()+t*vy)-P.Y()}`,
-      }));
+      return executeTransform({ op: 'reflect', of: [mirrorLine.id] });
     },
 
     // ── Display menu helpers ─────────────────────────────────────────────────
@@ -2626,224 +2539,88 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     // ── Measure menu additions ───────────────────────────────────────────────
     measureCoordinates: () => {
-      const board = boardRef.current;
-      if (!board) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pts = selectedRef.current.filter((o: any) => POINT_ELTS.includes(o.elType));
       if (pts.length === 0) return;
       saveSnapshot();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      pts.forEach((p: any) => {
-        const id = nextElId('meas');
-        const name = p.name || 'P';
-        board.create('text', [
-          () => p.X() + 0.3,
-          () => p.Y() - 0.3,
-          () => `${name}: (${p.X().toFixed(2)}, ${p.Y().toFixed(2)})`,
-        ], { id, strokeColor: '#1e3c96', fontSize: 13, withLabel: false });
-        elementsRef.current.push({
-          type: 'text', id,
-          parents: [
-            `function(){return board.objects['${p.id}'].X()+0.3}`,
-            `function(){return board.objects['${p.id}'].Y()-0.3}`,
-            `function(){var pt=board.objects['${p.id}']; return '${name}: ('+pt.X().toFixed(2)+', '+pt.Y().toFixed(2)+')'}`,
-          ],
-          attrs: { strokeColor: '#1e3c96', fontSize: 13, withLabel: false },
-        });
-      });
-      board.update();
-      onDirty();
+      pts.forEach((p: any) => addMeasure(nextElId('meas'),
+        { op: 'coordinates', args: [p.id], label: p.name || 'P', precision: 2 },
+        { of: [p.id], dx: 0.3, dy: -0.3 },
+        { strokeColor: '#1e3c96', fontSize: 13, withLabel: false }));
     },
 
     measureAbscissa: () => {
-      const board = boardRef.current;
-      if (!board) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pts = selectedRef.current.filter((o: any) => POINT_ELTS.includes(o.elType));
       if (pts.length === 0) return;
       saveSnapshot();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      pts.forEach((p: any) => {
-        const id = nextElId('meas');
-        const name = p.name || 'P';
-        board.create('text', [
-          () => p.X() + 0.3,
-          () => p.Y() - 0.3,
-          () => `x_{${name}} = ${p.X().toFixed(2)}`,
-        ], { id, strokeColor: '#1e3c96', fontSize: 13, withLabel: false });
-        elementsRef.current.push({
-          type: 'text', id,
-          parents: [
-            `function(){return board.objects['${p.id}'].X()+0.3}`,
-            `function(){return board.objects['${p.id}'].Y()-0.3}`,
-            `function(){var pt=board.objects['${p.id}']; return 'x_{${name}} = '+board.objects['${p.id}'].X().toFixed(2)}`,
-          ],
-          attrs: { strokeColor: '#1e3c96', fontSize: 13, withLabel: false },
-        });
-      });
-      board.update();
-      onDirty();
+      pts.forEach((p: any) => addMeasure(nextElId('meas'),
+        { op: 'abscissa', args: [p.id], label: `x_{${p.name || 'P'}}`, precision: 2 },
+        { of: [p.id], dx: 0.3, dy: -0.3 },
+        { strokeColor: '#1e3c96', fontSize: 13, withLabel: false }));
     },
 
     measureOrdinate: () => {
-      const board = boardRef.current;
-      if (!board) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pts = selectedRef.current.filter((o: any) => POINT_ELTS.includes(o.elType));
       if (pts.length === 0) return;
       saveSnapshot();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      pts.forEach((p: any) => {
-        const id = nextElId('meas');
-        const name = p.name || 'P';
-        board.create('text', [
-          () => p.X() + 0.3,
-          () => p.Y() - 0.3,
-          () => `y_{${name}} = ${p.Y().toFixed(2)}`,
-        ], { id, strokeColor: '#1e3c96', fontSize: 13, withLabel: false });
-        elementsRef.current.push({
-          type: 'text', id,
-          parents: [
-            `function(){return board.objects['${p.id}'].X()+0.3}`,
-            `function(){return board.objects['${p.id}'].Y()-0.3}`,
-            `function(){var pt=board.objects['${p.id}']; return 'y_{${name}} = '+board.objects['${p.id}'].Y().toFixed(2)}`,
-          ],
-          attrs: { strokeColor: '#1e3c96', fontSize: 13, withLabel: false },
-        });
-      });
-      board.update();
-      onDirty();
+      pts.forEach((p: any) => addMeasure(nextElId('meas'),
+        { op: 'ordinate', args: [p.id], label: `y_{${p.name || 'P'}}`, precision: 2 },
+        { of: [p.id], dx: 0.3, dy: -0.3 },
+        { strokeColor: '#1e3c96', fontSize: 13, withLabel: false }));
     },
 
     measureSlope: () => {
-      const board = boardRef.current;
-      if (!board) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const line = selectedRef.current.find((o: any) => ['line', 'segment', 'ray'].includes(o.elType));
       if (!line || !line.point1 || !line.point2) return;
       saveSnapshot();
-      const id = nextElId('slope');
-      const p1 = line.point1, p2 = line.point2;
-      board.create('text', [
-        () => (p1.X() + p2.X()) / 2,
-        () => (p1.Y() + p2.Y()) / 2 + 0.4,
-        () => {
-          const dx = p2.X() - p1.X();
-          if (Math.abs(dx) < 1e-6) return 'm = ∞';
-          return `m = ${((p2.Y() - p1.Y()) / dx).toFixed(2)}`;
-        },
-      ], { id, strokeColor: '#1e3c96', fontSize: 13, withLabel: false });
-      elementsRef.current.push({
-        type: 'text', id,
-        parents: [
-          `function(){var l=board.objects['${line.id}']; return (l.point1.X()+l.point2.X())/2}`,
-          `function(){var l=board.objects['${line.id}']; return (l.point1.Y()+l.point2.Y())/2+0.4}`,
-          `function(){var l=board.objects['${line.id}']; var dx=l.point2.X()-l.point1.X(); if(Math.abs(dx)<1e-6)return 'm = ∞'; return 'm = '+((l.point2.Y()-l.point1.Y())/dx).toFixed(2)}`,
-        ],
-        attrs: { strokeColor: '#1e3c96', fontSize: 13, withLabel: false },
-      });
-      board.update();
-      onDirty();
+      addMeasure(nextElId('slope'),
+        { op: 'slope', args: [line.id], label: 'm', precision: 2 },
+        { of: [line.id], dy: 0.4 },
+        { strokeColor: '#1e3c96', fontSize: 13, withLabel: false });
     },
 
     measureEquation: () => {
-      const board = boardRef.current;
-      if (!board) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const obj = selectedRef.current.find((o: any) => ['line', 'segment', 'circle'].includes(o.elType));
       if (!obj) return;
       saveSnapshot();
-      const id = nextElId('eq');
       if (obj.elType === 'circle') {
-        const c = obj.center ?? obj.point1;
-        board.create('text', [
-          () => c.X() + 0.5,
-          () => c.Y() - 0.5,
-          () => {
-            const r = obj.Radius?.() ?? 1;
-            const cx = c.X().toFixed(1), cy = c.Y().toFixed(1), r2 = (r * r).toFixed(1);
-            return `(x - ${cx})² + (y - ${cy})² = ${r2}`;
-          },
-        ], { id, strokeColor: '#1e3c96', fontSize: 13 });
-        elementsRef.current.push({
-          type: 'text', id,
-          parents: [
-            `function(){var c=board.objects['${c.id}']; return c.X()+0.5}`,
-            `function(){var c=board.objects['${c.id}']; return c.Y()-0.5}`,
-            `function(){var circ=board.objects['${obj.id}']; var c=circ.center||circ.point1; var r=circ.Radius?circ.Radius():1; return '(x - '+c.X().toFixed(1)+')² + (y - '+c.Y().toFixed(1)+')² = '+(r*r).toFixed(1)}`,
-          ],
-          attrs: { strokeColor: '#1e3c96', fontSize: 13 },
-        });
+        addMeasure(nextElId('eq'),
+          { op: 'equationCircle', args: [obj.id], precision: 1 },
+          { of: [obj.id], dx: 0.5, dy: -0.5 },
+          { strokeColor: '#1e3c96', fontSize: 13 });
       } else {
-        const p1 = obj.point1, p2 = obj.point2;
-        board.create('text', [
-          () => (p1.X() + p2.X()) / 2,
-          () => (p1.Y() + p2.Y()) / 2 + 0.4,
-          () => {
-            const a = p1.Y() - p2.Y();
-            const b = p2.X() - p1.X();
-            const c = p1.X() * p2.Y() - p2.X() * p1.Y();
-            return `${a.toFixed(1)}x + ${b.toFixed(1)}y + ${c.toFixed(1)} = 0`;
-          },
-        ], { id, strokeColor: '#1e3c96', fontSize: 13 });
-        elementsRef.current.push({
-          type: 'text', id,
-          parents: [
-            `function(){var l=board.objects['${obj.id}']; return (l.point1.X()+l.point2.X())/2}`,
-            `function(){var l=board.objects['${obj.id}']; return (l.point1.Y()+l.point2.Y())/2+0.4}`,
-            `function(){var l=board.objects['${obj.id}']; var p1=l.point1,p2=l.point2; var a=p1.Y()-p2.Y(),b=p2.X()-p1.X(),c=p1.X()*p2.Y()-p2.X()*p1.Y(); return a.toFixed(1)+'x + '+b.toFixed(1)+'y + '+c.toFixed(1)+' = 0'}`,
-          ],
-          attrs: { strokeColor: '#1e3c96', fontSize: 13 },
-        });
+        addMeasure(nextElId('eq'),
+          { op: 'equationLine', args: [obj.id], precision: 1 },
+          { of: [obj.id], dy: 0.4 },
+          { strokeColor: '#1e3c96', fontSize: 13 });
       }
-      board.update();
-      onDirty();
     },
 
     measurePerimeter: () => {
-      const board = boardRef.current;
-      if (!board) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const poly = selectedRef.current.find((o: any) => o.elType === 'polygon');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const circ = selectedRef.current.find((o: any) => o.elType === 'circle');
       if (!poly && !circ) return;
       saveSnapshot();
-      const id = nextElId('meas');
       if (circ) {
-        const c = circ.center ?? circ.point1;
-        board.create('text', [
-          () => c.X() + circ.Radius() * 1.1,
-          () => c.Y(),
-          () => `C = ${(2 * Math.PI * circ.Radius()).toFixed(3)}`,
-        ], { id, strokeColor: '#c83c3c', fontSize: 14 });
-        elementsRef.current.push({
-          type: 'text', id,
-          parents: [
-            `function(){var c=board.objects['${circ.id}']; return c.center.X()+c.Radius()*1.1}`,
-            `function(){return board.objects['${circ.id}'].center.Y()}`,
-            `function(){return 'C = '+(2*Math.PI*board.objects['${circ.id}'].Radius()).toFixed(3)}`,
-          ],
-          attrs: { strokeColor: '#c83c3c', fontSize: 14 },
-        });
-      } else if (poly) {
-        board.create('text', [
-          () => poly.vertices.reduce((s: number, v: { X(): number }) => s + v.X(), 0) / poly.vertices.length,
-          () => poly.vertices.reduce((s: number, v: { Y(): number }) => s + v.Y(), 0) / poly.vertices.length,
-          () => `P = ${poly.Perimeter ? poly.Perimeter().toFixed(3) : '…'}`,
-        ], { id, strokeColor: '#c83c3c', fontSize: 14 });
-        elementsRef.current.push({
-          type: 'text', id,
-          parents: [
-            `function(){var p=board.objects['${poly.id}']; return p.vertices.reduce(function(s,v){return s+v.X()},0)/p.vertices.length}`,
-            `function(){var p=board.objects['${poly.id}']; return p.vertices.reduce(function(s,v){return s+v.Y()},0)/p.vertices.length}`,
-            `function(){var p=board.objects['${poly.id}']; return 'P = '+(p.Perimeter?p.Perimeter().toFixed(3):'…')}`,
-          ],
-          attrs: { strokeColor: '#c83c3c', fontSize: 14 },
-        });
+        addMeasure(nextElId('meas'),
+          { op: 'circumference', args: [circ.id], label: 'C', precision: 3 },
+          { of: [circ.id], radiusFactor: 1.1 },
+          { strokeColor: '#c83c3c', fontSize: 14 });
+      } else {
+        addMeasure(nextElId('meas'),
+          { op: 'perimeter', args: [poly!.id], label: 'P', precision: 3 },
+          { of: [poly!.id] },
+          { strokeColor: '#c83c3c', fontSize: 14 });
       }
-      board.update();
-      onDirty();
     },
 
     getZoom: () => (boardRef.current as unknown as { zoomX?: number })?.zoomX ?? 1,

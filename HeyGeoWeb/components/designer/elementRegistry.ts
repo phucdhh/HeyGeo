@@ -7,7 +7,20 @@
  * round-trip. Before this registry the loader forwarded `el.type` straight to
  * board.create() and swallowed every failure, so a type the engine does not
  * accept (or a parent list it cannot resolve) silently disappeared on reload.
+ *
+ * Nothing here evaluates a string. A measurement or a transformed point arrives
+ * as a descriptor and becomes a closure over the board, a curve becomes a
+ * JSXGraph expression, and a source that is neither is reported instead of run.
  */
+import {
+  anchorClosures,
+  isAnchorSpec,
+  isMeasureSpec,
+  measureClosure,
+} from './measurement';
+import { migrateLegacyMeasure } from './legacyMeasure';
+import { migrateLegacyTransform } from './legacyTransform';
+import { imageClosures, isImageSpec, type ImageSpec } from './transforms';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -22,8 +35,6 @@ export interface ElementSpec {
 export interface CreateOutcome {
   obj: Any;
   error?: string;
-  /** Set when the element could only be rebuilt by evaluating stored JS source. */
-  legacyCode?: boolean;
 }
 
 interface RegistryEntry {
@@ -70,8 +81,10 @@ export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
   // parents are [x, y, caption] — only the anchor pair may reference elements.
   text:           { jxg: 'text',           parents: 3, refParents: [0, 1] },
   ticks:          { jxg: 'ticks',          parents: atLeast(1) },
-  curve:          { jxg: 'curve',          parents: atLeast(1) },
-  functiongraph:  { jxg: 'functiongraph',  parents: atLeast(1) },
+  // Parents are JSXGraph expressions or coordinate arrays, never element ids,
+  // so nothing here may be looked up in elMap.
+  curve:          { jxg: 'curve',          parents: atLeast(1), refParents: [] },
+  functiongraph:  { jxg: 'functiongraph',  parents: atLeast(1), refParents: [] },
   conic:          { jxg: 'conic',          parents: 5 },
   tracecurve:     { jxg: 'tracecurve',     parents: 2 },
   // desktop transforms: [dx,dy] / [angle, centreId] / [lineId]
@@ -97,38 +110,58 @@ export function isLegacyCodeSource(parent: unknown): boolean {
 }
 
 /**
- * Legacy measurements were persisted as JS source strings in the parent list and
- * rehydrated by evaluating them against the board. That is a code-execution
- * surface for stored JSON, kept only so existing models keep rendering; P0.5
- * replaces it with a declarative `attrs.measure` descriptor and deletes this.
+ * A curve does not need JavaScript: JSXGraph parses its own expression syntax.
+ * `function(t){ return Math.sin(t)+1; }` becomes the string `sin(x)+1` with the
+ * parameter renamed to x, and the engine evaluates that without a code-execution
+ * surface. An expression naming anything but its own parameter is refused.
  */
-export function hasLegacyCodeParents(el: ElementSpec): boolean {
+const ARROW_OR_BOARD = /\bboard\b|\bobjects\b|=>|\beval\b|new\s|fetch|require|import/;
+
+export function expressionFromCode(source: string): string | null {
+  const m = /^function\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{[\s\S]*?return([\s\S]*?);?\s*\}$/.exec(source.trim());
+  if (!m) return null;
+  const [, variable, raw] = m;
+  const expr = raw.trim();
+  if (!expr || ARROW_OR_BOARD.test(expr)) return null;
+  const renamed = expr.replace(new RegExp(`\\b${variable}\\b`, 'g'), 'x');
+  return renamed.replace(/\bMath\.PI\b/g, 'pi').replace(/\bMath\.E\b/g, 'e').replace(/\bMath\./g, '');
+}
+
+/**
+ * Old documents wrote measurements — their captions, sometimes their positions —
+ * and the images of Translate/Rotate/Dilate/Reflect as JS source. Those are
+ * rewritten to declarative descriptors here, once, on the way in, so nothing
+ * downstream has to know the history and nothing has to be evaluated. Curves
+ * become JSXGraph expression strings. Anything else keeps its source and is
+ * refused by resolveParents.
+ */
+export function normalizeElement(el: ElementSpec): ElementSpec {
+  const migrated = migrateLegacyMeasure(el) ?? migrateLegacyTransform(el);
+  if (migrated) return migrated;
+  if (!el.parents.some(isLegacyCodeSource)) return el;
+  if (el.type !== 'functiongraph' && el.type !== 'curve') return el;
+  const parents = el.parents.map((p) =>
+    (isLegacyCodeSource(p) ? expressionFromCode(p) ?? p : p));
+  return { ...el, parents };
+}
+
+/**
+ * True when a parent is source this registry will not run.
+ */
+function refusedCodeSource(el: ElementSpec): boolean {
   return el.parents.some(isLegacyCodeSource);
 }
 
-// The stored source is a zero-argument function that closes over a free `board`,
-// so it has to be compiled with board bound as that name, not called with it.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const compileLegacySource = new Function('source', 'board', 'return eval("(" + source + ")");') as unknown as
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (source: string, board: any) => any;
-
-export function resolveLegacyCodeParent(source: string, board: Any): Any {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const raw = compileLegacySource(source, board) as any;
-  // JSXGraph calls a function parent with the curve parameter, so the argument
-  // must reach the stored function; measurement sources take none and ignore it.
-  return function (this: Any, ...args: unknown[]) {
-    try {
-      const v = raw.apply(this, args);
-      return typeof v === 'number' ? v : (v != null ? String(v) : '…');
-    } catch {
-      return 0;
-    }
-  };
+function imageOf(el: ElementSpec): ImageSpec | null {
+  return el.type === 'point' && isImageSpec(el.attrs?.image) ? el.attrs.image : null;
 }
 
 function checkArity(entry: RegistryEntry, el: ElementSpec): string | undefined {
+  // An image point is placed by its descriptor, so its only parent is the point
+  // it copies.
+  if (imageOf(el)) {
+    return el.parents.length === 1 ? undefined : `điểm biến hình cần 1 đối tượng cha, nhận ${el.parents.length}`;
+  }
   const n = el.parents.length;
   if (typeof entry.parents === 'number') {
     return n === entry.parents ? undefined : `${el.type} cần ${entry.parents} đối tượng cha, nhận ${n}`;
@@ -153,33 +186,60 @@ export function isReferenceParent(el: ElementSpec, index: number): boolean {
 
 /**
  * Turn the JSON parent list into what JSXGraph wants: ids become the objects
- * already built in `elMap`, coordinate arrays keep their literals, and a stored
- * measurement/function source becomes a live function over this board.
+ * already built in `elMap`, coordinate arrays keep their literals, and a
+ * measurement descriptor becomes a live closure over this board. A code source
+ * that survived normalisation is refused.
  */
 export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string, unknown>): unknown[] {
+  const attrs = el.attrs ?? {};
+  const image = imageOf(el);
+  if (image) return imageClosures(board, String(el.parents[0]), image);
+  const measure = isMeasureSpec(attrs.measure) ? attrs.measure : null;
+  const anchor = isAnchorSpec(attrs.anchor) ? attrs.anchor : null;
+  if (measure || anchor) {
+    const [ax, ay] = anchor ? anchorClosures(board, anchor)
+      : [() => Number(el.parents[0]) || 0, () => Number(el.parents[1]) || 0];
+    const caption = measure ? measureClosure(board, measure) : String(el.parents[2] ?? '');
+    return [ax, ay, caption];
+  }
+
   const byName = ELEMENT_REGISTRY[el.type]?.parentMode === 'byName';
   return el.parents.map((p, i) => {
     if (isReferenceParent(el, i)) return elMap[p as string];
     if (byName && typeof p === 'string' && p in elMap) return elMap[p];
-    if (isLegacyCodeSource(p)) return resolveLegacyCodeParent(p as string, board);
     if (Array.isArray(p)) return (p as (number | null)[]).map(v => (v === null ? NaN : v));
     return p;
   });
 }
 
+/** Attributes that describe the element to this app, not to JSXGraph. */
+const APP_ATTRS = ['measure', 'anchor', 'image'];
+
 /** Build one element from its HeyGeo JSON description. */
 export function createElement(
   board: Any,
-  el: ElementSpec,
+  source: ElementSpec,
   elMap: Record<string, unknown> = {},
 ): CreateOutcome {
+  // Normalising here as well as in the loaders means no caller can hand this
+  // function a stored code source and have it reach the engine.
+  const el = normalizeElement(source);
   const entry = ELEMENT_REGISTRY[el.type];
   if (!entry) return { obj: null, error: `Không nhận kiểu đối tượng "${el.type}"` };
 
-  const legacyCode = hasLegacyCodeParents(el);
+  if (refusedCodeSource(el)) {
+    return { obj: null, error: `${el.type}: không dựng lại được biểu thức cũ, hãy tạo lại đo lường này` };
+  }
 
   const arityError = checkArity(entry, el);
   if (arityError) return { obj: null, error: arityError };
+
+  // An image point reads its source from the live board, not from elMap, so a
+  // missing source has to be caught before the closures are built.
+  const copiedPoint = String(el.parents[0]);
+  if (imageOf(el) && !elMap[copiedPoint] && !board?.objects?.[copiedPoint]) {
+    return { obj: null, error: `${el.type} tham chiếu đối tượng không tồn tại` };
+  }
 
   let parents: unknown[];
   try {
@@ -191,13 +251,16 @@ export function createElement(
     return { obj: null, error: `${el.type} tham chiếu đối tượng không tồn tại` };
   }
 
+  const attrs: Record<string, Any> = { ...(el.attrs ?? {}) };
+  for (const key of APP_ATTRS) delete attrs[key];
+
   try {
     const obj = board.create(entry.jxg, parents, {
       id: el.id,
       ...(entry.attrs ?? {}),
-      ...(el.attrs ?? {}),
+      ...attrs,
     });
-    return { obj, legacyCode };
+    return { obj };
   } catch (e) {
     return { obj: null, error: `${el.type}: ${(e as Error).message}` };
   }

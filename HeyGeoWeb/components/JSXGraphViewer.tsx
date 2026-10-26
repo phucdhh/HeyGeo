@@ -22,7 +22,7 @@
 import { useEffect, useRef, useState, useId } from 'react';
 import Script from 'next/script';
 import { getJXG, whenJsxGraphReady } from '@/lib/jsxgraph';
-import { createElement } from './designer/elementRegistry';
+import { createElement, normalizeElement } from './designer/elementRegistry';
 
 export interface HeyGeoElement {
   type: string;
@@ -291,7 +291,10 @@ export default function JSXGraphViewer({ data, containerId }: Props) {
 
       const elMap: Record<string, unknown> = {};
 
-      for (const el of data.elements) {
+      for (const spec of data.elements) {
+        // Old documents carry measurements as JS source; normalising upgrades
+        // them to descriptors so the registry never has to evaluate a string.
+        const el = normalizeElement(spec);
         // ── objectlocus: dynamic envelope of a line-family locus ─────────────
         // The C++ exporter emits type='objectlocus' when the locus driven object
         // is a G_LINE (perpendicular bisector, parallel, etc.).

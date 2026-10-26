@@ -14,8 +14,11 @@
 import {
   createElement,
   isReferenceParent,
+  normalizeElement,
   unresolvedParentId,
 } from './elementRegistry';
+import { measureDeps } from './measurement';
+import { imageDeps } from './transforms';
 import type { HeyGeoElement } from './designTypes';
 
 export const UNDO_LIMIT = 100;
@@ -52,11 +55,19 @@ const round = (v: number) => (Number.isFinite(v) ? Number(v.toFixed(6)) : v);
 
 // ─── Dependency graph ────────────────────────────────────────────────────────
 
-/** Ids this element is constructed from; coordinate parents are not references. */
+/**
+ * Ids this element is constructed from; coordinate parents are not references.
+ * A measurement reads its parents from its descriptor instead, and has to be in
+ * the graph too — deleting a segment should take the length caption with it.
+ * The same goes for an image point: its vector, centre or mirror is a parent.
+ */
 export function parentIds(el: HeyGeoElement): string[] {
   const out: string[] = [];
   for (let i = 0; i < el.parents.length; i++) {
     if (isReferenceParent(el, i)) out.push(String(el.parents[i]));
+  }
+  for (const id of [...measureDeps(el), ...imageDeps(el)]) {
+    if (!out.includes(id)) out.push(id);
   }
   return out;
 }
@@ -89,12 +100,19 @@ export function withDependents(els: HeyGeoElement[], seed: Iterable<string>): Se
 // ─── What counts as a change ──────────────────────────────────────────────────
 
 /**
- * What makes an element the construction it is: its referenced parents, in
- * order. Equal keys can be patched in place; different keys mean the board
- * object has to be re-created.
+ * What makes an element the construction it is: its referenced parents plus its
+ * measurement and transform descriptors. Equal keys can be patched in place;
+ * different keys mean the board object has to be re-created, because a caption
+ * or an image point is bound to its descriptor when it is created and
+ * setAttribute cannot rebind it.
  */
 export function constructionKey(el: HeyGeoElement): string {
-  return JSON.stringify(parentIds(el));
+  return JSON.stringify([
+    parentIds(el),
+    el.attrs?.measure ?? null,
+    el.attrs?.anchor ?? null,
+    el.attrs?.image ?? null,
+  ]);
 }
 
 /** Types whose position lives in numeric parents, so a change is a move. */
@@ -109,9 +127,15 @@ export function coordParents(el: HeyGeoElement): number[] | null {
     : null;
 }
 
+/** Descriptors this app reads; JSXGraph never sees them, so they are not style. */
+const APP_ATTRS = new Set(['measure', 'anchor', 'image']);
+
 export function attrsDiffer(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
   const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
-  for (const k of keys) if (j(a?.[k]) !== j(b?.[k])) return true;
+  for (const k of keys) {
+    if (APP_ATTRS.has(k)) continue;
+    if (j(a?.[k]) !== j(b?.[k])) return true;
+  }
   return false;
 }
 
@@ -148,7 +172,9 @@ export function planScene(prev: SceneSnapshot, next: SceneSnapshot): ScenePlan {
     const to = coordParents(target);
     if (from && to && j(from) !== j(to)) { moves.push({ id: target.id, coords: to }); continue; }
     if (attrsDiffer(el.attrs ?? {}, target.attrs ?? {})) {
-      attrUpdates.push({ id: target.id, attrs: { ...(target.attrs ?? {}) } });
+      const attrs = { ...(target.attrs ?? {}) };
+      for (const k of APP_ATTRS) delete attrs[k];
+      attrUpdates.push({ id: target.id, attrs });
     }
   }
 
@@ -197,6 +223,10 @@ export function applyScene(board: LiveBoard, next: SceneSnapshot, plan?: ScenePl
 
   const p = plan ?? emptyPlan();
   const wasLive = new Set(Object.keys(board.objects ?? {}));
+  // Documents written before measurement descriptors existed are upgraded on the
+  // way in: nothing below has to know the old format, and the next save writes
+  // the new one.
+  const target = { ...next, elements: next.elements.map((e) => normalizeElement(e) as HeyGeoElement) };
 
   for (const id of p.removeIds) {
     const obj = board.objects[id];
@@ -205,7 +235,7 @@ export function applyScene(board: LiveBoard, next: SceneSnapshot, plan?: ScenePl
   }
 
   // Anything the board lost — planned rebuilds, and drift no plan predicted.
-  let pending = next.elements.filter((e) => !wasLive.has(e.id) || p.rebuildIds.has(e.id));
+  let pending = target.elements.filter((e) => !wasLive.has(e.id) || p.rebuildIds.has(e.id));
   const made = new Map<string, unknown>();
   while (pending.length > 0) {
     const deferred: HeyGeoElement[] = [];
@@ -239,7 +269,7 @@ export function applyScene(board: LiveBoard, next: SceneSnapshot, plan?: ScenePl
 
   board.update?.();
 
-  return { elements: next.elements.filter((e) => !!board.objects?.[e.id]), errors, createdIds };
+  return { elements: target.elements.filter((e) => !!board.objects?.[e.id]), errors, createdIds };
 }
 
 function emptyPlan(): ScenePlan {

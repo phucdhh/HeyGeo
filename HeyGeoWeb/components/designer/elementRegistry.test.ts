@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createElement,
-  hasLegacyCodeParents,
+  expressionFromCode,
+  isLegacyCodeSource,
   isSupportedType,
-  resolveLegacyCodeParent,
+  normalizeElement,
   unresolvedParentId,
   type ElementSpec,
 } from './elementRegistry';
@@ -144,62 +145,56 @@ describe('parent ordering', () => {
   });
 });
 
-describe('legacy measurement source', () => {
+describe('stored code sources', () => {
   const legacy = el({
     type: 'text',
     parents: [`function(){return board.objects['A'].X()+0.3}`, 1, 'label'],
   });
 
-  it('is detected so P0.5 can migrate it', () => {
-    expect(hasLegacyCodeParents(legacy)).toBe(true);
-    expect(hasLegacyCodeParents(el({ type: 'text', parents: [1, 2, 'label'] }))).toBe(false);
+  it('are detected', () => {
+    expect(isLegacyCodeSource(legacy.parents[0])).toBe(true);
+    expect(isLegacyCodeSource('A')).toBe(false);
+    expect(isLegacyCodeSource(1)).toBe(false);
   });
 
-  it('ignores code parents when checking reference order', () => {
-    const known = new Set(['A']);
-    expect(unresolvedParentId(legacy, known)).toBeNull();
+  it('are ignored when checking reference order', () => {
+    expect(unresolvedParentId(legacy, new Set(['A']))).toBeNull();
   });
 
-  it('rehydrates to a live board reader', () => {
-    const board = { objects: { A: { X: () => 4 } } };
-    const reader = resolveLegacyCodeParent(
-      `function(){return board.objects['A'].X()+0.3}`,
-      board as never,
-    );
-    expect(reader()).toBeCloseTo(4.3);
-  });
-
-  it('keeps reading the board after the point moves', () => {
-    let x = 4;
-    const board = { objects: { A: { X: () => x } } };
-    const reader = resolveLegacyCodeParent(
-      `function(){return board.objects['A'].X()+0.3}`,
-      board as never,
-    );
-    x = 10;
-    expect(reader()).toBeCloseTo(10.3);
-  });
-
-  it('forwards the curve parameter that JSXGraph supplies', () => {
-    const board = { objects: {} };
-    const f = resolveLegacyCodeParent('function(x){ return x * x; }', board as never);
-    expect(f(3)).toBe(9);
-  });
-
-  it('passes a string result through unchanged for a dynamic caption', () => {
-    const board = { objects: {} };
-    const f = resolveLegacyCodeParent(
-      `function(){return 'AB = ' + (12.345).toFixed(2);}`,
-      board as never,
-    );
-    expect(f()).toBe('AB = 12.35');
-  });
-
-  it('reports the element as legacy but still builds it', () => {
+  it('are never evaluated: an unknown source is reported, not run', () => {
     const board = fakeBoard();
     const out = createElement(board, legacy, built());
-    expect(out.legacyCode).toBe(true);
+    expect(out.obj).toBeNull();
+    expect(out.error).toMatch(/không dựng lại được/);
+  });
+
+  it('become JSXGraph expressions for a curve', () => {
+    expect(expressionFromCode('function(x){ return Math.sin(x)+1; }')).toBe('sin(x)+1');
+    expect(expressionFromCode('function(t){ return t*t - Math.PI; }')).toBe('x*x - pi');
+    expect(expressionFromCode('function(){ return board.objects.A.X(); }')).toBeNull();
+    expect(expressionFromCode('function(x){ alert(1); }')).toBeNull();
+    expect(expressionFromCode('not a function at all')).toBeNull();
+  });
+
+  it('are normalised on the way in, and anything else is left for reporting', () => {
+    const curve = normalizeElement(el({
+      type: 'functiongraph',
+      parents: ['function(x){ return x*x; }', -2, 2],
+    }));
+    expect(curve.parents[0]).toBe('x*x');
+    expect(normalizeElement(legacy)).toBe(legacy);
+  });
+
+  it('build a measurement from its descriptor instead', () => {
+    const board = fakeBoard();
+    const out = createElement(board, el({
+      type: 'text',
+      parents: [1, 2, 'd'],
+      attrs: { measure: { op: 'distance', args: ['A', 'B'], precision: 2 } },
+    }), built());
     expect(out.obj).toBeTruthy();
+    // the descriptor is this app's business, JSXGraph must not receive it
+    expect(board.calls()[0][2]).not.toHaveProperty('measure');
   });
 });
 

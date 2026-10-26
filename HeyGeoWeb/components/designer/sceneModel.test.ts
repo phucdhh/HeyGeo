@@ -23,6 +23,48 @@ const el = (over: Partial<HeyGeoElement> & { type: string; id: string }): HeyGeo
 const scene = (...elements: HeyGeoElement[]): SceneSnapshot =>
   takeScene(elements, { axis: false, grid: false });
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Live = Record<string, any>;
+
+interface Fake {
+  objects: Record<string, Live>;
+  create(type: string, parents: unknown[], attrs: Record<string, unknown>): Live;
+  removeObject(obj: Live): void;
+  update(): void;
+}
+
+// A board stand-in that behaves like JSXGraph where the plan cares: objects
+// keyed by id, cascade removal, and a create() that registers.
+function fakeBoard(elements: HeyGeoElement[]): Fake {
+  const board: Fake = {
+    objects: {},
+    create: vi.fn(),
+    removeObject: vi.fn(),
+    update: vi.fn(),
+  };
+  let specs = [...elements];
+  const create = vi.fn((type: string, parents: unknown[], attrs: Record<string, unknown>): Live => {
+    const obj: Live = {
+      id: attrs.id as string, type, parents, attrs, elType: type,
+      setAttribute: (a: Record<string, unknown>) => Object.assign(obj.attrs, a),
+      moveTo: (c: number[]) => { obj.parents = [...c]; },
+      X: () => obj.parents[0] as number,
+      Y: () => obj.parents[1] as number,
+    };
+    board.objects[obj.id] = obj;
+    specs.push({ type: obj.type, id: obj.id, parents: obj.parents, attrs: obj.attrs });
+    return obj;
+  });
+  // JSXGraph removes an element together with everything built from it.
+  const removeObject = vi.fn((obj: Live) => {
+    for (const id of withDependents(specs, [obj.id])) delete board.objects[id];
+    specs = specs.filter((s) => board.objects[s.id]);
+  });
+  Object.assign(board, { create, removeObject });
+  for (const e of elements) create(e.type, e.parents, { ...e.attrs, id: e.id });
+  return board;
+}
+
 describe('dependency graph', () => {
   const tri = [
     el({ type: 'point', id: 'A', parents: [0, 0] }),
@@ -207,48 +249,6 @@ describe('undo history', () => {
 });
 
 describe('applyScene with a fake board', () => {
-  interface Fake {
-    objects: Record<string, Live>;
-    create(type: string, parents: unknown[], attrs: Record<string, unknown>): Live;
-    removeObject(obj: Live): void;
-    update(): void;
-  }
-
-  // A board stand-in that behaves like JSXGraph where the plan cares: objects
-  // keyed by id, cascade removal, and a create() that registers.
-  function fakeBoard(elements: HeyGeoElement[]): Fake {
-    const board: Fake = {
-      objects: {},
-      create: vi.fn(),
-      removeObject: vi.fn(),
-      update: vi.fn(),
-    };
-    let specs = [...elements];
-    const create = vi.fn((type: string, parents: unknown[], attrs: Record<string, unknown>): Live => {
-      const obj: Live = {
-        id: attrs.id as string, type, parents, attrs, elType: type,
-        setAttribute: (a: Record<string, unknown>) => Object.assign(obj.attrs, a),
-        moveTo: (c: number[]) => { obj.parents = [...c]; },
-        X: () => obj.parents[0] as number,
-        Y: () => obj.parents[1] as number,
-      };
-      board.objects[obj.id] = obj;
-      specs.push({ type: obj.type, id: obj.id, parents: obj.parents, attrs: obj.attrs });
-      return obj;
-    });
-    // JSXGraph removes an element together with everything built from it.
-    const removeObject = vi.fn((obj: Live) => {
-      for (const id of withDependents(specs, [obj.id])) delete board.objects[id];
-      specs = specs.filter((s) => board.objects[s.id]);
-    });
-    Object.assign(board, { create, removeObject });
-    for (const e of elements) create(e.type, e.parents, { ...e.attrs, id: e.id });
-    return board;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  type Live = Record<string, any>;
-
   it('keeps every board object that the change did not touch', () => {
     const elements = [
       el({ type: 'point', id: 'A', parents: [0, 0] }),
@@ -350,5 +350,124 @@ describe('applyScene with a fake board', () => {
     const snap = takeScene(elements, { axis: false, grid: false });
     const out = applyScene(board, snap);                // no plan: pure reconcile
     expect(out.createdIds).toEqual(['A']);
+  });
+});
+
+describe('measurement descriptors in the scene model', () => {
+  const caption = el({
+    type: 'text', id: 'm1', parents: [4, 2, 'd'],
+    attrs: { measure: { op: 'distance', args: ['A', 'B'], label: 'd', precision: 3 }, fontSize: 13 },
+  });
+  const anchored = el({
+    type: 'text', id: 'm2', parents: [0, 0, 'd'],
+    attrs: {
+      measure: { op: 'distance', args: ['A', 'B'], label: 'd', precision: 3 },
+      anchor: { of: ['A', 'B'], dy: 0.5 },
+    },
+  });
+  const points = [
+    el({ type: 'point', id: 'A', parents: [0, 0] }),
+    el({ type: 'point', id: 'B', parents: [3, 4] }),
+  ];
+
+  it('hangs a caption off what it measures, not off its coordinates', () => {
+    expect(parentIds(caption)).toEqual(['A', 'B']);
+    expect([...withDependents([...points, caption], ['A'])]).toEqual(['A', 'm1']);
+  });
+
+  it('re-creates a caption when its descriptor changes', () => {
+    const other = el({ ...caption, attrs: { ...caption.attrs, measure: { op: 'distance', args: ['A', 'B'], label: 'e', precision: 3 } } });
+    expect(constructionKey(caption)).not.toBe(constructionKey(other));
+    expect(constructionKey(caption)).toBe(constructionKey(el({ ...caption, id: 'other', parents: [9, 9, 'd'] })));
+  });
+
+  it('never sends a descriptor to the engine', () => {
+    const board = fakeBoard([]);
+    const out = applyScene(board, scene(...points, caption, anchored));
+    expect(out.errors).toEqual([]);
+    expect(board.objects.m1.attrs.measure).toBeUndefined();
+    expect(board.objects.m2.attrs.anchor).toBeUndefined();
+    expect(board.objects.m1.attrs.fontSize).toBe(13);
+  });
+
+  it('migrates a stored code caption on the way in, so a save writes data', () => {
+    const legacy = el({
+      type: 'text', id: 'old', parents: [1, 1,
+        "function(){return 'd = '+Math.sqrt(Math.pow(board.objects['B'].X()-board.objects['A'].X(),2)+Math.pow(board.objects['B'].Y()-board.objects['A'].Y(),2)).toFixed(3)}"],
+      attrs: {},
+    });
+    const board = fakeBoard(points);
+    const out = applyScene(board, scene(...points, legacy));
+    expect(out.errors).toEqual([]);
+    const saved = out.elements.find((e) => e.id === 'old')!;
+    expect(saved.attrs.measure).toEqual({ op: 'distance', args: ['B', 'A'], label: 'd', precision: 3 });
+    expect(JSON.stringify(saved)).not.toMatch(/function\(/);
+  });
+
+  it('reports a stored code caption no rule describes', () => {
+    const unknown = el({
+      type: 'text', id: 'old', parents: [1, 1, 'function(){return eval(document.cookie)}'], attrs: {},
+    });
+    const board = fakeBoard([]);
+    const out = applyScene(board, scene(unknown));
+    expect(out.elements).toEqual([]);
+    expect(out.errors.join(' ')).toMatch(/không dựng lại được/);
+  });
+});
+
+describe('transformed points in the scene model', () => {
+  const points = [
+    el({ type: 'point', id: 'A', parents: [0, 0] }),
+    el({ type: 'point', id: 'V1', parents: [1, 1] }),
+    el({ type: 'point', id: 'V2', parents: [3, 4] }),
+  ];
+  const image = el({
+    type: 'point', id: 'A2', parents: ['A'],
+    attrs: { image: { op: 'translate', of: ['V1', 'V2'] }, size: 4 },
+  });
+
+  it('hangs a copy off the point it copies and the vector it moves by', () => {
+    expect(parentIds(image)).toEqual(['A', 'V1', 'V2']);
+    expect([...withDependents([...points, image], ['V2'])]).toEqual(['V2', 'A2']);
+    expect([...withDependents([...points, image], ['A'])]).toEqual(['A', 'A2']);
+  });
+
+  it('re-creates a copy when its map changes and not when its style does', () => {
+    const rotated = el({ ...image, attrs: { ...image.attrs, image: { op: 'rotate', of: ['V1'], angle: 90 } } });
+    expect(constructionKey(image)).not.toBe(constructionKey(rotated));
+    expect(constructionKey(image)).toBe(constructionKey(el({ ...image, attrs: { ...image.attrs, size: 9 } })));
+  });
+
+  it('never sends the descriptor to the engine', () => {
+    const board = fakeBoard(points);
+    const out = applyScene(board, scene(...points, image));
+    expect(out.errors).toEqual([]);
+    expect(board.objects.A2.attrs.image).toBeUndefined();
+    expect(board.objects.A2.attrs.size).toBe(4);
+  });
+
+  it('migrates a stored code copy on the way in', () => {
+    const legacy = el({
+      type: 'point', id: 'old',
+      parents: [
+        "function(board){var P=board.objects['A'], A=board.objects['V1'], B=board.objects['V2']; return P.X()+(B.X()-A.X())}",
+        "function(board){var P=board.objects['A'], A=board.objects['V1'], B=board.objects['V2']; return P.Y()+(B.Y()-A.Y())}",
+      ],
+      attrs: {},
+    });
+    const board = fakeBoard(points);
+    const out = applyScene(board, scene(...points, legacy));
+    expect(out.errors).toEqual([]);
+    const saved = out.elements.find((e) => e.id === 'old')!;
+    expect(saved.parents).toEqual(['A']);
+    expect(saved.attrs.image).toEqual({ op: 'translate', of: ['V1', 'V2'] });
+    expect(JSON.stringify(saved)).not.toMatch(/function\(/);
+  });
+
+  it('builds a copy listed before its source', () => {
+    const board = fakeBoard([]);
+    const out = applyScene(board, scene(image, ...points));
+    expect(out.errors).toEqual([]);
+    expect(out.createdIds).toEqual(['A', 'V1', 'V2', 'A2']);
   });
 });
