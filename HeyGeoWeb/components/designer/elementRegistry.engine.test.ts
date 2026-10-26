@@ -1,0 +1,284 @@
+// @vitest-environment jsdom
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import {
+  createElement,
+  resolveLegacyCodeParent,
+  unresolvedParentId,
+  type ElementSpec,
+} from './elementRegistry';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+let JXG: any;
+function newBoard() {
+  const div = document.createElement('div');
+  document.body.appendChild(div);
+  return JXG.JSXGraph.initBoard(div, { boundingbox: [0, 0, 10, 10], axis: false, showGrid: false });
+}
+
+beforeAll(() => {
+  // jsxgraphcore.js is the same self-hosted file the app serves in P0.1
+  const src = readFileSync(resolve(process.cwd(), 'public/vendor/jsxgraph/jsxgraphcore.js'), 'utf8');
+  new Function(src)();
+  JXG = (globalThis as any).JXG;
+  // JSXGraph reads prefers-reduced-motion at init; jsdom has no matchMedia
+  (window as any).matchMedia = vi.fn(() => ({
+    matches: false, addEventListener: () => {}, removeEventListener: () => {},
+  }));
+});
+
+afterAll(() => {
+  JXG?.JSXGraph?.freeAllBoards?.();
+});
+
+const spec = (over: Partial<ElementSpec> & { type: string }): ElementSpec => ({
+  id: 'e1', parents: [], attrs: {}, ...over,
+});
+
+// Mirrors the parent resolution in DesignCanvas's loadDataToBoard
+function loader(board: any, elements: ElementSpec[]) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const elMap: Record<string, any> = {};
+  const errors: string[] = [];
+  let pending = elements;
+  while (pending.length > 0) {
+    const deferred: ElementSpec[] = [];
+    for (const item of pending) {
+      const missing = unresolvedParentId(item, new Set(Object.keys(elMap)));
+      if (missing !== null) {
+        deferred.push(item);
+        continue;
+      }
+      const out = createElement(board, item, elMap);
+      if (out.obj) elMap[item.id ?? ''] = out.obj;
+      else errors.push(out.error ?? item.type);
+    }
+    if (deferred.length === pending.length) break;
+    pending = deferred;
+  }
+  for (const item of pending) {
+    errors.push(`${item.type} "${item.id}": cha không tồn tại (${item.parents.join(', ')})`);
+  }
+  return { elMap, errors, loaded: Object.keys(elMap).length };
+}
+
+describe('real JSXGraph engine', () => {
+  it('loads the self-hosted vendor build', () => {
+    expect(JXG).toBeTruthy();
+    expect(JXG.version).toBe('1.12.2');
+  });
+
+  it.each([
+    ['point', () => [1, 2], 'point'],
+    ['segment', (b: any, A: any) => [A, b.create('point', [3, 4])], 'segment'],
+    ['line', (b: any, A: any) => [A, b.create('point', [3, 4])], 'line'],
+    ['circle', (b: any, A: any) => [A, 2], 'circle'],
+    ['midpoint', (b: any, A: any) => [A, b.create('point', [3, 3])], 'midpoint'],
+    ['glider', (b: any, A: any) => [2, 2, b.create('segment', [A, b.create('point', [6, 1])])], 'glider'],
+    ['perpendicular', (b: any, A: any) => [A, b.create('segment', [A, b.create('point', [6, 1])])], 'perpendicular'],
+    ['parallel', (b: any, A: any) => [A, b.create('segment', [A, b.create('point', [6, 1])])], 'parallel'],
+    ['bisector', (b: any, A: any) => [A, b.create('point', [3, 3]), b.create('point', [1, 5])], 'bisector'],
+    ['angle', (b: any, A: any) => [A, b.create('point', [3, 3]), b.create('point', [1, 5])], 'angle'],
+    ['sector', (b: any, A: any) => [A, b.create('point', [3, 3]), b.create('point', [1, 5])], 'sector'],
+    ['arc', (b: any, A: any) => [A, b.create('point', [3, 3]), b.create('point', [1, 5])], 'arc'],
+    ['polygon', (b: any, A: any) => [A, b.create('point', [3, 3]), b.create('point', [1, 5])], 'polygon'],
+    ['functiongraph', () => [(x: number) => x * x], 'curve'],
+    ['curve', () => [[1, 2, 3], [1, 4, 9]], 'curve'],
+    ['slider', (b: any, A: any) => [[1, 6], [4, 6], [0, 1, 5], A], 'slider'],
+    ['intersection', (b: any, A: any) => {
+      const l = b.create('segment', [A, b.create('point', [6, 1])]);
+      return [b.create('circle', [A, 2]), l, 1];
+    }, 'intersection'],
+    ['conic', (b: any, A: any) => [A, b.create('point', [3, 3]), b.create('point', [1, 5]), b.create('point', [4, 2]), b.create('point', [2, 6])], 'curve'],
+    ['ticks', (b: any, A: any) => {
+      const l = b.create('line', [A, b.create('point', [2, 2])]);
+      return [l, [A]];
+    }, 'ticks'],
+    ['tracecurve', (b: any, A: any) => {
+      const seg = b.create('segment', [A, b.create('point', [6, 1])]);
+      return [b.create('glider', [2, 2, seg]), b.create('point', [4, 4])];
+    }, 'curve'],
+    ['text', (b: any, A: any) => [A.X(), A.Y(), 'caption'], 'text'],
+  ])('creates %s', (type, parents, expectedElType) => {
+    const b = newBoard();
+    const A = b.create('point', [1, 2]);
+    const out = b.create(type, (parents as any)(b, A));
+    expect(out).toBeTruthy();
+    expect(out.elType).toBe(expectedElType);
+  });
+});
+
+describe('registry against the real engine', () => {
+  // One element of every registered type, with parents written the way
+  // HeyGeoWebExporter and the designer write them: ids for references,
+  // coordinate arrays for free geometry.
+  const scene: ElementSpec[] = [
+    spec({ type: 'point', id: 'A', parents: [0, 0] }),
+    spec({ type: 'point', id: 'B', parents: [4, 0] }),
+    spec({ type: 'point', id: 'C', parents: [1, 3] }),
+    spec({ type: 'point', id: 'D', parents: [2, 4] }),
+    spec({ type: 'point', id: 'E', parents: [3, 2] }),
+    spec({ type: 'segment', id: 's1', parents: ['A', 'B'] }),
+    spec({ type: 'line', id: 'l1', parents: ['A', 'C'] }),
+    spec({ type: 'ray', id: 'r1', parents: ['A', 'B'] }),
+    spec({ type: 'circle', id: 'c1', parents: ['A', 2] }),
+    spec({ type: 'arc', id: 'a1', parents: ['A', 'B', 'C'] }),
+    spec({ type: 'sector', id: 'sec1', parents: ['B', 'A', 'C'] }),
+    spec({ type: 'angle', id: 'ang1', parents: ['B', 'A', 'C'] }),
+    spec({ type: 'midpoint', id: 'm1', parents: ['A', 'B'] }),
+    spec({ type: 'intersection', id: 'i1', parents: ['c1', 'l1', 0] }),
+    spec({ type: 'glider', id: 'g1', parents: [1, 0, 's1'] }),
+    spec({ type: 'perpendicular', id: 'perp1', parents: ['C', 's1'] }),
+    spec({ type: 'parallel', id: 'par1', parents: ['C', 's1'] }),
+    spec({ type: 'bisector', id: 'bis1', parents: ['B', 'A', 'C'] }),
+    spec({ type: 'polygon', id: 'poly1', parents: ['A', 'B', 'C'] }),
+    spec({ type: 'conic', id: 'conic1', parents: ['A', 'B', 'C', 'D', 'E'] }),
+    spec({ type: 'slider', id: 'slid1', parents: [[0, 5], [3, 5], [0, 1, 5]] }),
+    spec({ type: 'text', id: 't1', parents: [1, 1, 'nhãn'] }),
+    spec({ type: 'curve', id: 'cur1', parents: [[1, 2, 3], [1, 4, 9]] }),
+    spec({ type: 'functiongraph', id: 'fg1', parents: ['function(x){ return x*x; }', -2, 2] }),
+    spec({ type: 'ticks', id: 'tk1', parents: ['l1', 1] }),
+    spec({ type: 'anglebisector', id: 'ab1', parents: ['B', 'A', 'C'] }),
+    spec({ type: 'transform', id: 'tr1', parents: [1, 0], attrs: { type: 'translate' } }),
+    spec({ type: 'transform', id: 'tr2', parents: ['s1'], attrs: { type: 'reflect' } }),
+    // a reflected copy uses the transform as a parent, the desktop spelling
+    spec({ type: 'point', id: 'Cimg', parents: ['C', 'tr2'] }),
+  ];
+
+  it('rebuilds every registered type from production-shaped JSON', () => {
+    const b = newBoard();
+    const r = loader(b, scene);
+    expect(r.errors).toEqual([]);
+    expect(r.loaded).toBe(scene.length);
+  });
+
+  it('gives each type the engine class the designer expects', () => {
+    const b = newBoard();
+    const r = loader(b, scene);
+    const elTypes = Object.fromEntries(
+      Object.entries(r.elMap).map(([id, o]) => [id, (o as any).elType]),
+    );
+    // JSXGraph has no ray, and conic/functiongraph are Curve subclasses.
+    // tracecurve is not asserted here: locus sampling needs real layout
+    // metrics and blows the jsdom stack, so P0.6 covers it in the browser.
+    expect(elTypes.r1).toBe('line');
+    expect(elTypes.conic1).toBe('curve');
+    expect(elTypes.fg1).toBe('curve');
+    expect(elTypes.perp1).toBe('perpendicular');
+    expect(elTypes.ab1).toBe('bisector');
+    // transforms carry no elType; assert what they do instead of how they name
+    expect((r.elMap.Cimg as any).Y()).toBeCloseTo(-3);
+    expect(elTypes.i1).toBe('intersection');
+    expect(elTypes.tk1).toBe('ticks');
+  });
+
+  it('maps ray to a line with one arrow, verifiable on the engine object', () => {
+    const b = newBoard();
+    const out = createElement(b, spec({ type: 'ray', parents: ['A', 'B'] }), {
+      A: b.create('point', [0, 0]),
+      B: b.create('point', [3, 2]),
+    });
+    const line = out.obj as any;
+    expect(line.visProp.lastarrow).toEqual([1, 1]);
+    expect(line.visProp.firstarrow).toEqual([0, 0]);
+  });
+
+  it('rejects an unsupported type without touching the engine', () => {
+    const b = newBoard();
+    const before = Object.keys(b.objects).length;
+    const out = createElement(b, spec({ type: 'mystery', parents: [] }));
+    expect(out.obj).toBeNull();
+    expect(Object.keys(b.objects).length).toBe(before);
+  });
+
+  it('rehydrates a legacy measurement against a real point', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [2, 1] }),
+      spec({ type: 'text', id: 't1', parents: [0, 0, `function(){return board.objects['A'].X()*10}`] }),
+    ]);
+    expect(r.errors).toEqual([]);
+    expect(r.loaded).toBe(2);
+  });
+
+  it('round-trips a model with ids, references and out-of-order children', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'perpendicular', id: 'perp', parents: ['C', 's1'] }),
+      spec({ type: 'midpoint', id: 'M', parents: ['A', 'B'] }),
+      spec({ type: 'point', id: 'A', parents: [0, 0] }),
+      spec({ type: 'point', id: 'B', parents: [4, 0] }),
+      spec({ type: 'segment', id: 's1', parents: ['A', 'B'] }),
+      spec({ type: 'point', id: 'C', parents: [2, 3] }),
+      spec({ type: 'angle', id: 'ang', parents: ['B', 'A', 'C'] }),
+    ]);
+    expect(r.errors).toEqual([]);
+    expect(r.loaded).toBe(7);
+    expect((r.elMap.perp as any).parents).toBeDefined();
+  });
+
+  it('reports a dangling reference instead of building a broken object', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [0, 0] }),
+      spec({ type: 'segment', id: 's1', parents: ['A', 'ghost'] }),
+    ]);
+    expect(r.loaded).toBe(1);
+    expect(r.errors.join(' ')).toMatch(/ghost|không tồn tại/);
+  });
+
+  it('surfaces an engine error with its message', () => {
+    const b = newBoard();
+    const out = createElement(b, spec({ type: 'segment', parents: [[0, 0], [0, 0]] }));
+    // identical endpoints: JSXGraph throws rather than returning nothing useful
+    if (!out.obj) expect(out.error).toMatch(/segment/);
+    else expect(out.obj.elType).toBe('segment');
+  });
+
+  it('plots a desktop-exported function with its parameter intact', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({
+        type: 'functiongraph',
+        id: 'f1',
+        parents: ['function(x){ return x*x; }', -2, 2],
+      }),
+    ]);
+    expect(r.errors).toEqual([]);
+    const curve = r.elMap.f1 as any;
+    expect(curve.Y(3)).toBeCloseTo(9);
+  });
+
+  it('plots a desktop-exported parametric curve', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({
+        type: 'curve',
+        id: 'c1',
+        parents: ['function(t){ return Math.cos(t); }', 'function(t){ return Math.sin(t); }', 0, 6.28],
+      }),
+    ]);
+    expect(r.errors).toEqual([]);
+    const curve = r.elMap.c1 as any;
+    expect(curve.X(0)).toBeCloseTo(1);
+    expect(curve.Y(0)).toBeCloseTo(0);
+  });
+
+  it('renders a desktop-exported measurement caption from a live point', () => {
+    const b = newBoard();
+    // HeyGeoWebExporter writes measure text as [x, y, functionSource]
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [2, 1] }),
+      spec({
+        type: 'text',
+        id: 'cap',
+        parents: [0, 0, `function(){var bo=board.objects;return 'A.x = ' + bo['A'].X().toFixed(2);}`],
+      }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    const txt = r.elMap.cap as any;
+    expect(String(txt.plaintext)).toContain('A.x = 2.00');
+  });
+});

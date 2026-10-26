@@ -19,6 +19,7 @@ import type {
   SliderPos,
 } from './designTypes';
 import { emptyData } from './designTypes';
+import { createElement, unresolvedParentId } from './elementRegistry';
 
 // ─── JSXGraph accessor (engine global, loaded from /vendor by lib/jsxgraph;
 //     extends the global declared in JSXGraphViewer) ────────────────────────
@@ -58,44 +59,47 @@ function boardToData(
 }
 
 // ─── Deserialise HeyGeoData → board objects ───────────────────────────────────
+// Elements are created through elementRegistry so an unsupported type, a wrong
+// parent count or a dangling reference is reported instead of vanishing.
+// Out-of-order JSON is rebuilt by retrying the deferred elements until a pass
+// makes no progress, which also ends a parent cycle.
 function loadDataToBoard(
   board: JXGBoard,
   data: HeyGeoData,
-): HeyGeoElement[] {
+): { loaded: HeyGeoElement[]; errors: string[] } {
   const elMap: Record<string, unknown> = {};
   const loaded: HeyGeoElement[] = [];
-  for (const el of data.elements) {
-    try {
-      const parents = el.parents.map((p) => {
-        if (typeof p === 'string' && elMap[p] !== undefined) return elMap[p];
-        if (Array.isArray(p)) return (p as (number | null)[]).map(v => (v === null ? NaN : v));
-        if (typeof p === 'string' && p.trimStart().startsWith('function(')) {
-          try {
-            const raw = new Function('board', `return (${p});`)(board);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return function(this: any) {
-              try {
-                const v = (raw as any).call(this, board);
-                if (typeof v === 'number') return v;
-                return v != null ? String(v) : '…';
-              } catch {
-                return 0;
-              }
-            };
-          } catch { return 0; }
-        }
-        return p;
-      });
-      // Map custom-serialized types to JSXGraph element types
-      const jxgElType = el.type === 'ray' ? 'line' : el.type;
-      const obj = board.create(jxgElType, parents, { id: el.id, ...el.attrs });
-      elMap[el.id] = obj;
-      loaded.push(el);
-    } catch {
-      // skip elements that fail (e.g., missing parents)
+  const errors: string[] = [];
+  let pending = data.elements;
+
+  while (pending.length > 0) {
+    const deferred: HeyGeoElement[] = [];
+    for (const el of pending) {
+      // A reference parent that is not built yet means the JSON is out of order,
+      // not that the element is broken — hold it for the next pass.
+      const missing = unresolvedParentId(el, new Set(Object.keys(elMap)));
+      if (missing !== null) {
+        deferred.push(el);
+        continue;
+      }
+
+      const outcome = createElement(board, el, elMap);
+
+      if (outcome.obj) {
+        elMap[el.id] = outcome.obj;
+        loaded.push(el);
+      } else {
+        errors.push(outcome.error ?? `Không tạo được ${el.type}`);
+      }
     }
+    if (deferred.length === pending.length) break;
+    pending = deferred;
   }
-  return loaded;
+  for (const el of pending) {
+    errors.push(`${el.type} "${el.id}": cha không tồn tại (${el.parents.join(', ')})`);
+  }
+
+  return { loaded, errors };
 }
 
 // ─── Find a snap point near screen coords ────────────────────────────────────
@@ -549,6 +553,17 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     redoStack.current = [];
   }
 
+  // Elements dropped while loading used to disappear without a trace, which made
+  // a bad save round-trip look like a rendering bug.
+  function reportLoadErrors(errors: string[]) {
+    if (errors.length === 0) return;
+    const shown = errors.slice(0, 3).join(' · ');
+    onNotifyRef.current?.(
+      `${errors.length} đối tượng không dựng lại được: ${shown}` +
+      (errors.length > 3 ? ' …' : ''),
+    );
+  }
+
   // ─── Rebuild board from elements[] ────────────────────────────────────────
   function rebuildBoard(els: HeyGeoElement[]) {
     const board = boardRef.current;
@@ -569,7 +584,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     });
     boardRef.current = newBoard;
     attachBoardEvents(newBoard); // must be before loadDataToBoard so events attach to all elements
-    elementsRef.current = loadDataToBoard(newBoard, { ...emptyData(), elements: els });
+    const { loaded, errors } = loadDataToBoard(newBoard, { ...emptyData(), elements: els });
+    elementsRef.current = loaded;
+    reportLoadErrors(errors);
     selectedRef.current = [];
     onSelectionChange([]);
     setSelDecorations([]);
@@ -1415,7 +1432,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         axis:  initialData.axis  ?? true,
         grid:  initialData.grid  ?? false,
       };
-      elementsRef.current = loadDataToBoard(board, initialData);
+      const { loaded, errors } = loadDataToBoard(board, initialData);
+      elementsRef.current = loaded;
+      reportLoadErrors(errors);
     }
   }
 
@@ -1893,33 +1912,43 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
       if (!tracePoint && !traceLine) return { ok: false, reason: 'no_trace' };
 
-      saveSnapshot();
-
       const baseAttrs = {
         strokeColor: '#c83c3c', strokeWidth: 1.5,
         withLabel: false, numberpoints: 300,
         highlight: false,
       };
 
+      const specs: HeyGeoElement[] = [];
       if (tracePoint) {
         const id = nextElId('lc');
-        board.create('tracecurve', [glider, tracePoint], { id, ...baseAttrs });
-        elementsRef.current.push({
-          type: 'tracecurve', id,
-          parents: [glider.id, tracePoint.id],
-          attrs: { ...baseAttrs },
-        });
+        specs.push({ type: 'tracecurve', id, parents: [glider.id, tracePoint.id], attrs: { ...baseAttrs } });
       } else if (traceLine) {
         // Locus of a line: trace its two defining points
-        const id1 = nextElId('lc'), id2 = nextElId('lc');
         const lineAttrs = { ...baseAttrs, dash: 1 };
-        board.create('tracecurve', [glider, traceLine.point1], { id: id1, ...lineAttrs });
-        board.create('tracecurve', [glider, traceLine.point2], { id: id2, ...lineAttrs });
-        elementsRef.current.push(
-          { type: 'tracecurve', id: id1, parents: [glider.id, traceLine.point1.id], attrs: { ...lineAttrs } },
-          { type: 'tracecurve', id: id2, parents: [glider.id, traceLine.point2.id], attrs: { ...lineAttrs } },
+        specs.push(
+          { type: 'tracecurve', id: nextElId('lc'), parents: [glider.id, traceLine.point1.id], attrs: { ...lineAttrs } },
+          { type: 'tracecurve', id: nextElId('lc'), parents: [glider.id, traceLine.point2.id], attrs: { ...lineAttrs } },
         );
       }
+
+      // JSXGraph recurses to stack depth when the traced object does not depend
+      // on the driver, so a failed locus must be reported rather than thrown.
+      const live: Record<string, unknown> = {};
+      for (const o of sel) live[o.id] = o;
+      const built: { spec: HeyGeoElement; obj: unknown }[] = [];
+      for (const sp of specs) {
+        const outcome = createElement(board, sp, live);
+        if (!outcome.obj) break;
+        live[sp.id!] = outcome.obj;
+        built.push({ spec: sp, obj: outcome.obj });
+      }
+      if (built.length !== specs.length) {
+        built.forEach(({ obj }) => board.removeObject(obj as never));
+        onNotifyRef.current?.('Không dựng được quỹ tích: điểm được chọn phải phụ thuộc vào điểm dẫn.');
+        return { ok: false, reason: 'trace_failed' };
+      }
+      saveSnapshot();
+      built.forEach(({ spec }) => elementsRef.current.push(spec));
 
       board.update();
       onDirty();

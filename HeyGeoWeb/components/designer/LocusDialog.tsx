@@ -23,6 +23,8 @@ export default function LocusDialog({ result, onRetry, onClose }: Props) {
       ? 'Không tìm thấy điểm quỹ tích. Hãy chọn thêm một điểm (hoặc đường thẳng) phụ thuộc vào điểm dẫn.'
     : !result.ok && result.reason === 'need_2_items'
       ? 'Hãy chọn đúng 2 đối tượng: điểm dẫn (glider) và điểm/đường quỹ tích.'
+    : !result.ok && result.reason === 'trace_failed'
+      ? 'Không dựng được quỹ tích: điểm được chọn phải phụ thuộc vào điểm dẫn (midpoint, intersection, điểm trên đường nối tiếp…).'
     : null;
 
   return (

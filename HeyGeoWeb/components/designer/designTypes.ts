@@ -150,7 +150,7 @@ export interface SelectedElementInfo {
 // ─── Locus result (returned by createLocus) ──────────────────────────────────
 export type LocusResult =
   | { ok: true }
-  | { ok: false; reason: 'no_glider' | 'no_trace' | 'need_2_items' };
+  | { ok: false; reason: 'no_glider' | 'no_trace' | 'need_2_items' | 'trace_failed' };
 
 // ─── Mark info for transformations ────────────────────────────────────────────
 export interface MarkInfo {

@@ -22,6 +22,7 @@
 import { useEffect, useRef, useState, useId } from 'react';
 import Script from 'next/script';
 import { getJXG, whenJsxGraphReady } from '@/lib/jsxgraph';
+import { createElement } from './designer/elementRegistry';
 
 export interface HeyGeoElement {
   type: string;
@@ -291,38 +292,6 @@ export default function JSXGraphViewer({ data, containerId }: Props) {
       const elMap: Record<string, unknown> = {};
 
       for (const el of data.elements) {
-        const parents = el.parents.map((p) => {
-          if (typeof p === 'string' && elMap[p] !== undefined) return elMap[p];
-          // Coordinate arrays for curve plot type: convert null → NaN (pen-lift separator)
-          if (Array.isArray(p)) return (p as (number | null)[]).map(v => (v === null ? NaN : v));
-          // Dynamic function strings for text elements (measure/calculate values).
-          // The string "function(){...}" closes over a `board` variable injected
-          // via new Function so that board.objects['id'].X()/Y() resolve correctly.
-          // The returned function is wrapped in an error guard: if the inner
-          // computation throws (e.g. a referenced element isn't ready yet),
-          // JSXGraph gets a safe '…' string instead of displaying fn.toString().
-          if (typeof p === 'string' && p.trimStart().startsWith('function(')) {
-            try {
-              // eslint-disable-next-line no-new-func
-              const raw = new Function('board', `return (${p});`)(board);
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              return function(this: any) {
-                try {
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  const v = (raw as any).call(this);
-                  return v != null ? String(v) : '…';
-                } catch (err) {
-                  console.error('[HeyGeo] text fn error:', err, '\nfn:', p.slice(0, 120));
-                  return '…';
-                }
-              };
-            } catch {
-              return '…'; // syntax error in generated funcStr – show harmless placeholder
-            }
-          }
-          return p;
-        });
-
         // ── objectlocus: dynamic envelope of a line-family locus ─────────────
         // The C++ exporter emits type='objectlocus' when the locus driven object
         // is a G_LINE (perpendicular bisector, parallel, etc.).
@@ -494,11 +463,15 @@ export default function JSXGraphViewer({ data, containerId }: Props) {
           continue;
         }
 
-        let attrs: Record<string, unknown> = el.id
-          ? { id: el.id, ...(el.attrs ?? {}) }
-          : { ...(el.attrs ?? {}) };
-
-        const created = board.create(el.type, parents, attrs);
+        // One resolution/create path for viewer and designer: ids become the
+        // objects already built, literals (captions, slider ranges) pass through,
+        // and a type the registry does not know is reported instead of taking
+        // the whole board down with it.
+        const { obj: created, error } = createElement(board, el, elMap);
+        if (!created) {
+          console.warn(`[HeyGeo] ${el.type} "${el.id ?? ''}": ${error}`);
+          continue;
+        }
         if (el.id) elMap[el.id] = created;
 
         // Make point labels draggable by intercepting pointer events at the board
