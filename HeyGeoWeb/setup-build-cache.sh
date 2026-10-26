@@ -23,6 +23,14 @@ setup_symlink() {
 
   mkdir -p "$CACHE_BASE"
 
+  # Cache đích còn sót từ lần chạy trước: mv vào đó sẽ tạo lồng $DST/$NAME
+  # rồi ln -s fail. Đổi tên giữ lại để người dùng tự quyết định xoá.
+  if [[ -d "$DST" && ! -L "$DST" ]]; then
+    local STALE="$DST.old-$(date +%Y%m%d_%H%M%S)"
+    echo -e "${YELLOW}⚠  Dời cache cũ $NAME → ${STALE:t}${RESET}"
+    mv "$DST" "$STALE"
+  fi
+
   if [[ -d "$SRC" ]]; then
     echo -e "${BOLD}▶  Dời $NAME ra ngoài GDrive...${RESET}"
     mv "$SRC" "$DST"
