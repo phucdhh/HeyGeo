@@ -19,7 +19,18 @@ import type {
   SliderPos,
 } from './designTypes';
 import { emptyData } from './designTypes';
-import { createElement, unresolvedParentId } from './elementRegistry';
+import { createElement } from './elementRegistry';
+import {
+  applyScene,
+  clearHistory,
+  planScene,
+  pushCapped,
+  setSceneChrome,
+  syncPositions,
+  takeScene,
+  withDependents,
+  type SceneSnapshot,
+} from './sceneModel';
 
 // ─── JSXGraph accessor (engine global, loaded from /vendor by lib/jsxgraph;
 //     extends the global declared in JSXGraphViewer) ────────────────────────
@@ -59,47 +70,19 @@ function boardToData(
 }
 
 // ─── Deserialise HeyGeoData → board objects ───────────────────────────────────
-// Elements are created through elementRegistry so an unsupported type, a wrong
-// parent count or a dangling reference is reported instead of vanishing.
-// Out-of-order JSON is rebuilt by retrying the deferred elements until a pass
-// makes no progress, which also ends a parent cycle.
+// Elements are created through elementRegistry inside the scene model, so an
+// unsupported type, a wrong parent count or a dangling reference is reported
+// instead of vanishing. Out-of-order JSON is rebuilt by retrying the deferred
+// elements until a pass makes no progress, which also ends a parent cycle.
 function loadDataToBoard(
   board: JXGBoard,
   data: HeyGeoData,
 ): { loaded: HeyGeoElement[]; errors: string[] } {
-  const elMap: Record<string, unknown> = {};
-  const loaded: HeyGeoElement[] = [];
-  const errors: string[] = [];
-  let pending = data.elements;
-
-  while (pending.length > 0) {
-    const deferred: HeyGeoElement[] = [];
-    for (const el of pending) {
-      // A reference parent that is not built yet means the JSON is out of order,
-      // not that the element is broken — hold it for the next pass.
-      const missing = unresolvedParentId(el, new Set(Object.keys(elMap)));
-      if (missing !== null) {
-        deferred.push(el);
-        continue;
-      }
-
-      const outcome = createElement(board, el, elMap);
-
-      if (outcome.obj) {
-        elMap[el.id] = outcome.obj;
-        loaded.push(el);
-      } else {
-        errors.push(outcome.error ?? `Không tạo được ${el.type}`);
-      }
-    }
-    if (deferred.length === pending.length) break;
-    pending = deferred;
-  }
-  for (const el of pending) {
-    errors.push(`${el.type} "${el.id}": cha không tồn tại (${el.parents.join(', ')})`);
-  }
-
-  return { loaded, errors };
+  const out = applyScene(board, takeScene(data.elements, {
+    axis: data.axis ?? false,
+    grid: data.grid ?? false,
+  }));
+  return { loaded: out.elements, errors: out.errors };
 }
 
 // ─── Find a snap point near screen coords ────────────────────────────────────
@@ -484,8 +467,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   // Internal state (not React state – avoids re-renders on every move)
   const metaRef    = useRef({ title: 'Chưa đặt tên', axis: false, grid: false });
   const elementsRef = useRef<HeyGeoElement[]>([]);        // canonical element list
-  const undoStack  = useRef<HeyGeoElement[][]>([]);
-  const redoStack  = useRef<HeyGeoElement[][]>([]);
+  const undoStack  = useRef<SceneSnapshot[]>([]);
+  const redoStack  = useRef<SceneSnapshot[]>([]);
+  // Document state captured on mouse-down, pushed to the undo stack only if the
+  // pointer actually dragged something — a click must not become an undo step.
+  const dragBaseRef = useRef<SceneSnapshot | null>(null);
 
   // Stable ref for onOpenProperties so the board dblclick closure is never stale
   const onOpenPropertiesRef = useRef(onOpenProperties);
@@ -548,8 +534,19 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   }, [tool]);
 
   // ─── Snapshot helpers ─────────────────────────────────────────────────────
+  /**
+   * The document plus the board's live positions. A drag moves the geometry
+   * without touching the document, so a snapshot taken without the write-back
+   * would undo a drag to the point's creation coordinates.
+   */
+  function currentScene(): SceneSnapshot {
+    const board = boardRef.current;
+    if (board) syncPositions(elementsRef.current, board);
+    return takeScene(elementsRef.current, metaRef.current);
+  }
+
   function saveSnapshot() {
-    undoStack.current.push(JSON.parse(JSON.stringify(elementsRef.current)));
+    pushCapped(undoStack.current, currentScene());
     redoStack.current = [];
   }
 
@@ -564,7 +561,36 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     );
   }
 
+  // ─── Restore a snapshot onto the board that is already there ──────────────
+  // Only the difference reaches the board, so zoom, pan, traced curves, running
+  // animations and the selection all survive an undo.
+  function restoreScene(target: SceneSnapshot) {
+    const board = boardRef.current;
+    if (!board) return;
+    cancelTool();
+    const { elements, errors } = applyScene(board, target, planScene(currentScene(), target));
+    elementsRef.current = elements;
+    metaRef.current = { ...metaRef.current, axis: target.axis, grid: target.grid };
+    setSceneChrome(board, metaRef.current);
+    reportLoadErrors(errors);
+    keepSelection(board);
+    onDirty();
+  }
+
+  /** Keep what is still on the board selected, by id. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function keepSelection(board: any) {
+    const alive = selectedRef.current
+      .map((o: { id: string }) => board.objects?.[o.id])
+      .filter(Boolean);
+    selectedRef.current = alive;
+    onSelectionChange(alive.map(toSelectedInfo));
+    setSelDecorations(computeDecorations(alive, board));
+  }
+
   // ─── Rebuild board from elements[] ────────────────────────────────────────
+  // Used when a whole new document arrives; a snapshot restore goes through
+  // restoreScene instead.
   function rebuildBoard(els: HeyGeoElement[]) {
     const board = boardRef.current;
     if (!board) return;
@@ -573,8 +599,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const meta = metaRef.current;
     const newBoard = jxg().JSXGraph.initBoard(BOARD_ID, {
       boundingbox: [-8, 8, 8, -8],
-      axis: meta.axis,
-      grid: meta.grid,
+      axis: true,
+      grid: true,
       showCopyright: false,
       showNavigation: true,
       keepaspectratio: true,
@@ -587,6 +613,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const { loaded, errors } = loadDataToBoard(newBoard, { ...emptyData(), elements: els });
     elementsRef.current = loaded;
     reportLoadErrors(errors);
+    setSceneChrome(newBoard, meta);
     selectedRef.current = [];
     onSelectionChange([]);
     setSelDecorations([]);
@@ -787,15 +814,35 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           // Selection is handled by board.on('down') below using findObjectsAt.
           // objectClickedRef is set there; just stop DOM propagation here so
           // the container mousedown doesn’t also start rubber-band.
-          if (toolRef.current === 'selection') evt.stopPropagation?.();
+          if (toolRef.current === 'selection') {
+            // Remember where the drag starts, but only spend an undo step on it
+            // if the pointer actually moves something.
+            dragBaseRef.current = currentScene();
+            evt.stopPropagation?.();
+          }
         });
         // ── drag: dragging an unselected object makes it the sole selection ──
         obj.on('drag', () => {
+          if (dragBaseRef.current) {
+            pushCapped(undoStack.current, dragBaseRef.current);
+            redoStack.current = [];
+            dragBaseRef.current = null;
+          }
           if (toolRef.current !== 'selection') return;
           if (selectedRef.current.length === 1 && selectedRef.current[0] === obj) return;
           selectedRef.current = [obj];
           setSelDecorations(computeDecorations([obj], board));
           onSelectionChange(selectedRef.current.map(toSelectedInfo));
+        });
+        // ── drop: a moved object has to land back in the document ───────────
+        obj.on('up', () => {
+          dragBaseRef.current = null;
+          if (toolRef.current !== 'selection') return;
+          if (syncPositions(elementsRef.current, board)) {
+            setSelDecorations(computeDecorations(selectedRef.current, board));
+            onSelectionChange(selectedRef.current.map(toSelectedInfo));
+            onDirty();
+          }
         });
         // ── hover: pointer cursor, no color change ──────────────────────────
         obj.on('over', () => {
@@ -1414,8 +1461,10 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     resetCounters();
     const board = jxg().JSXGraph.initBoard(BOARD_ID, {
       boundingbox: [-8, 8, 8, -8],
-      axis: false,
-      grid: false,
+      // Axes and grid are always created because JSXGraph cannot bring hidden
+      // ones back; setSceneChrome then applies what the document asks for.
+      axis: true,
+      grid: true,
       showCopyright: false,
       showNavigation: true,
       keepaspectratio: true,
@@ -1426,6 +1475,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     boardRef.current = board;
     attachBoardEvents(board);
 
+    setSceneChrome(board, metaRef.current);
+
     if (initialData) {
       metaRef.current = {
         title: initialData.title ?? 'Chưa đặt tên',
@@ -1435,6 +1486,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const { loaded, errors } = loadDataToBoard(board, initialData);
       elementsRef.current = loaded;
       reportLoadErrors(errors);
+      setSceneChrome(board, metaRef.current);
     }
   }
 
@@ -1639,27 +1691,30 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
   // ─── Imperative handle ────────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
-    getHeyGeoData: () =>
-      boardToData(boardRef.current!, metaRef.current, elementsRef.current),
+    getHeyGeoData: () => {
+      const board = boardRef.current!;
+      syncPositions(elementsRef.current, board);
+      return boardToData(board, metaRef.current, elementsRef.current);
+    },
 
     loadData: (data: HeyGeoData) => {
       resetCounters();
+      clearHistory(undoStack.current, redoStack.current);
+      dragBaseRef.current = null;
       metaRef.current = { title: data.title, axis: data.axis ?? true, grid: data.grid ?? false };
       rebuildBoard(data.elements);
     },
 
     undo: () => {
       if (undoStack.current.length === 0) return;
-      redoStack.current.push(JSON.parse(JSON.stringify(elementsRef.current)));
-      const prev = undoStack.current.pop()!;
-      rebuildBoard(prev);
+      pushCapped(redoStack.current, currentScene());
+      restoreScene(undoStack.current.pop()!);
     },
 
     redo: () => {
       if (redoStack.current.length === 0) return;
-      undoStack.current.push(JSON.parse(JSON.stringify(elementsRef.current)));
-      const next = redoStack.current.pop()!;
-      rebuildBoard(next);
+      pushCapped(undoStack.current, currentScene());
+      restoreScene(redoStack.current.pop()!);
     },
 
     canUndo: () => undoStack.current.length > 0,
@@ -1669,13 +1724,19 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const board = boardRef.current;
       if (!board || selectedRef.current.length === 0) return;
       saveSnapshot();
-      const ids = selectedRef.current.map((o: { id: string }) => o.id);
-      ids.forEach(id => {
-        try { board.removeObject(board.objects[id]); } catch { /**/ }
-      });
-      elementsRef.current = elementsRef.current.filter(e => !ids.includes(e.id));
+      // JSXGraph removes an element with everything built from it, so the
+      // document has to drop the same set or it drifts from the board.
+      const doomed = withDependents(
+        elementsRef.current,
+        selectedRef.current.map((o: { id: string }) => o.id),
+      );
+      [...elementsRef.current].reverse()
+        .filter(e => doomed.has(e.id))
+        .forEach(e => { try { board.removeObject(board.objects[e.id]); } catch { /**/ } });
+      elementsRef.current = elementsRef.current.filter(e => !doomed.has(e.id));
       selectedRef.current = [];
       onSelectionChange([]);
+      setSelDecorations([]);
       onDirty();
     },
 
@@ -1696,14 +1757,18 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     },
 
     setAxis: (v: boolean) => {
+      saveSnapshot();
       metaRef.current.axis = v;
-      // Rebuild board to apply axis change
-      rebuildBoard(elementsRef.current);
+      // Axes are always on the board; only their visibility changes.
+      setSceneChrome(boardRef.current, metaRef.current);
+      onDirty();
     },
 
     setGrid: (v: boolean) => {
+      saveSnapshot();
       metaRef.current.grid = v;
-      rebuildBoard(elementsRef.current);
+      setSceneChrome(boardRef.current, metaRef.current);
+      onDirty();
     },
 
     zoomIn:  () => boardRef.current?.zoomIn(0, 0),

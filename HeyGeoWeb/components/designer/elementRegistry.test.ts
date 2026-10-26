@@ -7,6 +7,8 @@ import {
   unresolvedParentId,
   type ElementSpec,
 } from './elementRegistry';
+import { applyScene, takeScene } from './sceneModel';
+import type { HeyGeoElement } from './designTypes';
 
 function fakeBoard() {
   const create = vi.fn((_type: string) => ({ ok: true }));
@@ -202,38 +204,39 @@ describe('legacy measurement source', () => {
 });
 
 describe('load round-trip over real element shapes', () => {
-  /** Mirrors what DesignCanvas's loader does, including the ordering retry. */
-  function loadInto(board: { create: (t: string, p: unknown[], a: object) => unknown }, elements: ElementSpec[]) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const elMap: Record<string, any> = {};
-    const errors: string[] = [];
-    let pending = elements;
-    while (pending.length > 0) {
-      const deferred: ElementSpec[] = [];
-      for (const item of pending) {
-        const missing = unresolvedParentId(item, new Set(Object.keys(elMap)));
-        if (missing !== null) {
-          deferred.push(item);
-          continue;
-        }
-        const out = createElement(board, item, elMap);
-        if (out.obj) elMap[item.id ?? ''] = out.obj;
-        else errors.push(out.error ?? item.type);
-      }
-      if (deferred.length === pending.length) break;
-      pending = deferred;
-    }
-    for (const item of pending) {
-      errors.push(`${item.type} "${item.id}": cha không tồn tại (${item.parents.join(', ')})`);
-    }
-    return { created: Object.keys(elMap).length, errors, unresolved: pending.map(p => p.id ?? p.type) };
+  // Loading is sceneModel.applyScene's job now, so these drive that function
+  // instead of a second copy of its retry loop.
+  interface LoadBoard {
+    objects: Record<string, unknown>;
+    create(type: string, parents: unknown[], attrs: Record<string, unknown>): unknown;
+    removeObject(obj: unknown): void;
+    update(): void;
   }
-
-  const board = () => ({ create: vi.fn((t: string) => ({ elType: t })) });
+  const loadInto = (elements: ElementSpec[]) => {
+    const board: LoadBoard = {
+      objects: {},
+      create: vi.fn(),
+      removeObject: vi.fn(),
+      update: vi.fn(),
+    };
+    board.create = vi.fn((type: string, _parents: unknown[], attrs: Record<string, unknown>) => {
+      const obj = { elType: type, id: attrs.id };
+      board.objects[String(attrs.id)] = obj;
+      return obj;
+    });
+    const out = applyScene(
+      board,
+      takeScene(elements as unknown as HeyGeoElement[], { axis: false, grid: false }),
+    );
+    return {
+      created: Object.keys(board.objects).length,
+      order: (board.create as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]),
+      errors: out.errors,
+    };
+  };
 
   it('rebuilds a perpendicular from two stored ids', () => {
-    const b = board();
-    const r = loadInto(b, [
+    const r = loadInto([
       el({ type: 'point', id: 'A', parents: [0, 0] }),
       el({ type: 'point', id: 'B', parents: [4, 0] }),
       el({ type: 'segment', id: 's1', parents: ['A', 'B'] }),
@@ -242,13 +245,11 @@ describe('load round-trip over real element shapes', () => {
     ]);
     expect(r.errors).toEqual([]);
     expect(r.created).toBe(5);
-    expect(b.create.mock.calls.map(c => c[0])).toEqual(
-      ['point', 'point', 'segment', 'point', 'perpendicular']);
+    expect(r.order).toEqual(['point', 'point', 'segment', 'point', 'perpendicular']);
   });
 
   it('recovers when JSON lists a child before its parent', () => {
-    const b = board();
-    const r = loadInto(b, [
+    const r = loadInto([
       el({ type: 'midpoint', id: 'm1', parents: ['A', 'B'] }),
       el({ type: 'point', id: 'A', parents: [0, 0] }),
       el({ type: 'point', id: 'B', parents: [2, 2] }),
@@ -258,8 +259,7 @@ describe('load round-trip over real element shapes', () => {
   });
 
   it('retries deep enough for a chain of reversed parents', () => {
-    const b = board();
-    const r = loadInto(b, [
+    const r = loadInto([
       el({ type: 'perpendicular', id: 'perp', parents: ['m1', 's1'] }),
       el({ type: 'midpoint', id: 'm1', parents: ['A', 'B'] }),
       el({ type: 'segment', id: 's1', parents: ['A', 'B'] }),
@@ -271,20 +271,17 @@ describe('load round-trip over real element shapes', () => {
   });
 
   it('stops on a parent cycle instead of looping forever', () => {
-    const b = board();
-    const r = loadInto(b, [
+    const r = loadInto([
       el({ type: 'midpoint', id: 'm1', parents: ['m2', 'A'] }),
       el({ type: 'midpoint', id: 'm2', parents: ['m1', 'A'] }),
       el({ type: 'point', id: 'A', parents: [1, 1] }),
     ]);
     expect(r.created).toBe(1);
-    expect(r.unresolved).toEqual(['m1', 'm2']);
-    expect(r.errors.join(' ')).toMatch(/cha không tồn tại/);
+    expect(r.errors.filter((e) => /cha không tồn tại/.test(e))).toHaveLength(2);
   });
 
   it('reports an element whose parent is genuinely absent', () => {
-    const b = board();
-    const r = loadInto(b, [el({ type: 'midpoint', id: 'm1', parents: ['A', 'ghost'] })]);
+    const r = loadInto([el({ type: 'midpoint', id: 'm1', parents: ['A', 'ghost'] })]);
     expect(r.created).toBe(0);
     expect(r.errors.join(' ')).toMatch(/không tồn tại/);
   });
