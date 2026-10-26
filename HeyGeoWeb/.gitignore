@@ -1,10 +1,12 @@
 # Dependencies
-node_modules/
+# No trailing slash: node_modules and .next are symlinks to the build cache
+# outside Google Drive, and `dir/` patterns do not match symlinks.
+node_modules
 .pnp
 .pnp.js
 
 # Next.js
-.next/
+.next
 out/
 
 # Production
