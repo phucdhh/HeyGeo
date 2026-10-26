@@ -289,3 +289,64 @@ describe('a saved document rebuilds the same drawing', () => {
     expect(drawing(again).join('\n')).toMatch(/text:d = \d+\.\d+/);
   });
 });
+
+/**
+ * The shapes src/app/HeyGeoWebExporter.cpp writes for a desktop document. The
+ * exporter used to hand over JavaScript source; it now emits the same
+ * descriptors the designer saves, so these fixtures are the contract between
+ * the two apps and changing either one has to show up here.
+ */
+describe('a document exported from the desktop app', () => {
+  it('draws a measured distance from its descriptor at the desktop scale', () => {
+    const b = newBoard();
+    load(b, [
+      el({ type: 'point', id: 'p0', parents: [0, 0], attrs: { name: 'O' } }),
+      el({ type: 'point', id: 'p2', parents: [2, 3], attrs: { name: 'C' } }),
+      // the hidden y-direction point of a coordinate system: U rotated 90° about O
+      el({ type: 'point', id: 'p1', parents: [1, 0], attrs: { name: 'I' } }),
+      el({
+        type: 'point', id: 'cs0_v', parents: ['p1'],
+        attrs: { visible: false, withLabel: false, image: { op: 'rotate', of: ['p0'], angle: 90 } },
+      }),
+      // scale is the desktop centimetres-per-unit factor, not a redrawn number
+      el({
+        type: 'text', id: 'mea0', parents: [0.6, 1.4, 'OC'],
+        attrs: {
+          fontSize: 14, strokeColor: '#333333',
+          measure: { op: 'distance', args: ['p0', 'p2'], label: 'OC', precision: 2, unit: ' cm', scale: 2 },
+        },
+      }),
+      // a Calculate has no declarative op yet: the desktop exports its caption
+      el({ type: 'text', id: 'cal0', parents: [-2, 2, 'AB + BC = 7.21'], attrs: { fontSize: 14 } }),
+    ]);
+    b.update();
+
+    expect(String(b.objects.mea0.plaintext)).toBe(`OC = ${(Math.hypot(2, 3) * 2).toFixed(2)} cm`);
+    expect(b.objects.cs0_v.X()).toBeCloseTo(0);
+    expect(b.objects.cs0_v.Y()).toBeCloseTo(1);
+    expect(String(b.objects.cal0.plaintext)).toBe('AB + BC = 7.21');
+    expect(drawing(b).join('\n')).toMatch(/OC = \d+\.\d+ cm/);
+  });
+
+  it('places a caption in the document coordinate system the exporter names', () => {
+    const b = newBoard();
+    load(b, [
+      el({ type: 'point', id: 'p0', parents: [0, 0], attrs: { visible: false } }),
+      // the unit point is two board units away, so the frame is half-scale
+      el({ type: 'point', id: 'p1', parents: [2, 0], attrs: { visible: false } }),
+      el({ type: 'point', id: 'p2', parents: [3, 1], attrs: { name: 'A' } }),
+      el({
+        type: 'text', id: 'mea0', parents: [1, 2, 'x<sub>A</sub>'],
+        attrs: { measure: { op: 'relativeAbscissa', args: ['p0', 'p1', 'p2'], label: 'x<sub>A</sub>', precision: 2 } },
+      }),
+      el({
+        type: 'text', id: 'mea1', parents: [1, 3, 'A'],
+        attrs: { measure: { op: 'relativeCoordinates', args: ['p0', 'p1', 'p2'], label: 'A', precision: 2 } },
+      }),
+    ]);
+    b.update();
+
+    expect(String(b.objects.mea0.plaintext)).toContain('= 1.50');
+    expect(String(b.objects.mea1.plaintext)).toContain('(1.50; 0.50)');
+  });
+});

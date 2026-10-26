@@ -271,15 +271,49 @@ static QString expandCalcLabel(const G_calculateObject *calcObj,
 }
 
 // --------------------------------------------------------------------------
-// measureNumExprJs -- return a pure JS numeric expression (using bo = board.objects)
-//   that evaluates the G_MEASURE ref's displayed value in physical units
-//   (cm for lengths, degrees for angles, dimensionless otherwise).
-//   cmF = SCALE * G_cmPerPixel() = centimetres per JSXGraph unit.
-//   Returns "" for unsupported types / missing IDs.
+// measureSpec -- one attrs.measure descriptor: { op, args, label, precision,
+//   unit, scale }.  The web reads it in components/designer/measurement.ts and
+// turns it into a live closure over the board, so what travels in the JSON is
+// data about the measurement, never code to run.
+//   scale carries the desktop centimetres-per-unit factor (cmF): the web
+//   multiplies the board value by it before formatting, so the exported
+//   measurement still reads in centimetres.
 // --------------------------------------------------------------------------
-static QString measureNumExprJs(G_ref *ref,
-                                 const QMap<G_ref*, QString> &idMap,
-                                 double cmF)
+static QJsonObject measureSpec(const QString &op,
+                               const QStringList &args,
+                               const QString &label = QString(),
+                               const QString &unit = QString(),
+                               double scale = 1.0)
+{
+    QJsonArray jargs;
+    for (const QString &a : args) jargs.append(a);
+
+    QJsonObject spec;
+    spec[QStringLiteral("op")]        = op;
+    spec[QStringLiteral("args")]      = jargs;
+    spec[QStringLiteral("precision")] = 2;
+    if (!label.isEmpty()) spec[QStringLiteral("label")] = label;
+    if (!unit.isEmpty())  spec[QStringLiteral("unit")]  = unit;
+    if (scale != 1.0)     spec[QStringLiteral("scale")] = scale;
+    return spec;
+}
+
+/** The text before " = " in the desktop caption -- the web measurement label. */
+static QString measureLabelText(G_valueObject *valObj)
+{
+    QString disp = valObj ? valObj->getDisplayText() : QString();
+    int eq = disp.lastIndexOf(QStringLiteral(" = "));
+    return (eq >= 0) ? disp.left(eq) : disp;
+}
+
+// --------------------------------------------------------------------------
+// measureSpecFor -- the attrs.measure descriptor for a non-coord G_MEASURE.
+//   Returns an empty object for the types the web has no declarative op for
+//   (area, arc length) and for coord measures, which have their own ops.
+// --------------------------------------------------------------------------
+static QJsonObject measureSpecFor(G_ref *ref,
+                                  const QMap<G_ref*, QString> &idMap,
+                                  double cmF)
 {
     int dtype = ref->getDescendType();
     const G_refs &par = ref->getParentsConst();
@@ -288,291 +322,79 @@ static QString measureNumExprJs(G_ref *ref,
         auto it = idMap.find(r);
         return (it != idMap.end()) ? *it : QString();
     };
-    // Preformat cmF constant to embed in JS strings
-    QString cmFStr = QString::number(cmF, 'f', 10);
+    auto specOrNull = [&](const QString &op, const QStringList &args,
+                          const QString &unit = QString(), double scale = 1.0) {
+        for (const QString &id : args) if (id.isEmpty()) return QJsonObject();
+        G_valueObject *valObj = dynamic_cast<G_valueObject *>(ref->getObject());
+        return measureSpec(op, args, measureLabelText(valObj), unit, scale);
+    };
 
     switch (dtype) {
 
     case G_DISTANCE_MEASURE: {
-        if ((int)par.size() < 2) return QString();
+        if ((int)par.size() < 2) return QJsonObject();
         QString p0id = objId(par[0]);
-        if (p0id.isEmpty() || par[0]->getType() != G_POINT) return QString();
-
-        if (par[1] && par[1]->getType() == G_POINT) {
-            // point-to-point Euclidean distance
-            QString p1id = objId(par[1]);
-            if (p1id.isEmpty()) return QString();
-            return QString(
-                "(function(){var bo=board.objects,"
-                "dx=bo['%1'].X()-bo['%2'].X(),"
-                "dy=bo['%1'].Y()-bo['%2'].Y();"
-                "return Math.sqrt(dx*dx+dy*dy)*%3;})()")
-                .arg(p0id, p1id, cmFStr);
-        }
-        if (par[1] && (par[1]->getType() & G_SEGMENT)) {
-            // point-to-segment (nearest-point projection)
-            QString sid = objId(par[1]);
-            if (sid.isEmpty()) return QString();
-            return QString(
-                "(function(){var bo=board.objects,"
-                "ax=bo['%1'].X(),ay=bo['%1'].Y(),"
-                "seg=bo['%2'],"
-                "px=seg.point1.X(),py=seg.point1.Y(),"
-                "qx=seg.point2.X(),qy=seg.point2.Y(),"
-                "ddx=qx-px,ddy=qy-py,lsq=ddx*ddx+ddy*ddy,"
-                "t=lsq<1e-12?0:Math.max(0,Math.min(1,((ax-px)*ddx+(ay-py)*ddy)/lsq)),"
-                "nx=px+t*ddx,ny=py+t*ddy;"
-                "return Math.sqrt((ax-nx)*(ax-nx)+(ay-ny)*(ay-ny))*%3;})()")
-                .arg(p0id, sid, cmFStr);
-        }
-        return QString();
+        if (p0id.isEmpty() || par[0]->getType() != G_POINT) return QJsonObject();
+        if (par[1] && par[1]->getType() == G_POINT)
+            return specOrNull(QStringLiteral("distance"),
+                              { p0id, objId(par[1]) },
+                              QStringLiteral(" cm"), cmF);
+        if (par[1] && (par[1]->getType() & G_SEGMENT))
+            return specOrNull(QStringLiteral("pointSegmentDistance"),
+                              { p0id, objId(par[1]) },
+                              QStringLiteral(" cm"), cmF);
+        return QJsonObject();
     }
 
     case G_LENGTH_MEASURE: {
-        if (par.empty()) return QString();
+        if (par.empty()) return QJsonObject();
         QString sid = objId(par[0]);
-        if (sid.isEmpty()) return QString();
-
-        if (par[0]->getType() == G_SEGMENT) {
-            return QString(
-                "(function(){var bo=board.objects,seg=bo['%1'],"
-                "dx=seg.point2.X()-seg.point1.X(),"
-                "dy=seg.point2.Y()-seg.point1.Y();"
-                "return Math.sqrt(dx*dx+dy*dy)*%2;})()")
-                .arg(sid, cmFStr);
-        }
-        if (par[0]->getType() == G_CIRCLE) {
-            // circumference = 2π·r
-            return QString(
-                "(function(){var bo=board.objects;"
-                "return bo['%1'].Radius()*2*Math.PI*%2;})()")
-                .arg(sid, cmFStr);
-        }
-        return QString(); // G_ARC arc-length: skip
+        if (par[0]->getType() == G_SEGMENT)
+            return specOrNull(QStringLiteral("length"), { sid },
+                              QStringLiteral(" cm"), cmF);
+        if (par[0]->getType() == G_CIRCLE)
+            return specOrNull(QStringLiteral("circumference"), { sid },
+                              QStringLiteral(" cm"), cmF);
+        return QJsonObject(); // G_ARC arc-length: no declarative op yet
     }
 
     case G_RADIUS_MEASURE: {
-        if (par.empty()) return QString();
-        if (!(par[0]->getType() & (G_CIRCLE | G_ARC))) return QString();
-        QString cid = objId(par[0]);
-        if (cid.isEmpty()) return QString();
-        // JSXGraph circle and arc both expose .Radius()
-        return QString(
-            "(function(){var bo=board.objects;"
-            "return bo['%1'].Radius()*%2;})()")
-            .arg(cid, cmFStr);
+        if (par.empty()) return QJsonObject();
+        if (!(par[0]->getType() & (G_CIRCLE | G_ARC))) return QJsonObject();
+        return specOrNull(QStringLiteral("radius"), { objId(par[0]) },
+                          QStringLiteral(" cm"), cmF);
     }
 
     case G_ANGLE_MEASURE: {
-        if ((int)par.size() < 3) return QString(); // arc case: skip
-        QString bid = objId(par[0]);  // B (first wing)
-        QString aid = objId(par[1]);  // A = vertex
-        QString cid = objId(par[2]);  // C (second wing)
-        if (bid.isEmpty() || aid.isEmpty() || cid.isEmpty()) return QString();
-        // JSXGraph uses y-up; HeyGeo uses y-down for atan2.
-        // Negate dy to convert JSXGraph→screen-y for atan2 consistency.
-        // Build via concatenation (not .arg()) so the JS '%' modulo operator
-        // is not misinterpreted as a QString::arg() format specifier.
-        return QStringLiteral("(function(){var bo=board.objects,")
-            + QStringLiteral("dx0=bo['")+bid+QStringLiteral("'].X()-bo['")+aid+QStringLiteral("'].X(),")
-            + QStringLiteral("dy0=bo['")+bid+QStringLiteral("'].Y()-bo['")+aid+QStringLiteral("'].Y(),")
-            + QStringLiteral("dx2=bo['")+cid+QStringLiteral("'].X()-bo['")+aid+QStringLiteral("'].X(),")
-            + QStringLiteral("dy2=bo['")+cid+QStringLiteral("'].Y()-bo['")+aid+QStringLiteral("'].Y(),")
-            + QStringLiteral("a0=Math.atan2(-dy0,dx0),a2=Math.atan2(-dy2,dx2);")
-            + QStringLiteral("return ((-(a2-a0)+4*Math.PI)%(2*Math.PI))*180/Math.PI;})()");
+        if ((int)par.size() < 3) return QJsonObject(); // arc case: skip
+        // par = [wing, vertex, wing]; the web op takes the same order.
+        return specOrNull(QStringLiteral("angle"),
+                          { objId(par[0]), objId(par[1]), objId(par[2]) },
+                          QStringLiteral("\u00b0"));
     }
 
     case G_RATIO_MEASURE: {
-        if ((int)par.size() < 2) return QString();
-        QString s0id = objId(par[0]);
-        QString s1id = objId(par[1]);
-        if (s0id.isEmpty() || s1id.isEmpty()) return QString();
-        // ratio = len(seg0)/len(seg1), cmF cancels out
-        return QString(
-            "(function(){var bo=board.objects,"
-            "seg0=bo['%1'],seg1=bo['%2'],"
-            "dx0=seg0.point2.X()-seg0.point1.X(),dy0=seg0.point2.Y()-seg0.point1.Y(),"
-            "dx1=seg1.point2.X()-seg1.point1.X(),dy1=seg1.point2.Y()-seg1.point1.Y(),"
-            "l0=Math.sqrt(dx0*dx0+dy0*dy0),"
-            "l1=Math.sqrt(dx1*dx1+dy1*dy1);"
-            "return l1<1e-12?0:l0/l1;})()")
-            .arg(s0id, s1id);
+        if ((int)par.size() < 2) return QJsonObject();
+        QJsonObject spec = specOrNull(QStringLiteral("ratio"),
+                                      { objId(par[0]), objId(par[1]) });
+        // toUgly() gives "(num)/(den)"; the caption reads "num/den".
+        QString label = spec.value(QStringLiteral("label")).toString();
+        static const QRegularExpression ratioRe(QStringLiteral(R"(\(([^)]+)\)/\(([^)]+)\))"));
+        QRegularExpressionMatch m = ratioRe.match(label);
+        if (m.hasMatch())
+            spec[QStringLiteral("label")] =
+                m.captured(1) + QStringLiteral("/") + m.captured(2);
+        return spec;
     }
 
     case G_SLOPE_MEASURE: {
-        if (par.empty()) return QString();
-        QString sid = objId(par[0]); // segment, line, or ray
-        if (sid.isEmpty()) return QString();
-        // JSXGraph segment/line/ray all expose .point1 and .point2.
-        // slope = dy_math/dx_math (y-up) = -(dy_screen)/dx = desktop value.
-        return QString(
-            "(function(){var bo=board.objects,obj=bo['%1'],"
-            "dx=obj.point2.X()-obj.point1.X(),"
-            "dy=obj.point2.Y()-obj.point1.Y();"
-            "return Math.abs(dx)<1e-12?(dy<0?-1e12:1e12):dy/dx;})()")
-            .arg(sid);
+        if (par.empty()) return QJsonObject(); // segment, line or ray
+        return specOrNull(QStringLiteral("slope"), { objId(par[0]) });
     }
 
     default:
-        return QString(); // coord measures, area, etc.: handled separately
+        return QJsonObject(); // coord measures, area, etc.: handled elsewhere
     }
-}
-
-// --------------------------------------------------------------------------
-// measureToJsFunc -- build a JSXGraph text function string for a G_MEASURE
-//   ref (non-coord types).  Returns "" if expression can't be generated.
-// --------------------------------------------------------------------------
-static QString measureToJsFunc(G_ref *ref,
-                                const QMap<G_ref*, QString> &idMap,
-                                double cmF)
-{
-    int dtype = ref->getDescendType();
-    // Coord measures are handled by the dedicated coord code path
-    if (dtype == G_COORDINATES_MEASURE || dtype == G_ABSCISSA_MEASURE ||
-        dtype == G_ORDINATE_MEASURE    || dtype == G_COORD_DISTANCE_MEASURE)
-        return QString();
-
-    auto *valObj = dynamic_cast<G_valueObject *>(ref->getObject());
-    if (!valObj) return QString();
-
-    QString numExpr = measureNumExprJs(ref, idMap, cmF);
-    if (numExpr.isEmpty()) return QString();
-
-    // Extract label from displayText (everything before " = ")
-    QString dispText = valObj->getDisplayText();
-    int eqPos = dispText.lastIndexOf(QStringLiteral(" = "));
-    QString label = (eqPos >= 0) ? dispText.left(eqPos) : dispText;
-
-    // For ratio measures, toUgly() produces "(num)/(den)"; clean to "num/den"
-    if (dtype == G_RATIO_MEASURE) {
-        static const QRegularExpression ratioRe(
-            QStringLiteral(R"(\(([^)]+)\)/\(([^)]+)\))"));
-        QRegularExpressionMatch m = ratioRe.match(label);
-        if (m.hasMatch())
-            label = m.captured(1) + QStringLiteral("/") + m.captured(2);
-    }
-
-    // Determine number format and unit based on measure type
-    QString unit;
-    switch (dtype) {
-    case G_DISTANCE_MEASURE:
-    case G_LENGTH_MEASURE:
-    case G_RADIUS_MEASURE:   unit = QStringLiteral(" cm"); break;
-    case G_ANGLE_MEASURE:    unit = QStringLiteral("\u00b0"); break;  // °
-    case G_AREA_MEASURE:     unit = QStringLiteral(" cm\u00b2"); break;
-    default: break; // ratio, slope: dimensionless
-    }
-
-    // Escape for JS single-quoted string
-    QString esc = label;
-    esc.replace('\\', "\\\\").replace('\'', "\\'");
-
-    if (!unit.isEmpty()) {
-        QString escUnit = unit;
-        escUnit.replace('\'', "\\'");
-        return QStringLiteral("function(){return '%1 = '+(%2).toFixed(2)+'%3';}")
-               .arg(esc, numExpr, escUnit);
-    }
-    return QStringLiteral("function(){return '%1 = '+(%2).toFixed(2);}")
-           .arg(esc, numExpr);
-}
-
-// --------------------------------------------------------------------------
-// calcNumExprJs -- raw JS numeric expression for a G_CALCULATE.
-//   Handles G_PARAMETER, G_MEASURE, and nested G_CALCULATE parents.
-//   Returns "" if any parent type is unsupported or ID is missing.
-// --------------------------------------------------------------------------
-static QString calcNumExprJs(G_calculateObject          *calcObj,
-                              const G_refs               &parentRefs,
-                              const QMap<G_ref*, QString> &idMap,
-                              double                      cmF)
-{
-    if (!calcObj) return QString();
-    const QString &formula = calcObj->getFormulaString();
-    if (formula.isEmpty()) return QString();
-
-    QVector<QString> parentExprs;
-    for (int i = 0; i < (int)parentRefs.size(); ++i) {
-        G_ref *pr = parentRefs[i];
-        if (!pr) return QString();
-
-        if (pr->getType() == G_PARAMETER) {
-            auto it = idMap.find(pr);
-            if (it == idMap.end()) return QString();
-            parentExprs.append(QStringLiteral("board.objects['") + *it
-                               + QStringLiteral("'].Value()"));
-        } else if ((pr->getType() & G_MEASURE) && cmF > 0.0) {
-            QString expr = measureNumExprJs(pr, idMap, cmF);
-            if (expr.isEmpty()) return QString();
-            parentExprs.append(expr);
-        } else if (pr->getType() == G_CALCULATE && cmF > 0.0) {
-            // Recursively build numeric expression for nested G_CALCULATE
-            auto *child = dynamic_cast<G_calculateObject *>(pr->getObject());
-            if (!child) return QString();
-            QString ne = calcNumExprJs(child, pr->getParentsConst(), idMap, cmF);
-            if (ne.isEmpty()) return QString();
-            parentExprs.append(QStringLiteral("(") + ne + QStringLiteral(")"));
-        } else {
-            return QString(); // unsupported parent type
-        }
-    }
-
-    // Apply math-to-JS mappings on the raw formula BEFORE parent substitution
-    // so regex word-boundary matches cannot re-fire on already-correct
-    // "Math.sqrt(...)" strings inside parent IIFEs.
-    QString ugly = G_functionDef::toJavaScript(
-        KFormula::toUgly(formula), QStringLiteral("___unused___"));
-
-    QString js;
-    js.reserve(ugly.size() * 3);
-    for (int i = 0; i < ugly.length(); ++i) {
-        int ch = ugly[i].unicode();
-        if (IS_REFERENCE(ch)) {
-            int refIdx = ch - REFERENCE_ABOVE;
-            if (refIdx < 0 || refIdx >= parentExprs.size()) return QString();
-            js += parentExprs[refIdx];
-        } else {
-            js += ugly[i];
-        }
-    }
-    return js;
-}
-
-// --------------------------------------------------------------------------
-// calcFormulaToJs -- convert a G_CALCULATE formula string to a JS function
-//   body for dynamic export.  Returns "" if conversion fails.
-//
-// Supported parent types (recursively via calcNumExprJs):
-//   G_PARAMETER → board.objects[id].Value()
-//   G_MEASURE   → measureNumExprJs() inline expression
-//   G_CALCULATE → calcNumExprJs() recursive inline expression
-// --------------------------------------------------------------------------
-static QString calcFormulaToJs(G_calculateObject          *calcObj,
-                                const G_refs               &parentRefs,
-                                const QMap<G_ref*, QString> &idMap,
-                                const QString              &labelText,
-                                double                      cmF = 0.0)
-{
-    QString js = calcNumExprJs(calcObj, parentRefs, idMap, cmF);
-    if (js.isEmpty()) return QString();
-
-    // Determine unit suffix via dimensional analysis (computed at export time)
-    QString unitSuffix;
-    UnitType ut = calcObj->getLhs()->evaluateUnit();
-    if      (ut.L == 1 && ut.A == 0) unitSuffix = QStringLiteral(" cm");
-    else if (ut.L == 2 && ut.A == 0) unitSuffix = QStringLiteral(" cm\u00b2");
-    else if (ut.L == 0 && ut.A == 1) unitSuffix = QStringLiteral("\u00b0");
-
-    QString escaped = labelText;
-    escaped.replace('\'', "\\'");
-    if (unitSuffix.isEmpty()) {
-        return QStringLiteral("function(){return '%1 = '+(%2).toFixed(2);}")
-               .arg(escaped, js);
-    }
-    QString escapedUnit = unitSuffix;
-    escapedUnit.replace('\'', "\\'");
-    return QStringLiteral("function(){return '%1 = '+(%2).toFixed(2)+'%3';}")
-           .arg(escaped, js, escapedUnit);
 }
 
 // --------------------------------------------------------------------------
@@ -1286,10 +1108,10 @@ void HeyGeoWebExporter::appendElements(G_ref *ref,
         el[QStringLiteral("id")]   = myId;
 
         int descType = ref->getDescendType();
-        QString funcStr;
+        QJsonObject measure;
 
         if (ref->getType() == G_MEASURE) {
-            // ── Coord measures: existing dynamic logic (uses coordsys O/U IDs) ──
+            // ── Coord measures: relative to the document coordinate system ────
             bool isCoordMeasure = (descType == G_COORDINATES_MEASURE ||
                                    descType == G_ABSCISSA_MEASURE    ||
                                    descType == G_ORDINATE_MEASURE    ||
@@ -1314,8 +1136,9 @@ void HeyGeoWebExporter::appendElements(G_ref *ref,
                 }
 
                 if (csRef) {
-                    // Get O and U IDs from the coordsys's own parents → fully dynamic
-                    // computation of sf and origin in the JSXGraph function string.
+                    // O and U come from the coordsys's own parents, so the
+                    // descriptor names them and the web recomputes the frame on
+                    // every drag.
                     const G_refs &csPar = csRef->getParentsConst();
                     QString oId = (csPar.size() >= 1) ? pid(csPar[0], idMap) : QString();
                     QString uId = (csPar.size() >= 2) ? pid(csPar[1], idMap) : QString();
@@ -1337,73 +1160,39 @@ void HeyGeoWebExporter::appendElements(G_ref *ref,
                     }
 
                     bool hasDynamic = !oId.isEmpty() && !uId.isEmpty() && !p0Id.isEmpty();
-                    if (hasDynamic && descType == G_ABSCISSA_MEASURE) {
-                        funcStr = QString(
-                            "function(){"
-                            "var ox=board.objects['%1'].X(),oy=board.objects['%1'].Y();"
-                            "var ux=board.objects['%2'].X(),uy=board.objects['%2'].Y();"
-                            "var sf=Math.sqrt((ux-ox)*(ux-ox)+(uy-oy)*(uy-oy));"
-                            "var x=(board.objects['%3'].X()-ox)/sf;"
-                            "return 'x<sub>%4</sub> = '+x.toFixed(2);"
-                            "}")
-                            .arg(oId, uId, p0Id, label0);
-                    } else if (hasDynamic && descType == G_ORDINATE_MEASURE) {
-                        funcStr = QString(
-                            "function(){"
-                            "var ox=board.objects['%1'].X(),oy=board.objects['%1'].Y();"
-                            "var ux=board.objects['%2'].X(),uy=board.objects['%2'].Y();"
-                            "var sf=Math.sqrt((ux-ox)*(ux-ox)+(uy-oy)*(uy-oy));"
-                            "var y=(board.objects['%3'].Y()-oy)/sf;"
-                            "return 'y<sub>%4</sub> = '+y.toFixed(2);"
-                            "}")
-                            .arg(oId, uId, p0Id, label0);
-                    } else if (hasDynamic && descType == G_COORDINATES_MEASURE) {
-                        funcStr = QString(
-                            "function(){"
-                            "var ox=board.objects['%1'].X(),oy=board.objects['%1'].Y();"
-                            "var ux=board.objects['%2'].X(),uy=board.objects['%2'].Y();"
-                            "var sf=Math.sqrt((ux-ox)*(ux-ox)+(uy-oy)*(uy-oy));"
-                            "var x=(board.objects['%3'].X()-ox)/sf;"
-                            "var y=(board.objects['%3'].Y()-oy)/sf;"
-                            "return '%4 = ('+x.toFixed(2)+'; '+y.toFixed(2)+')';"
-                            "}")
-                            .arg(oId, uId, p0Id, label0);
-                    } else if (hasDynamic && descType == G_COORD_DISTANCE_MEASURE
-                               && !p1Id.isEmpty()) {
-                        funcStr = QString(
-                            "function(){"
-                            "var ox=board.objects['%1'].X(),oy=board.objects['%1'].Y();"
-                            "var ux=board.objects['%2'].X(),uy=board.objects['%2'].Y();"
-                            "var sf=Math.sqrt((ux-ox)*(ux-ox)+(uy-oy)*(uy-oy));"
-                            "var x1=(board.objects['%3'].X()-ox)/sf;"
-                            "var y1=(board.objects['%3'].Y()-oy)/sf;"
-                            "var x2=(board.objects['%4'].X()-ox)/sf;"
-                            "var y2=(board.objects['%4'].Y()-oy)/sf;"
-                            "var d=Math.sqrt((x1-x2)*(x1-x2)+(y1-y2)*(y1-y2));"
-                            "return '%5%6 = '+d.toFixed(2);"
-                            "}")
-                            .arg(oId, uId, p0Id, p1Id, label0, label1);
+                    const QStringList frame{ oId, uId, p0Id };
+                    if (hasDynamic) {
+                        switch (descType) {
+                        case G_ABSCISSA_MEASURE:
+                            measure = measureSpec(QStringLiteral("relativeAbscissa"), frame,
+                                QStringLiteral("x<sub>%1</sub>").arg(label0));
+                            break;
+                        case G_ORDINATE_MEASURE:
+                            measure = measureSpec(QStringLiteral("relativeOrdinate"), frame,
+                                QStringLiteral("y<sub>%1</sub>").arg(label0));
+                            break;
+                        case G_COORDINATES_MEASURE:
+                            measure = measureSpec(QStringLiteral("relativeCoordinates"),
+                                                  frame, label0);
+                            break;
+                        case G_COORD_DISTANCE_MEASURE:
+                            if (!p1Id.isEmpty())
+                                measure = measureSpec(QStringLiteral("relativeDistance"),
+                                    QStringList{ oId, uId, p0Id, p1Id },
+                                    label0 + label1);
+                            break;
+                        default: break;
+                        }
                     }
                 }
             }
 
-            // ── Non-coord (or coord with no coordsys found): generic dynamic ──
-            if (funcStr.isEmpty())
-                funcStr = measureToJsFunc(ref, idMap, cmF);
-
-        } else { // G_CALCULATE
-
-            auto *calcObj = dynamic_cast<G_calculateObject *>(valObj);
-            if (calcObj) {
-                // Build a human-readable formula label ("AB + CD" etc.)
-                QString labelStr = expandCalcLabel(calcObj, par);
-                if (labelStr.isEmpty()) {
-                    labelStr = ref->getLabel().getText();
-                    if (labelStr.isEmpty()) labelStr = QStringLiteral("calc");
-                }
-                funcStr = calcFormulaToJs(calcObj, par, idMap, labelStr, cmF);
-            }
+            // ── Non-coord (or coord with no coordsys found): its own descriptor ──
+            if (measure.isEmpty())
+                measure = measureSpecFor(ref, idMap, cmF);
         }
+        // A G_CALCULATE gets no descriptor: an arbitrary formula has no
+        // declarative op yet, so it exports as the caption the desktop shows.
 
         // ── Emit element ──────────────────────────────────────────────────────
         // Resolve text color from the ref's drawstyle (respects per-object
@@ -1414,33 +1203,28 @@ void HeyGeoWebExporter::appendElements(G_ref *ref,
             if (ds) textColor = ds->getPen().color().name();
         }
 
-        if (!funcStr.isEmpty()) {
-            el[QStringLiteral("parents")] = QJsonArray{ jx, jy, funcStr };
-            el[QStringLiteral("attrs")]   = QJsonObject{
-                {QStringLiteral("fontSize"),    14},
-                {QStringLiteral("strokeColor"), textColor}
-            };
+        QJsonObject attrs{
+            {QStringLiteral("fontSize"),    14},
+            {QStringLiteral("strokeColor"), textColor}
+        };
+        QString caption;
+        if (!measure.isEmpty()) {
+            attrs[QStringLiteral("measure")] = measure;
+            // The web recomputes the caption from the descriptor; parents 0 and
+            // 1 say where it sits and index 2 is only the label it leads with.
+            caption = measure.value(QStringLiteral("label")).toString();
+        } else if (ref->getType() == G_CALCULATE && valObj) {
+            QString formulaLabel =
+                expandCalcLabel(dynamic_cast<G_calculateObject *>(valObj), par);
+            caption = formulaLabel.isEmpty()
+                      ? valObj->getDisplayText()
+                      : formulaLabel + QStringLiteral(" = ") + valObj->getDisplayText();
         } else {
-            // Static fallback: show "formula = value" for G_CALCULATE (fixes
-            // the bug where only the bare numeric value was displayed).
-            QString dispText;
-            if (ref->getType() == G_CALCULATE && valObj) {
-                auto *calcObj = dynamic_cast<G_calculateObject *>(valObj);
-                QString formulaLabel = expandCalcLabel(calcObj, par);
-                dispText = formulaLabel.isEmpty()
-                           ? valObj->getDisplayText()
-                           : formulaLabel + QStringLiteral(" = ")
-                             + valObj->getDisplayText();
-            } else {
-                dispText = valObj && !valObj->getDisplayText().isEmpty()
-                           ? valObj->getDisplayText() : ref->getLabel().getText();
-            }
-            el[QStringLiteral("parents")] = QJsonArray{ jx, jy, dispText };
-            el[QStringLiteral("attrs")]   = QJsonObject{
-                {QStringLiteral("fontSize"),    14},
-                {QStringLiteral("strokeColor"), textColor}
-            };
+            caption = valObj && !valObj->getDisplayText().isEmpty()
+                      ? valObj->getDisplayText() : ref->getLabel().getText();
         }
+        el[QStringLiteral("parents")] = QJsonArray{ jx, jy, caption };
+        el[QStringLiteral("attrs")]   = attrs;
         elements.append(el);
         break;
     }
@@ -1467,24 +1251,20 @@ void HeyGeoWebExporter::appendElements(G_ref *ref,
             //  - needsRegularUpdate stays true (axis defaults to false → axes freeze)
             //  - no automatic full-height tick marks (axis.ticks.majorHeight=-1 → "grid")
 
-            // V = U rotated 90° CCW around O (gives y-axis direction).
-            // Rotation formula: V_x = O_x - (U_y - O_y),  V_y = O_y + (U_x - O_x)
-            QString vId  = myId + QStringLiteral("_v");
-            QString vxFn = QString(
-                "function(){var ox=board.objects['%1'].X(),oy=board.objects['%1'].Y();"
-                "var uy=board.objects['%2'].Y();return ox-(uy-oy);}")
-                .arg(oId, uId);
-            QString vyFn = QString(
-                "function(){var ox=board.objects['%1'].X(),oy=board.objects['%1'].Y();"
-                "var ux=board.objects['%2'].X();return oy+(ux-ox);}")
-                .arg(oId, uId);
+            // V = U rotated 90° CCW around O (gives y-axis direction). The web
+            // reads that as an image descriptor, not as code to run.
+            QString vId = myId + QStringLiteral("_v");
             QJsonObject vEl;
             vEl[QStringLiteral("type")]    = QStringLiteral("point");
             vEl[QStringLiteral("id")]      = vId;
-            vEl[QStringLiteral("parents")] = QJsonArray{ vxFn, vyFn };
+            vEl[QStringLiteral("parents")] = QJsonArray{ uId };
             vEl[QStringLiteral("attrs")]   = QJsonObject{
                 {QStringLiteral("visible"),   false},
-                {QStringLiteral("withLabel"), false}};
+                {QStringLiteral("withLabel"), false},
+                {QStringLiteral("image"),     QJsonObject{
+                    {QStringLiteral("op"),  QStringLiteral("rotate")},
+                    {QStringLiteral("of"),  QJsonArray{ oId }},
+                    {QStringLiteral("angle"), 90} }} };
             elements.append(vEl);
 
             // x-axis: line through O and U, with right arrow.
