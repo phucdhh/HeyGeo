@@ -1,0 +1,463 @@
+{
+  "metadata": {
+    "width": 780,
+    "height": 540,
+    "wsp-version": "4.8.0",
+    "wsp-build-number": "1075",
+    "wsp-build-stamp": "a52eed0e7762/20210510175710",
+    "exporter-version": "6.00A3007(dev)",
+    "exporter-build": "3007(dev)",
+    "original-document-name": "ndmp_Vector_tool.gsp",
+    "start-page": "1",
+    "authorPreferences": {
+      "stylewidget": "none",
+      "tracewidget": "none",
+      "labelwidget": "none",
+      "visibilitywidget": "none",
+      "deletewidget": "none",
+      "resetbutton": "none",
+      "uploadutil": false,
+      "downloadutil": false,
+      "disablescrolling": false,
+      "removeinaccessibleobjects": false
+    }
+  },
+  "resources": {
+    "pictures": [
+      {
+        "height": 54,
+        "width": 70,
+        "src": "data:image/png;base64,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"
+      }
+    ],
+    "fontList": [
+      "\"Geneva\", sans-serif",
+      "\"Times New Roman\", sans-serif"
+    ]
+  },
+  "pages": [
+    {
+      "metadata": {
+        "title": "1",
+        "id": "1",
+        "sketchRect": {
+          "top": 0,
+          "left": 0,
+          "bottom": 540,
+          "right": 780
+        }
+      },
+      "preferences": {
+        "units": {
+          "length": "cm",
+          "angle": "deg"
+        },
+        "precision": {
+          "length": 2,
+          "angle": 2,
+          "scalar": 2
+        },
+        "colorableComponents": {
+          "Points": {
+            "color": "rgb(254,0,0)"
+          },
+          "Straights": {
+            "color": "black"
+          },
+          "Curves": {
+            "color": "rgb(0,127,0)"
+          },
+          "Interior": {
+            "color": "yellow"
+          },
+          "Plot": {
+            "color": "rgb(127,0,127)"
+          },
+          "PointLocus": {
+            "color": "rgb(46,59,204)"
+          },
+          "Selection": {
+            "color": "rgb(194,0,194)"
+          },
+          "CoordSys": {
+            "color": "rgb(160,160,160)"
+          },
+          "ActionButton": {
+            "color": "white"
+          }
+        },
+        "text": {
+          "mathItalicization": false,
+          "textTypes": {
+            "Label": {
+              "font-family": "\"Geneva\", sans-serif",
+              "color": "blue"
+            },
+            "Caption": {
+              "font-family": "\"Times New Roman\", sans-serif",
+              "font-size": 14,
+              "font-weight": "bold",
+              "color": "blue"
+            },
+            "Measurement": {
+              "font-family": "\"Times New Roman\", sans-serif",
+              "font-size": 24,
+              "font-weight": "bold",
+              "color": "blue"
+            },
+            "Action": {
+              "label": {
+                "font-family": "\"Arial\", sans-serif",
+                "font-size": 24
+              }
+            },
+            "Table": {
+              "font-family": "\"Arial\", sans-serif",
+              "font-size": 24
+            },
+            "AxisTicksAndOptionalLabel": {
+              "font-family": "\"Times New Roman\", sans-serif",
+              "font-size": 36,
+              "font-style": "italic",
+              "color": "blue"
+            }
+          }
+        }
+      },
+      "objects": {
+        "1": {
+          "kind": "Point",
+          "genus": "Point",
+          "constraint": "Free",
+          "geom": {
+            "loc": {
+              "x": 118,
+              "y": 194
+            }
+          }
+        },
+        "2": {
+          "kind": "Point",
+          "genus": "Point",
+          "constraint": "Free",
+          "geom": {
+            "loc": {
+              "x": 159,
+              "y": 163
+            }
+          }
+        },
+        "3": {
+          "kind": "Straight",
+          "genus": "Segment",
+          "parents": {
+            "p0": "1",
+            "p1": "2"
+          },
+          "constraint": "Segment"
+        },
+        "4": {
+          "kind": "Point",
+          "genus": "Point",
+          "parents": {
+            "source": "2"
+          },
+          "angle": -1.3962634015954667,
+          "distance": 7.086614173228346,
+          "constraint": "TranslateFixDistFixAngle",
+          "shouldAutogenerateLabel": true,
+          "style": {
+            "hidden": true,
+            "color": "red",
+            "radius": 2
+          }
+        },
+        "5": {
+          "kind": "Circle",
+          "genus": "Circle",
+          "parents": {
+            "p0": "2",
+            "p1": "4"
+          },
+          "constraint": "CircleFromTwoPoints",
+          "style": {
+            "hidden": true,
+            "color": "green"
+          }
+        },
+        "6": {
+          "kind": "Straight",
+          "genus": "Segment",
+          "parents": {
+            "source": "3",
+            "center": "2"
+          },
+          "angle": -0.5235987755983,
+          "constraint": "Rotate",
+          "shouldAutogenerateLabel": true,
+          "style": {
+            "hidden": true
+          }
+        },
+        "7": {
+          "kind": "Straight",
+          "genus": "Segment",
+          "parents": {
+            "source": "3",
+            "center": "2"
+          },
+          "angle": 0.5235987755983,
+          "constraint": "Rotate",
+          "shouldAutogenerateLabel": true,
+          "style": {
+            "hidden": true
+          }
+        },
+        "8": {
+          "kind": "Point",
+          "genus": "Intersection",
+          "parents": {
+            "obj": "7",
+            "circle": "5"
+          },
+          "constraint": "Intersection1",
+          "style": {
+            "hidden": true,
+            "color": "red",
+            "radius": 2
+          }
+        },
+        "9": {
+          "kind": "Point",
+          "genus": "Intersection",
+          "parents": {
+            "obj": "6",
+            "circle": "5"
+          },
+          "constraint": "Intersection1",
+          "style": {
+            "hidden": true,
+            "color": "red",
+            "radius": 2
+          }
+        },
+        "10": {
+          "kind": "Straight",
+          "genus": "Segment",
+          "parents": {
+            "p0": "8",
+            "p1": "2"
+          },
+          "constraint": "Segment"
+        },
+        "11": {
+          "kind": "Straight",
+          "genus": "Segment",
+          "parents": {
+            "p0": "2",
+            "p1": "9"
+          },
+          "constraint": "Segment"
+        },
+        "12": {
+          "kind": "Text",
+          "genus": "Caption",
+          "constraint": "Free",
+          "geom": {
+            "loc": {
+              "x": 130,
+              "y": 184
+            }
+          },
+          "textMFS": "<T'Vect\u01a1'>"
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "metadata": {
+        "image": 0,
+        "name": "Vector"
+      },
+      "objects": {
+        "1": {
+          "kind": "Point",
+          "genus": "Point",
+          "constraint": "Free",
+          "geom": {
+            "loc": {
+              "x": 124,
+              "y": 82
+            }
+          },
+          "toolRole": "given",
+          "givenSortOrder": 1,
+          "style": {
+            "color": "rgb(254,0,0)"
+          }
+        },
+        "2": {
+          "kind": "Point",
+          "genus": "Point",
+          "constraint": "Free",
+          "geom": {
+            "loc": {
+              "x": 277,
+              "y": 71
+            }
+          },
+          "toolRole": "given",
+          "givenSortOrder": 2,
+          "style": {
+            "color": "rgb(254,0,0)"
+          }
+        },
+        "3": {
+          "kind": "Straight",
+          "genus": "Segment",
+          "parents": {
+            "p0": "1",
+            "p1": "2"
+          },
+          "constraint": "Segment",
+          "style": {
+            "color": "black"
+          }
+        },
+        "4": {
+          "kind": "Point",
+          "genus": "Point",
+          "parents": {
+            "source": "2"
+          },
+          "angle": -1.3962634015954667,
+          "distance": 7.086614173228346,
+          "constraint": "TranslateFixDistFixAngle",
+          "shouldAutogenerateLabel": true,
+          "style": {
+            "hidden": true,
+            "color": "red",
+            "radius": 2
+          }
+        },
+        "5": {
+          "kind": "Circle",
+          "genus": "Circle",
+          "parents": {
+            "p0": "2",
+            "p1": "4"
+          },
+          "constraint": "CircleFromTwoPoints",
+          "style": {
+            "hidden": true,
+            "color": "green"
+          }
+        },
+        "6": {
+          "kind": "Straight",
+          "genus": "Segment",
+          "parents": {
+            "source": "3",
+            "center": "2"
+          },
+          "angle": -0.5235987755983,
+          "constraint": "Rotate",
+          "shouldAutogenerateLabel": true,
+          "style": {
+            "hidden": true,
+            "color": "black"
+          }
+        },
+        "7": {
+          "kind": "Straight",
+          "genus": "Segment",
+          "parents": {
+            "source": "3",
+            "center": "2"
+          },
+          "angle": 0.5235987755983,
+          "constraint": "Rotate",
+          "shouldAutogenerateLabel": true,
+          "style": {
+            "hidden": true,
+            "color": "black"
+          }
+        },
+        "8": {
+          "kind": "Point",
+          "genus": "Intersection",
+          "parents": {
+            "obj": "7",
+            "circle": "5"
+          },
+          "constraint": "Intersection1",
+          "style": {
+            "hidden": true,
+            "color": "red",
+            "radius": 2
+          }
+        },
+        "9": {
+          "kind": "Point",
+          "genus": "Intersection",
+          "parents": {
+            "obj": "6",
+            "circle": "5"
+          },
+          "constraint": "Intersection1",
+          "style": {
+            "hidden": true,
+            "color": "red",
+            "radius": 2
+          }
+        },
+        "10": {
+          "kind": "Straight",
+          "genus": "Segment",
+          "parents": {
+            "p0": "8",
+            "p1": "2"
+          },
+          "constraint": "Segment",
+          "style": {
+            "color": "black"
+          }
+        },
+        "11": {
+          "kind": "Straight",
+          "genus": "Segment",
+          "parents": {
+            "p0": "2",
+            "p1": "9"
+          },
+          "constraint": "Segment",
+          "style": {
+            "color": "black"
+          }
+        },
+        "12": {
+          "kind": "Picture",
+          "genus": "ImportedPicture",
+          "constraint": "PictureFree",
+          "geom": {
+            "transform": {
+              "m00": 0.8714285714285713,
+              "m10": 0,
+              "m20": 7.9,
+              "m01": 0,
+              "m11": 0.8278659611992945,
+              "m21": 18.295238095238084
+            }
+          },
+          "image": 0,
+          "style": {
+            "color": "red",
+            "opacity": 1,
+            "layerOrder": 0
+          }
+        }
+      }
+    }
+  ]
+}

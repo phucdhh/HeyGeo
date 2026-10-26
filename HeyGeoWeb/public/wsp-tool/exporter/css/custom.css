@@ -1,0 +1,227 @@
+/**
+ * Page-wide rules
+ */
+body {
+  background-color: #CADBF3;
+}
+body.beta {
+  background-color: #ACE49F;
+}
+
+#wrapper {
+  padding-left: 15px;
+  padding-right: 15px;
+  position: relative;
+}
+#wrapper a {
+  color: #000000;
+  text-decoration: underline;
+}
+#wrapper header {
+  text-align: center;
+}
+
+#wrapper .inline-img {
+  max-height: 2em;
+}
+
+/**
+ * Navigation Bar
+ */
+/* Make the navbar shorter */
+.navbar {
+  min-height: 40px;
+}
+
+.navbar-brand {
+  padding-bottom: 10px;
+  padding-top: 10px;
+  margin-right:15px;
+}
+
+.navbar-nav > li >a {
+  padding-bottom: 10px;
+  padding-top: 10px;
+}
+.betaenv-label {
+  display:none;
+}
+
+body.beta .betaenv-label {
+  display:block;
+  background-image:url('/images/green-exclamation.png');
+  background-repeat:no-repeat;
+  height:48px;
+  font-size:16px;
+  float:left;
+  padding:12px 0 0 50px;
+  font-weight:bold;
+}
+/**
+ * Front page
+ */
+.top-logo {
+  position: relative;
+  overflow: hidden;
+}
+body .top-logo {
+  background-color: #CADBF3;
+}
+body.beta .top-logo {
+  background-color: #ACE49F;
+}
+.top-logo > div {
+  position: relative;
+  left: 50%;
+  margin-left: -570px;
+  width: 1154px;
+}
+
+#exporter-with-sketch {
+  width: 100%;
+  max-width: 500px;
+}
+.sketch-thumb > img {
+  height:180px;
+  max-width: 250px;
+  padding: 5px;
+  border: 1px solid #EEEEEE;
+}
+.home-link > img {
+  width: 22px;
+}
+.support-yes {
+  color: green;
+}
+.support-yes span{
+  color: black;
+}
+.support-yes:before {
+  content:"(YES) ";
+}
+.support-partial {
+  color: yellow;
+}
+.support-partial span{
+  color: black;
+}.support-partial:before {
+  content:"(PARTIAL) ";
+}
+.support-no {
+  color: red;
+}
+.support-no span{
+  color: black;
+}
+.support-no:before {
+  content:"(NO) ";
+}
+
+.aside {
+    font-style: italic;
+}
+
+/* Sketch demo example view page */
+.sketch-urlparam {
+  background-color: white; 
+  display: inline-block; 
+}
+
+a.sketch-thumb {
+  margin-left:auto;
+  margin-right:auto;
+  display:block;
+  width:244px;
+}
+
+a.sketch-thumb > img {
+  display:inline;
+  margin:0;
+}
+
+/* Release Notes page */
+.releasenote {
+  background-color: #F8F8F8;
+  padding: 12px;
+  border-radius: 14px;
+  margin-top: 24px;
+}
+
+.term {
+    font-style: italic;
+}
+
+.setting.widget {
+  clear: both;
+}
+
+.pagePref {
+  width: 100px;
+  line-height: 12px;
+}
+
+.pagePref:disabled {
+  color: #aaa;
+}
+
+.pagePrefDiv {
+  float:right;
+}
+
+label {
+  font-weight: normal;
+}
+
+.widgetLabel {
+  text-align: right;
+  width:110px;
+  padding-top: 2px;
+}
+
+/* ======================================================= */
+/* Rules for resolution specific displays */
+/* ======================================================= */
+
+/* Extra small devices (phones, less than 768px) */
+/* No media query since this is the default in Bootstrap */
+.row-header {
+  padding-left:30px;
+}
+
+/* Small devices (tablets, 768px and up) */
+@media (min-width: 768px) {
+  footer {
+    font-size:12px;
+    font-size: 12px;
+    padding-top: 20px;
+  }
+  
+  #wrapper {
+    margin-right:10px;
+  }
+}
+
+/* Medium devices (desktops, 992px and up) */
+@media (min-width: 992px) {
+  .row:nth-child(2) {
+    border-bottom:2px solid black;
+    padding-bottom:20px;
+    margin-bottom:20px;
+  }
+  #wrapper {
+    margin-right:15px;
+  }
+}
+
+/* Large devices (large desktops, 1200px and up) */
+@media (min-width: 1200px) {
+  #wrapper {
+    margin-right:15px;
+  }
+}
+
+/* Bootstrap 3.1.x */
+.modal-lg {
+  width: 900px;
+}
+

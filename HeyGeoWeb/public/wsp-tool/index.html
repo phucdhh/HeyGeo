@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<!-- This file sets the shortcut icons and loads standard styles and scripts
+original: https://geometricfunctions.org/includes/v4.6/
+https://geometricfunctions.org/fc/tools
+-->
+<link rel="shortcut icon" href="./widgets/fc-icon16.png">
+<link rel="shortcut icon" href="./widgets/fc-icon32.png">
+<link rel="shortcut icon" href="./widgets/fc-icon64.png">
+
+<script charset="utf-8" type="text/javascript" src="./js/jquery-2.1.0.js"></script>
+<script charset="utf-8" type="text/javascript" src="./js/wsp.js"></script>
+<script charset="utf-8" type="text/javascript" src="./js/wsp-runner.js"></script>
+<script charset="utf-8" type="text/javascript" src="./widgets/jquery.tiny-draggable.js"></script>
+<link rel="stylesheet" type="text/css" href="./widgets/widgets.css" />
+<script charset="utf-8" type="text/javascript" src="./widgets/widgets.js"></script>
+<link rel="stylesheet" type="text/css" href="./tools.css" />
+
+<script charset="utf-8" type="text/javascript" src="./tools.js"></script>
+
+
+<title>Web Sketchpad - phiên bản web của The Geometer's Sketchpad </title>
+
+
+	</head>
+  <body style="background-color: #eee;">
+		<br>
+
+		<div class="uTitle">WEB SKETCHPAD &nbsp;
+      <span class="uTitleButton"><button type="button" onclick="var el=$('#about'); if (el.css('display')==='none') el.css('display','block'); else el.css('display','none');">Hướng dẫn </button></span>
+      <span id="heygeoSaveArea" style="display:none; margin-left:8px;">
+        <button id="heygeoSaveBtn" type="button" style="background:#2563eb;color:#fff;border:none;padding:3px 10px;border-radius:6px;cursor:pointer;font-size:1rem;" onclick="heygeoSave()">💾 Lưu vào HeyGeo</button>
+        <button type="button" style="background:#6b7280;color:#fff;border:none;padding:3px 10px;border-radius:6px;cursor:pointer;font-size:1rem;margin-left:6px;" onclick="window.location.href='/dashboard'">⬅ Dashboard</button>
+      </span>
+    </div>
+
+    <script>
+      /* Show Save button only when a model id is present in the URL */
+      (function() {
+        var p = new URLSearchParams(window.location.search);
+        if (p.get('id')) document.getElementById('heygeoSaveArea').style.display = 'inline';
+      })();
+
+      function heygeoSave() {
+        var p = new URLSearchParams(window.location.search);
+        var modelId = p.get('id');
+        if (!modelId) return;
+        var sketchDoc = $('#libSketch').data('document');
+        if (!sketchDoc) { alert('Chưa tải mô hình.'); return; }
+        var specObj = sketchDoc.getCurrentSpecObject();
+        // Capture thumbnail by compositing all WSP canvas layers
+        var thumbnail = null;
+        try {
+          var canvases = document.querySelectorAll('#libSketch canvas');
+          if (!canvases.length) canvases = document.querySelectorAll('canvas');
+          if (canvases.length) {
+            var first = canvases[0];
+            var W = first.width, H = first.height;
+            if (W > 0 && H > 0) {
+              var offscreen = document.createElement('canvas');
+              offscreen.width = W; offscreen.height = H;
+              var ctx = offscreen.getContext('2d');
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, W, H);
+              for (var ci = 0; ci < canvases.length; ci++) {
+                try { ctx.drawImage(canvases[ci], 0, 0); } catch(ex) {}
+              }
+              thumbnail = offscreen.toDataURL('image/png');
+            }
+          }
+        } catch(e) { /* canvas capture failed */ }
+        var btn = document.getElementById('heygeoSaveBtn');
+        btn.disabled = true;
+        btn.textContent = 'Đang lưu…';
+        var payload = thumbnail ? { data: specObj, thumbnail: thumbnail } : { data: specObj };
+        fetch('/api/wsp-sketch?id=' + encodeURIComponent(modelId), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        .then(function(res) {
+          if (res.ok) {
+            btn.textContent = '✓ Đã lưu';
+            setTimeout(function() { btn.textContent = '💾 Lưu vào HeyGeo'; btn.disabled = false; }, 2000);
+          } else {
+            btn.textContent = 'Lỗi!';
+            btn.disabled = false;
+          }
+        })
+        .catch(function() { btn.textContent = 'Lỗi kết nối!'; btn.disabled = false; });
+      }
+    </script>
+		
+		<div id="about" class="uAbout">
+			<div class="uAboutClose"><button type="button" onclick="$('#about').css('display','none');">Đóng</button></div>
+			<div class="lib-about-div">
+				<h3 class="firstPara">Sử dụng thư viện công cụ</h3>
+				<p> Ở trang web này, bạn có thể tạo hoặc chỉnh sửa các mô hình bằng cách thêm bớt các công cụ, thêm bớt trang, và thay đổi kích thước cửa sổ mô hình. Thiết kế xong, bạn có thể lưu file dưới tên "***-json.js", và có thể tích hợp vào trong các trang web hoặc khóa học phù hợp.
+                </p>
+				<p> Bạn thêm công cụ vào mô hình bằng cách nhấn vào biểu tượng công cụ trong danh sách ở phía dưới mô hình. Bạn kéo rê thanh cuộn để thấy được nhiều công cụ hơn, hoặc nhấn các nút để xem các tập hợp công cụ khác. Bạn sắp xếp lại hoặc xóa công cụ bằng cách kéo thả danh sách công cụ ở bên trái cửa sổ mô hình.</p>
+				<p>(Chú ý: nút undo/redo của mô hình sẽ mất tác dụng khi bạn thêm, sắp xếp, hoặc xóa công cụ).</p>
+				<p> Bạn có thể xóa trang hiện thời bằng cách nhấn nút "Xóa trang", hoặc thêm, nhân đôi trang.</p>
+				<h3>Tải mô hình</h3>
+				<p>Sau khi hoàn thành, bạn lưu mô hình bằng cách chọn Download từ menu (nằm phía dưới trái của cửa sổ mô hình, biểu tượng có 3 gạch ngang).</p>
+				<p>Để chỉnh sửa một mô hình đã có, bạn chọn Upload từ menu, rồi dẫn đến nơi chứa mô hình.</p>
+			</div>
+		</div>
+
+		<div class="uLeftPane" style="background-color: #fff;">
+			<div id="sizePane" class="uLeftSub">
+				<div>
+					<label for="height">Cao:</label>
+					<input type="number" id="height" class="uSizeButton" name="height" min="50" max="2000" onchange="TOOLS.resetSketchWindowSize('libSketch');"/>
+					<span class="validity"></span>
+				</div>
+				<div class="uClear">
+					<label for="width">Rộng:</label>
+					<input type="number" id="width" class="uSizeButton" name="width" min="50" max="2000" onchange="TOOLS.resetSketchWindowSize('libSketch');"/>
+					<span class="validity"></span>
+				</div>
+			</div>
+			<div id="uPagePane" class="uLeftSub">
+				<input type="button" id="newPage" value="Trang mới" onclick="TOOLS.insertPage('libSketch', 'new');"/><br>
+				<input type="button" id="newPage" value="Nhân trang" onclick="TOOLS.insertPage('libSketch', 'clone');"/><br>
+				<input type="button" id="deletePage" value="Xóa trang" onclick="TOOLS.deletePage('libSketch');"/>
+			</div>
+      <div class="uLeftSub">
+			<ul id="uToolList">
+			</ul>
+      </div>
+      <div class="debug uLeftSub">
+<!--        <input type="button" class="debug" value="Check Graph" onclick="if (TOOLS.checkSketchGraph('libSketch', 'verbose')) {$(this).removeAttr ('border'); $(this).removeAttr ('border-width'); $(this).removeAttr ('border-color');} else $(this).css ('border', 'solid 4px red');"/>
+-->
+        <input type="button" class="debug" value="Check Graph" onclick="if (TOOLS.checkSketchGraph('libSketch', 'verbose,topology')) {this.style.removeProperty ('border');} else $(this).css ('border', 'solid 4px red');"/>
+
+        <input type="button" class="debug" style = "font-size: 11.5px" value="Remove Hidden Labels" onclick="TOOLS.removeHiddenLabels('libSketch');"/>
+
+        <div class="uDropDown">
+          <div id="uPrefToggle">Sketch Prefs 🔽</div>
+          <div id="uPrefDiv" style="display: none" onclick="$('#uPrefDiv').hide();">
+            <ul id="uPrefList">
+            </ul>
+          </div>
+        </div>
+      </div>
+		</div>
+		
+		<div style="display: inline-block">
+      <div class="sketch_container" style="background-color: #fff;">
+        <div class="sketch_canvas" id="libSketch" data-url="empty.json" > </div>
+        <script>
+          /* Load model from HeyGeo dashboard: /wsp-tool/index.html?id=MODEL_ID */
+          (function() {
+            var p = new URLSearchParams(window.location.search);
+            var modelId = p.get('id');
+            if (modelId) {
+              document.getElementById('libSketch').setAttribute('data-url',
+                '/api/wsp-sketch?id=' + encodeURIComponent(modelId));
+            }
+          })();
+        </script>
+        <div class="button_area">
+          <div class="util-menu-btn"></div>
+          <div class="wsp_logo"></div>
+          <p id="libFileName" style="padding-top:3px;">&nbsp;</p>
+          <div class="page_buttons">
+            <span class="page_btn page_prevBtn">&nbsp;</span><div style="display:inline-block; position:relative;"><span class="page_num"></span></div><span class="page_btn page_nextBtn">&nbsp;</span></span>
+          </div>
+          <button class="widget_button">Widgets</button>
+        </div>
+      </div>
+      <div class="uClear"></div>
+      <div id="utilPrompt" style="font-family: sans-serif; font-size: 1.0rem; padding-left: 0.4rem; margin-top: -10px;">
+        Sử dụng lệnh <img src="./widgets/utility-icon.png" style="width:20px; height:20px; border: 1px solid black; position: relative; top: 5px;"> để tải mô hình, hoặc thay đổi đơn vị.</p>
+      </div>
+    </div>
+    
+    <div id="resize" style="position:absolute; z-index: 1; left:900px; top:500px; height: 15px; width: 15px; cursor: move; padding:0;">
+      <img src="./widgets/resize.png" width="14px;">
+    </div>
+    
+    
+	<div class="uClear"></div>
+	<br><br>
+	<div id="toolCollection" style="background-color: #fff;">
+		<div class="uLibDirections">Nhấn vào một công cụ để thêm vào mô hình.</div>
+		<div class="uLibButtons">
+			<button type="button" onclick="TOOLS.loadLibraryTools('basic/*.json');">Cơ bản </button> &nbsp; &nbsp;
+			<button type="button" onclick="TOOLS.loadLibraryTools('hyperbolic/*.json');">Hình học Hyperbolic</button>&nbsp;
+		</div>
+		<div id="toolTable">
+		</div>
+	</div><br>
+	
+	<div class="uClear"></div>
+<!-- This file provides the version info that goes under the sketch.
+-->
+<div class="legal" style="font-size:0.8rem">
+    <div class="version">Release: 2020Q2, Semantic Version: 4.6.2, Build Number: 1047, Build Stamp: stek-macbook-pro/20190813174206
+    </div>
+    <div class="copyright">Web Sketchpad Copyright &copy; 2019 KCP Technologies, a McGraw-Hill Education Company. <br>
+    &ldquo;You may freely use Web Sketchpad in your own Web pages, provided you do so for non-commercial use only&rdquo; [per <a href="http://kcpt.github.io">kcpt.github.io</a>].
+    </div>
+    <div class="version">License: <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons CC-BY-NC-SA 4.0</a>
+    </div>
+</div> <!--legal-->
+
+  </body>
+</html>

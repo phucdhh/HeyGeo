@@ -1,0 +1,150 @@
+{
+  "metadata": {
+    "exporter-build": "3007(dev)",
+    "exporter-version": "6.00A3007(dev)",
+    "height": 540,
+    "original-document-name": "Caption Tool.gsp",
+    "start-page": "1",
+    "width": 780,
+    "wsp-build-number": "1026.12-wsp-widgets",
+    "wsp-build-stamp": "ip-10-149-70-76/20190402135319",
+    "wsp-version": "4.5.1-alpha"
+  },
+  "pages": [
+    {
+      "metadata": {
+        "id": "1",
+        "sketchRect": {
+          "bottom": 540,
+          "left": 0,
+          "right": 780,
+          "top": 0
+        },
+        "title": "sketch"
+      },
+      "preferences": {
+        "colorableComponents": {
+          "ActionButton": {
+            "color": "black"
+          },
+          "CoordSys": {
+            "color": "rgb(160,160,160)"
+          },
+          "PointLocus": {
+            "color": "blue"
+          },
+          "Straights": {
+            "color": "blue"
+          }
+        },
+        "precision": {
+          "angle": 0,
+          "length": 2,
+          "scalar": 2
+        },
+        "text": {
+          "mathItalicization": true,
+          "textTypes": {
+            "Action": {
+              "label": {
+                "font-family": "\"Arial\", sans-serif"
+              }
+            },
+            "AxisTicksAndOptionalLabel": {
+              "color": "rgb(160,160,160)",
+              "font-family": "\"Arial\", sans-serif",
+              "font-size": 16,
+              "font-weight": "bold"
+            },
+            "Caption": {
+              "font-family": "\"Times New Roman\", serif",
+              "font-size": 18
+            },
+            "Label": {
+              "font-family": "\"Times New Roman\", serif",
+              "font-size": 18,
+              "font-weight": "normal"
+            },
+            "Measurement": {
+              "font-family": "\"Times New Roman\", serif",
+              "font-size": 24
+            },
+            "Table": {
+              "font-family": "\"Arial\", sans-serif",
+              "font-size": 12
+            }
+          }
+        },
+        "units": {
+          "angle": "rad",
+          "length": "px"
+        }
+      }
+    }
+  ],
+  "resources": {
+    "fontList": [
+      "\"Times New Roman\", serif"
+    ],
+    "pictures": [
+      {
+        "height": 63,
+        "src": "data:image/png;base64,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",
+        "width": 84
+      }
+    ]
+  },
+  "tools": [
+    {
+      "metadata": {
+        "image": 0,
+        "name": "Caption"
+      },
+      "objects": {
+        "1": {
+          "constraint": "Free",
+          "genus": "Caption",
+          "geom": {
+            "loc": {
+              "x": 267,
+              "y": 76
+            }
+          },
+          "kind": "Text",
+          "style": {
+            "color": "black",
+            "font-family": 0,
+            "font-size": 18,
+            "font-style": "normal",
+            "font-weight": "normal",
+            "letter-spacing": "none",
+            "text-decoration": "none"
+          },
+          "textMFS": "<VL<T'Use the Label Widget to edit me.'>>",
+          "toolRole": "given"
+          },
+        "2": {
+          "constraint": "PictureFree",
+          "genus": "ImportedPicture",
+          "geom": {
+            "transform": {
+              "m00": 1,
+              "m01": 0,
+              "m10": 0,
+              "m11": 1,
+              "m20": 26,
+              "m21": 53
+            }
+          },
+          "image": 0,
+          "kind": "Picture",
+          "style": {
+            "color": "red",
+            "layerOrder": 1,
+            "opacity": 1
+          }
+        }
+      }
+    }
+  ]
+}

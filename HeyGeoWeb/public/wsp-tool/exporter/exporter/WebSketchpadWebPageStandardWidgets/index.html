@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Web Sketchpad</title>
+		
+		<script charset="utf-8" type="text/javascript" src="./js/jquery-2.1.0.min.js"></script>
+		<script charset="utf-8" type="text/javascript" src="./js/wsp-min.js"></script>
+		<script charset="utf-8" type="text/javascript" src="./widgets/jquery.tiny-draggable.js"></script>
+		<link rel="stylesheet" type="text/css" href="./widgets/widgets.css" />
+		<script charset="utf-8" type="text/javascript" src="./widgets/widgets.js"></script>
+		<script charset="utf-8" type="text/javascript" src="./js/sketch-json.js"></script>
+		<script charset="utf-8" type="text/javascript" src="./js/wsp-runner.js"></script>
+		
+    <style type="text/css">
+      .sketch_canvas {
+          border: medium solid lightgray;
+          display: inline-block;
+      }
+    </style>
+
+	</head>
+  <body role="main">
+
+		<div class="sketch_container">
+			<div class="sketch_canvas" id="sketchDiv" data-var="sketch" > </div>
+      <div style="clear:both;"></div>
+      <div class="button_area">
+        <div class="util-menu-btn"></div>
+        <p><!--Any (short!) desired left-justified text goes here--></p>
+        <span class="page_buttons"></span>
+        <button class="widget_button">Widgets</button>
+      </div>
+		</div>
+
+    <div style="font-size:80%;"> <br>
+        <div class="legal">
+        <div class="copyright">Copyright &copy; 2019 KCP Technologies, a McGraw-Hill Education Company. All rights reserved.</div>
+        <div class="version">Release: 2020Q3, semantic Version: 4.8.0, Build Number: 1075, Build Stamp: a52eed0e7762/20210510175707</div>
+        </div>
+    </div>
+
+  </body>
+</html>

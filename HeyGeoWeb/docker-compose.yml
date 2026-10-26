@@ -1,0 +1,51 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: heygeo
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: heygeo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U heygeo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://heygeo:${DB_PASSWORD}@db:5432/heygeo
+      JWT_SECRET: ${JWT_SECRET}
+      NEXT_PUBLIC_BASE_URL: https://heygeo.pedu.vn
+      NODE_ENV: production
+      RELEASE_DIR: /app/release
+    volumes:
+      - ./release:/app/release:ro   # Chứa file .zip cho trang /release
+    ports:
+      - "3000:3000"
+    labels:
+      - "traefik.enable=false"   # Remove if using Traefik
+
+  # Database migration (runs once on deploy)
+  migrate:
+    build: .
+    command: npx prisma db push --force-reset
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://heygeo:${DB_PASSWORD}@db:5432/heygeo
+    profiles:
+      - migrate   # Run with: docker compose --profile migrate up migrate
+
+volumes:
+  postgres_data:

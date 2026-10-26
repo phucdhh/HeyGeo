@@ -1,0 +1,53 @@
+{
+  "name": "heygeo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "prebuild": "node scripts/sync-jsxgraph-vendor.js && prisma generate",
+    "vendor:jsxgraph": "node scripts/sync-jsxgraph-vendor.js",
+    "vendor:check": "test \"$(cat public/vendor/jsxgraph/VERSION)\" = \"$(node -p \"require('./node_modules/jsxgraph/package.json').version\")\" || (echo 'public/vendor/jsxgraph lệch phiên bản với node_modules — chạy npm run vendor:jsxgraph'; exit 1)",
+    "build": "next build",
+    "postbuild": "cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "start": "next start",
+    "lint": "next lint",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "db:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.1",
+    "@codemirror/commands": "^6.10.3",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/language": "^6.12.2",
+    "@codemirror/lint": "^6.9.5",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "@codemirror/view": "^6.40.0",
+    "@prisma/client": "^5.10.0",
+    "@types/katex": "^0.16.8",
+    "bcryptjs": "^2.4.3",
+    "codemirror": "^6.0.2",
+    "i18next": "^25.10.10",
+    "i18next-browser-languagedetector": "^8.2.1",
+    "jose": "^5.2.0",
+    "jsxgraph": "1.12.2",
+    "katex": "^0.16.38",
+    "next": "^15.3.0",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-i18next": "^16.6.6"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.0.1",
+    "postcss": "^8",
+    "prisma": "^5.10.0",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,28 @@
+# Cloudflare Tunnel – HeyGeo
+#
+# Tên tunnel: heygeo
+# Tạo tunnel bằng lệnh (chạy một lần duy nhất):
+#   cloudflared tunnel login
+#   cloudflared tunnel create heygeo
+#   cloudflared tunnel route dns heygeo heygeo.pedu.vn
+#
+# Sau khi chạy `cloudflared tunnel create heygeo`, lệnh sau sẽ tự điền TUNNEL_ID:
+#   TUNNEL_ID=$(cloudflared tunnel list --name heygeo --output json | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
+#   sed -i '' "s/TUNNEL_ID/$TUNNEL_ID/" cloudflared/config.yml
+#
+# File credentials (~/.cloudflared/<TUNNEL_ID>.json) được cloudflared tự tạo.
+# ─────────────────────────────────────────────────────────────
+
+tunnel: heygeo
+credentials-file: /Users/m2pro/.cloudflared/101c56c9-4ba4-47d7-bda4-8ceb1ed81c7d.json
+
+ingress:
+  # Route heygeo.pedu.vn → Next.js app trên localhost:3535
+  - hostname: heygeo.pedu.vn
+    service: http://localhost:3535
+    originRequest:
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # Mọi request không khớp hostname → 404
+  - service: http_status:404

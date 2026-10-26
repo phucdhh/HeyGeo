@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>WebSketchpad Sample Page</title>
+    <meta charset="utf-8" />
+    <script charset="utf-8" type="text/javascript" src="./js/jquery-2.1.0.min.js"></script>
+    <script charset="utf-8" type="text/javascript" src="./js/wsp-min.js"></script>
+    <script charset="utf-8" type="text/javascript" src="./js/wsp-runner.js"></script>
+    <style type="text/css">
+      .sketch_canvas {
+          border: medium solid lightgray;
+      }
+    </style>
+    <script src="triangle.js" type="text/javascript" charset="utf-8" ></script>
+  </head>
+  <body>
+    <h1>WebSketchpad Sample Page</h1>
+
+    <p>Version: 4.8.0</p>
+    <p>
+        This page demonstrates three methods of writing static HTML pages
+        that contain WebSketchpad sketches. These methods do not require 
+        writing any Javascript or direct interaction with the WebSketchpad engine.
+        One must only create an appropriate html element with special 
+        attributes. When the page is loaded, the software will search for
+        these attributes and configure the page itself.
+    </p>
+    <p>
+        All pages that contain WebSketchpad sketches should reference the CSS 
+        stylesheet contained in this distribution and the following javascript
+        files:
+    </p>
+    <ul>
+       <li>wsp-min.js</li>
+       <li>wsp-runner.js</li>
+    </ul>
+    <h2>By URL</h2>
+       <h3><span style="color: red">Please Note:</span> Due to browser origin restrictions, the data-url method will not work reliably from a file:// url. It's best to serve it up from a web server.</h3>
+    <p>
+        The following is the pattern for loading a sketch document from 
+        a url. The document referred to must by a valid JSON document.
+        The url is named in the "data-url" attribute.
+     </p>
+     <pre>
+       
+        &lt;div class="sketch_canvas" data-url="./triangle.json"&gt;&nbsp;&lt;/div&gt;
+     </pre>
+    <div class="sketch_canvas" data-url="./triangle.json" >&nbsp;</div>
+
+    <h2>By Var</h2>
+    <p> 
+       This method for initializing the sketch passes a javascript variable
+       the value of which is a sketch document. In this case the variable
+       is defined in the header of this HTML document, but it could be defined
+       in a separate javascript file that is referred to in the header.
+       The variable containing the sketch is named in the "data-var" attribute.
+     </p>
+     <pre>
+        &lt;div class="sketch_canvas" data-var="trianglevar" &gt;&nbsp;&lt;/div&gt;
+     </pre>
+    <div class="sketch_canvas" data-var="trianglevar" >&nbsp;</div>
+    <footer>
+      <p>
+        Web Sketchpad Copyright &copy; 2019 KCP Technologies, a McGraw-Hill Education Company. All rights reserved.
+        All rights reserved.
+      </p>
+      <p class="version">Release: 2020Q3, semantic Version: 4.8.0, Build Number: 1075, Build Stamp: a52eed0e7762/20210510180304</p>
+    </footer>
+  </body>
+</html>

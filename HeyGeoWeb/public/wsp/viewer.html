@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WSP Viewer</title>
+  <script charset="utf-8" type="text/javascript" src="./jquery.js"></script>
+  <script charset="utf-8" type="text/javascript" src="./wsp.js"></script>
+  <script charset="utf-8" type="text/javascript" src="./wsp-runner.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #fff; overflow: hidden; }
+    #container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+    .sketch_canvas { max-width: 100%; max-height: 100%; }
+    #msg { font-family: sans-serif; font-size: 14px; color: #666; }
+
+    /* ── Mobile portrait: toolbar nằm ngang phía trên, tools thu nhỏ 50% ── */
+    /* Kích hoạt bằng JS khi window.innerWidth <= 600 (thêm class mobile-layout vào body) */
+    body.mobile-layout .wsp-version-4-8-0 .wsp-main-row {
+      flex-direction: column !important;
+    }
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tool-container {
+      display: block !important;
+      float: none !important;
+      width: 100% !important;
+    }
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tools-compactLook,
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tools-classicLook,
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tools-newLook {
+      padding-right: 0 !important;
+      margin-right: 0 !important;
+      border-right: none !important;
+      border-bottom: 2px solid #999 !important;
+      width: 100% !important;
+    }
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tool-column,
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tools-compactLook .wsp-tool-column,
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tools-classicLook .wsp-tool-column,
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tools-newLook .wsp-tool-column {
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: center !important;
+      width: 100% !important;
+      height: auto !important;
+      overflow: hidden !important;
+      border-radius: 0 !important;
+    }
+    body.mobile-layout .wsp-version-4-8-0 .wsp-ok-cancel-container.wsp-undo-redo-top {
+      display: flex !important;
+      flex-direction: row !important;
+      flex-shrink: 0;
+      height: auto !important;
+    }
+    body.mobile-layout .wsp-version-4-8-0 .wsp-ok-cancel-container.wsp-undo-redo-bottom {
+      display: none !important;
+    }
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tools-compactLook .wsp-undo-redo button,
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tools-classicLook .wsp-undo-redo button,
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tools-newLook .wsp-undo-redo button {
+      width: 36px !important;
+      height: 36px !important;
+    }
+    body.mobile-layout .wsp-version-4-8-0 .wsp-user-tools {
+      display: flex !important;
+      flex-direction: row !important;
+      height: auto !important;
+      overflow: hidden !important;  /* JS translateX handles scrolling */
+      flex: 1;
+    }
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tools-inner {
+      display: flex !important;
+      flex-direction: row !important;
+      flex-shrink: 0 !important;  /* must NOT shrink — translateX creates the scroll effect */
+      height: auto !important;
+      align-items: center;
+    }
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tool-container .wsp-tool-column .wsp-tool {
+      flex-shrink: 0;
+      zoom: 0.5;
+      width: auto !important;
+    }
+    body.mobile-layout .wsp-version-4-8-0 .wsp-sketch-container {
+      float: none !important;
+      display: block !important;
+      width: 100% !important;
+    }
+    body.mobile-layout .wsp-version-4-8-0 .wsp-tool-logo {
+      display: none !important;
+    }
+
+    /* ── Mobile landscape: sidebar dọc giữ nguyên, chỉ thu nhỏ tools 50% ── */
+    /* Kích hoạt khi width > 600 AND height <= 500 (điện thoại xoay ngang) */
+    body.mobile-landscape .wsp-version-4-8-0 .wsp-tool {
+      zoom: 0.5;
+    }
+    /* WSP JS sets inline width on tool-column based on unscaled tool size;
+       override to auto so it collapses to the zoomed tools' actual layout size */
+    body.mobile-landscape .wsp-version-4-8-0 .wsp-tool-column {
+      width: auto !important;
+    }
+    body.mobile-landscape .wsp-version-4-8-0 .wsp-user-tools {
+      width: auto !important;
+    }
+    body.mobile-landscape .wsp-version-4-8-0 .wsp-tool-logo {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="msg">Đang tải mô hình…</div>
+  </div>
+
+  <script>
+    // Global used by wsp-runner's data-var lookup
+    window.wspData = null;
+
+    // ── Mobile layout detection ──────────────────────────────
+    // Returns 'portrait' | 'landscape' | 'desktop'
+    function getLayoutMode() {
+      var w = window.innerWidth, h = window.innerHeight;
+      if (w <= 600)                        return 'portrait';
+      if (w <= 900 && h <= 500)            return 'landscape';
+      return 'desktop';
+    }
+
+    var _currentMode = null;
+
+    function applyMobileLayout() {
+      var mode = getLayoutMode();
+      document.body.classList.toggle('mobile-layout',    mode === 'portrait');
+      document.body.classList.toggle('mobile-landscape', mode === 'landscape');
+
+      // When orientation changes, WSP's inline styles are stale — re-render
+      if (_currentMode !== null && _currentMode !== mode && window.wspData) {
+        _currentMode = mode;
+        initSketch(window.wspData);
+        return;
+      }
+      _currentMode = mode;
+    }
+    applyMobileLayout();
+    window.addEventListener('resize', applyMobileLayout);
+
+    function initSketch(jsonData) {
+      window.wspData = jsonData;
+      _currentMode = getLayoutMode();   // record mode at render time
+
+      var container = document.getElementById('container');
+      container.innerHTML = '';
+
+      var width  = (jsonData.metadata && jsonData.metadata.width)  || 600;
+      var height = (jsonData.metadata && jsonData.metadata.height) || 450;
+
+      var div = document.createElement('div');
+      div.className = 'sketch_canvas';
+      div.setAttribute('data-var', 'wspData');
+      div.style.width  = width  + 'px';
+      div.style.height = height + 'px';
+      container.appendChild(div);
+
+      // Trigger wsp-runner's jQuery plugin on this specific element
+      $(div).WSP('loadSketch');
+
+      // Setup toolbar swipe scroll on mobile (portrait: horizontal, landscape: vertical)
+      if (_currentMode === 'portrait' || _currentMode === 'landscape') {
+        setupToolbarSwipe();
+      }
+    }
+
+    /**
+     * setupToolbarSwipe – intercepts touch events on .wsp-user-tools in the
+     * CAPTURE phase (fires before WSP's jQuery bubble-phase handlers).
+     *
+     * Logic:
+     *  - touchstart: record finger start position (let WSP also see it → tool highlight)
+     *  - touchmove:  if horizontal movement > vertical AND > THRESHOLD px →
+     *                mark as "scrolling", call stopPropagation() so WSP never sees
+     *                the move, and manually update container.scrollLeft
+     *  - touchend:   if we were scrolling, stopPropagation() so WSP doesn't select
+     *                the tool under the finger, then clean up wsp-tool-active class
+     */
+    function setupToolbarSwipe() {
+      // WSP renders tools asynchronously; poll until .wsp-user-tools appears
+      var attempts = 0;
+      var timer = setInterval(function () {
+        var el = document.querySelector('.wsp-user-tools');
+        if (el) {
+          clearInterval(timer);
+          attachSwipeHandler(el);
+        } else if (++attempts > 40) {   // give up after ~4 s
+          clearInterval(timer);
+        }
+      }, 100);
+    }
+
+    function attachSwipeHandler(container) {
+      if (container._swipeAttached) return;
+      container._swipeAttached = true;
+
+      var inner = container.querySelector('.wsp-tools-inner');
+      if (!inner) return;
+
+      var mode = getLayoutMode();
+      var isHorizontal = (mode === 'portrait');
+      var toolCol  = container.parentElement;           // .wsp-tool-column
+      var toolCont = toolCol && toolCol.parentElement;  // .wsp-tool-container
+      var undoRedo = toolCol && toolCol.querySelector('.wsp-ok-cancel-container.wsp-undo-redo-top');
+      var contSize;  // the visible dimension we scroll within
+
+      if (isHorizontal) {
+        // Portrait: horizontal scroll — force widths to viewport (bypass sketch fixed-px parent)
+        var vpW = window.innerWidth;
+        if (toolCont) toolCont.style.setProperty('width', vpW + 'px', 'important');
+        if (toolCol)  toolCol.style.setProperty('width',  vpW + 'px', 'important');
+        var undoW = undoRedo ? undoRedo.getBoundingClientRect().width : 0;
+        contSize = vpW - undoW;
+        container.style.setProperty('width',    contSize + 'px', 'important');
+        container.style.setProperty('overflow', 'hidden',        'important');
+        inner.style.setProperty('flex-shrink', '0', 'important');
+      } else {
+        // Landscape: vertical scroll — bound height to viewport minus undo/redo strip
+        var vpH  = window.innerHeight;
+        var undoH = undoRedo ? undoRedo.getBoundingClientRect().height : 0;
+        contSize = vpH - undoH;
+        container.style.setProperty('height',   contSize + 'px', 'important');
+        container.style.setProperty('overflow', 'hidden',        'important');
+        inner.style.setProperty('flex-shrink', '0', 'important');
+      }
+
+      var startX, startY;
+      var startTranslate = 0, currentTranslate = 0;
+      var maxOffset = 0;
+      var scrolling = false;
+      var THRESHOLD = 8;
+
+      function killWspDraggable() {
+        var drags = container.querySelectorAll('.wsp-draggable-toolButton');
+        for (var i = 0; i < drags.length; i++) drags[i].remove();
+        var actives = container.querySelectorAll('.wsp-tool-active');
+        for (var i = 0; i < actives.length; i++) actives[i].classList.remove('wsp-tool-active');
+      }
+
+      function measureMaxOffset() {
+        maxOffset = isHorizontal
+          ? Math.max(0, inner.offsetWidth  - container.offsetWidth)
+          : Math.max(0, inner.offsetHeight - container.offsetHeight);
+      }
+
+      function applyTranslate(v) {
+        currentTranslate = Math.max(-maxOffset, Math.min(0, v));
+        var tf = isHorizontal
+          ? 'translateX(' + currentTranslate + 'px)'
+          : 'translateY(' + currentTranslate + 'px)';
+        inner.style.setProperty('transform', tf, 'important');
+      }
+
+      container.addEventListener('touchstart', function (e) {
+        var t = e.touches[0];
+        startX = t.clientX; startY = t.clientY;
+        startTranslate = currentTranslate;
+        scrolling = false;
+        measureMaxOffset();
+      }, { capture: true, passive: true });
+
+      container.addEventListener('touchmove', function (e) {
+        if (!e.touches.length) return;
+        var t  = e.touches[0];
+        var dx = t.clientX - startX;
+        var dy = t.clientY - startY;
+        if (!scrolling) {
+          if (Math.abs(dx) < THRESHOLD && Math.abs(dy) < THRESHOLD) return;
+          // Portrait needs mostly-horizontal; landscape needs mostly-vertical
+          if (isHorizontal  && Math.abs(dx) <= Math.abs(dy)) return;
+          if (!isHorizontal && Math.abs(dy) <= Math.abs(dx)) return;
+          scrolling = true;
+          killWspDraggable();
+        }
+        e.stopPropagation();
+        applyTranslate(startTranslate + (isHorizontal ? dx : dy));
+      }, { capture: true, passive: true });
+
+      container.addEventListener('touchend', function (e) {
+        if (!scrolling) return;
+        e.stopPropagation();
+        killWspDraggable();
+        scrolling = false;
+      }, { capture: true, passive: true });
+
+      container.addEventListener('touchcancel', function () {
+        if (!scrolling) return;
+        killWspDraggable();
+        scrolling = false;
+      }, { capture: true, passive: true });
+    }
+
+    // Listen for sketch data sent from the parent React component
+    window.addEventListener('message', function(event) {
+      // Respond to ping (parent checking if we're ready)
+      if (event.data && event.data.type === 'wsp-ping') {
+        window.parent.postMessage({ type: 'wsp-ready' }, '*');
+        return;
+      }
+      if (!event.data || event.data.type !== 'wsp-init') return;
+      try {
+        var data = typeof event.data.sketch === 'string'
+          ? JSON.parse(event.data.sketch)
+          : event.data.sketch;
+        initSketch(data);
+      } catch (e) {
+        document.getElementById('container').innerHTML =
+          '<div id="msg">L\u1ed7i t\u1ea3i m\u00f4 h\u00ecnh: ' + e.message + '</div>';
+      }
+    });
+
+    // Notify parent on full load
+    window.addEventListener('load', function() {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'wsp-ready' }, '*');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.heygeo.backup</string>
+
+    <key>UserName</key>
+    <string>m2pro</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>/Users/m2pro/HeyGeo/backup_model.sh</string>
+        <string>--keep</string>
+        <string>30</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/m2pro/HeyGeo</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/m2pro</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/m2pro/HeyGeo/logs/backup.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/m2pro/HeyGeo/logs/backup.log</string>
+
+    <!-- Chạy mỗi ngày lúc 03:00 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Không giữ tiến trình chạy nền, chỉ chạy khi đến giờ -->
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>

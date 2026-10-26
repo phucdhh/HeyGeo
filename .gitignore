@@ -48,20 +48,8 @@ aqtinstall.log
 # ------------------------------------------------------------------
 # HeyGeoWeb – Next.js / Node.js
 # ------------------------------------------------------------------
-HeyGeoWeb/
-# HeyGeoWeb/node_modules/
-# HeyGeoWeb/.next/
-# HeyGeoWeb/release/
-# HeyGeoWeb/logs/
-# HeyGeoWeb/uploads/
-# HeyGeoWeb/tsconfig.tsbuildinfo
-
-# Sensitive environment variables – DO NOT commit real secrets
-# Keep .env.example (template without real values)
-# HeyGeoWeb/.env
-
-# Prisma generated client (can be regenerated with `prisma generate`)
-# HeyGeoWeb/prisma/generated/
+# Tracked as part of this repo; its own HeyGeoWeb/.gitignore decides what
+# inside it is ignored (node_modules, .next, .env, release artifacts, …).
 
 # ------------------------------------------------------------------
 # Editor / IDE
