@@ -11,9 +11,9 @@ export type ToolMode =
   | 'segment'          // 2 clicks → segment
   | 'ray'              // 2 clicks → ray
   | 'line'             // 2 clicks → infinite line
-  | 'polygon'          // multi-click, dbl-click to close (unfilled)
-  | 'polygon_filled'   // same, filled
-  | 'polygon_open'     // open polyline
+  | 'polygon'          // GSP Polygon: interior + frame
+  | 'polygon_and_edges' // polygon plus the segments that form its edges
+  | 'polygon_edges'    // the closed ring of segments, no interior
   | 'text'             // click object to toggle/edit label
   | 'pen'              // mark segments / angles (GSP Pen tool)
   | 'info'             // click object to show info
@@ -72,8 +72,8 @@ export const TOOL_LABELS: Record<ToolMode, string> = {
   ray:             'Tia',
   line:            'Đường thẳng',
   polygon:         'Đa giác',
-  polygon_filled:  'Đa giác tô màu',
-  polygon_open:    'Đường gấp khúc',
+  polygon_and_edges: 'Đa giác và các cạnh',
+  polygon_edges:   'Các cạnh đa giác',
   text:            'Văn bản / Nhãn',
   pen:             'Bút đánh dấu',
   info:            'Thông tin',
@@ -92,9 +92,9 @@ export const TOOL_HINTS: Record<ToolMode, string> = {
   segment:         'Nhấp (1) điểm đầu – nhấp (2) điểm cuối',
   ray:             'Nhấp (1) gốc – nhấp (2) hướng',
   line:            'Nhấp (1) điểm A – nhấp (2) điểm B',
-  polygon:         'Nhấp các đỉnh – nhấp đúp để hoàn thành',
-  polygon_filled:  'Nhấp các đỉnh – nhấp đúp để hoàn thành (tô màu)',
-  polygon_open:    'Nhấp các đỉnh – nhấp đúp để kết thúc',
+  polygon:         'Nhấp từ 3 đỉnh – nhấp lại đỉnh đầu tiên hoặc nhấp đúp đỉnh cuối để đóng',
+  polygon_and_edges: 'Nhấp từ 3 đỉnh – tạo đa giác kèm các đoạn thẳng là cạnh của nó',
+  polygon_edges:   'Nhấp từ 3 đỉnh – chỉ tạo các cạnh khép kín, không tạo phần trong',
   text:            'Nhấp vào đối tượng để ẩn/hiện nhãn',
   pen:             'Nhấp vào đoạn thẳng hoặc góc để đánh dấu (tính năng đang phát triển)',
   info:            'Nhấp vào đối tượng để xem thuộc tính',
@@ -110,8 +110,8 @@ export const TOOL_SHORTCUTS: Partial<Record<string, ToolMode>> = {
   r: 'ray',
   l: 'line',
   g: 'polygon',
-  f: 'polygon_filled',
-  o: 'polygon_open',
+  f: 'polygon_and_edges',
+  o: 'polygon_edges',
   t: 'text',
   x: 'pen',
   i: 'info',

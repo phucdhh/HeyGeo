@@ -19,7 +19,7 @@ import {
 } from './elementRegistry';
 import { measureDeps } from './measurement';
 import { imageDeps } from './transforms';
-import type { HeyGeoElement } from './designTypes';
+import type { HeyGeoElement, ToolMode } from './designTypes';
 
 export const UNDO_LIMIT = 100;
 
@@ -308,6 +308,44 @@ export function gatherSelectionPoints(sel: any[]): any[] {
     }
   }
   return [...out.values()];
+}
+
+/**
+ * The objects a polygon tool leaves on the board. Sketchpad's three rows differ
+ * only here (Reference Center/tools_polygon.htm): the polygon, the polygon plus
+ * the segments that form its edges, or the edges alone. The edges close the ring
+ * — every vertex has two neighbours — and when real segments draw the frame the
+ * polygon hides its own borders so nothing is drawn twice.
+ */
+export function polygonElements(
+  mode: ToolMode,
+  vertexIds: string[],
+  baseId: string,
+): HeyGeoElement[] {
+  const out: HeyGeoElement[] = [];
+  if (mode !== 'polygon_edges') {
+    out.push({
+      type: 'polygon',
+      id: baseId,
+      parents: [...vertexIds],
+      attrs: {
+        strokeColor: '#1e3c96', strokeWidth: 2, fillColor: '#1e3c9622',
+        withLabel: false,
+        borders: { withLabel: false, visible: mode === 'polygon' },
+      },
+    });
+  }
+  if (mode !== 'polygon') {
+    vertexIds.forEach((_, i) => {
+      out.push({
+        type: 'segment',
+        id: `${baseId}_s${i}`,
+        parents: [vertexIds[i], vertexIds[(i + 1) % vertexIds.length]],
+        attrs: { strokeColor: '#1e3c96', strokeWidth: 2, withLabel: false },
+      });
+    });
+  }
+  return out;
 }
 
 /**

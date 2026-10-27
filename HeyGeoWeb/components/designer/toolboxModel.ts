@@ -47,8 +47,8 @@ export const TOOL_FAMILIES: ToolFamily[] = [
     id: 'polygon',
     variations: [
       { tool: 'polygon', key: 'G' },
-      { tool: 'polygon_filled', key: 'F' },
-      { tool: 'polygon_open', key: 'O' },
+      { tool: 'polygon_and_edges', key: 'F' },
+      { tool: 'polygon_edges', key: 'O' },
     ],
   },
   { id: 'slider',   variations: [{ tool: 'slider', key: 'V' }] },
@@ -99,6 +99,14 @@ export function activeVariation(tool: ToolMode, arrow: ArrowMode): ToolVariation
 /** True when this tray row is the one the toolbox is on. */
 export function isActiveVariation(v: ToolVariation, tool: ToolMode, arrow: ArrowMode): boolean {
   return sameVariation(v, tool, arrow);
+}
+
+/**
+ * The three polygon tools gather vertices the same way; only what they leave on
+ * the board differs.
+ */
+export function isPolygonTool(tool: ToolMode): boolean {
+  return tool === 'polygon' || tool === 'polygon_and_edges' || tool === 'polygon_edges';
 }
 
 /** Shift+Left/Right: the next variation inside the active family. */

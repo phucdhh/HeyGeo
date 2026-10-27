@@ -12,6 +12,7 @@ import {
   cycleFamily,
   cycleVariation,
   familyOf,
+  isPolygonTool,
   TOOL_FAMILIES,
   variationHint,
   variationLabel,
@@ -29,12 +30,18 @@ describe('the toolbox families', () => {
   it('give the arrow, straightedge and polygon trays their GSP members', () => {
     expect(family('arrow').variations.map((v) => v.arrow)).toEqual(['translate', 'rotate', 'dilate']);
     expect(family('straight').variations.map((v) => v.tool)).toEqual(['segment', 'ray', 'line']);
-    expect(family('polygon').variations.map((v) => v.tool)).toEqual(['polygon', 'polygon_filled', 'polygon_open']);
+    expect(family('polygon').variations.map((v) => v.tool)).toEqual(['polygon', 'polygon_and_edges', 'polygon_edges']);
   });
 
   it('keeps the three arrows one tool, because they only differ while dragging', () => {
     expect(new Set(family('arrow').variations.map((v) => v.tool))).toEqual(new Set(['selection']));
     expect(familyOf('selection', 'dilate')?.id).toBe('arrow');
+  });
+
+  it('gives the canvas one click behaviour for the whole polygon tray', () => {
+    for (const v of family('polygon').variations) expect(isPolygonTool(v.tool)).toBe(true);
+    expect(isPolygonTool('segment')).toBe(false);
+    expect(isPolygonTool('selection')).toBe(false);
   });
 
   it('labels and hints every row the toolbox can put on the canvas', () => {
@@ -83,7 +90,7 @@ describe('keyboard tool switching', () => {
     expect(cycleVariation('selection', 'dilate', 1)?.arrow).toBe('translate');
     expect(cycleVariation('selection', 'translate', -1)?.arrow).toBe('dilate');
     expect(cycleVariation('line', 'translate', 1)?.tool).toBe('segment');
-    expect(cycleVariation('polygon', 'translate', -1)?.tool).toBe('polygon_open');
+    expect(cycleVariation('polygon', 'translate', -1)?.tool).toBe('polygon_edges');
   });
 
   it('has nothing to cycle in a single-tool family', () => {

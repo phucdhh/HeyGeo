@@ -143,35 +143,23 @@ function IconLine() {
   );
 }
 
-function IconPolygon({ filled = false }: { filled?: boolean }) {
+/**
+ * The three polygon tools, drawn the way the Sketchpad toolbox draws them
+ * (polygon_tools.png): the interior on its own, the interior with its edges as
+ * objects, and the edges alone.
+ */
+function IconPolygon({ fill = true, thick = false }: { fill?: boolean; thick?: boolean }) {
   return (
     <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
       <polygon
         points="14,3 25,18 19,25 9,25 3,18"
         stroke={C_MAIN}
-        strokeWidth="1.8"
-        fill={filled ? `${C_MAIN}44` : 'none'}
+        strokeWidth={thick ? 2.6 : 1.4}
+        fill={fill ? `${C_MAIN}66` : 'none'}
       />
       <circle cx="14" cy="3" r="2.2" fill={C_ACC} />
       <circle cx="25" cy="18" r="2.2" fill={C_ACC} />
       <circle cx="9" cy="25" r="2.2" fill={C_ACC} />
-    </svg>
-  );
-}
-
-function IconPolyline() {
-  return (
-    <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <polyline
-        points="3,24 10,8 18,18 25,5"
-        stroke={C_MAIN}
-        strokeWidth="2"
-        fill="none"
-      />
-      <circle cx="3" cy="24" r="2.2" fill={C_ACC} />
-      <circle cx="10" cy="8" r="2.2" fill={C_ACC} />
-      <circle cx="18" cy="18" r="2.2" fill={C_ACC} />
-      <circle cx="25" cy="5" r="2.2" fill={C_ACC} />
     </svg>
   );
 }
@@ -239,9 +227,9 @@ const TOOL_ICONS: Record<string, React.ReactNode> = {
   segment:        <IconSegment />,
   ray:            <IconRay />,
   line:           <IconLine />,
-  polygon:        <IconPolygon />,
-  polygon_filled: <IconPolygon filled />,
-  polygon_open:   <IconPolyline />,
+  polygon:           <IconPolygon />,
+  polygon_and_edges: <IconPolygon thick />,
+  polygon_edges:     <IconPolygon fill={false} thick />,
   slider:         <IconSlider />,
   text:           <IconText />,
   pen:            <IconPen />,

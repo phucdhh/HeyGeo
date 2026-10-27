@@ -364,7 +364,7 @@ export default function DesignMenuBar({
         { label: 'Arc Through 3 Points',                           action: () => onToolChange('arc') },
         { separator: true },
         // Interiors
-        { label: 'Polygon Interior',       shortcut: 'Alt+G',     action: () => onToolChange('polygon_filled') },
+        { label: 'Polygon',                shortcut: 'Alt+G',     action: () => onToolChange('polygon') },
         { label: 'Circle Interior',                                action: onUnderDevelopment },
         { label: 'Sector Interior',                                action: onUnderDevelopment },
         { label: 'Arc Interior',                                   action: onUnderDevelopment },

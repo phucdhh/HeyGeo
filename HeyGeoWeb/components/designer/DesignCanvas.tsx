@@ -28,6 +28,7 @@ import {
   coordParents,
   gatherSelectionPoints,
   planScene,
+  polygonElements,
   pushCapped,
   setSceneChrome,
   syncPositions,
@@ -35,7 +36,7 @@ import {
   withDependents,
   type SceneSnapshot,
 } from './sceneModel';
-import type { ArrowMode } from './toolboxModel';
+import { isPolygonTool, type ArrowMode } from './toolboxModel';
 
 // ─── JSXGraph accessor (engine global, loaded from /vendor by lib/jsxgraph;
 //     extends the global declared in JSXGraphViewer) ────────────────────────
@@ -538,6 +539,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     polyLines?: any[];
     rawPt1?: { x: number; y: number };  // for slider first click (raw user coords)
   }>({ phase: 'idle' });
+
+  // True right after a polygon closes, so the tail of its own double-click is ignored.
+  const polygonClosedRef = useRef(false);
 
   // Selection
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1506,10 +1510,24 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return;
     }
 
-    if (curTool === 'polygon' || curTool === 'polygon_filled' || curTool === 'polygon_open') {      const p = pendingRef.current;
+    if (isPolygonTool(curTool)) {
+      const p = pendingRef.current;
+      // The second click of the double-click that closed a polygon must not
+      // open a new one.
+      if (polygonClosedRef.current) {
+        polygonClosedRef.current = false;
+        if (evt.detail > 1) return;
+      }
       const verts = p.polyVerts ?? [];
       const lines = p.polyLines ?? [];
       const pt = createOrSnapPoint(x, y, sx, sy);
+      // Sketchpad closes a polygon when the first point is clicked again.
+      if (verts.length >= 3 && pt === verts[0]) {
+        finishPolygon(curTool);
+        return;
+      }
+      // Re-clicking the last vertex is the first half of the double-click that closes.
+      if (pt === verts[verts.length - 1]) return;
       if (verts.length > 0) {
         // Preview edge from last vertex to new
         const ghostLine = board.create('segment', [verts[verts.length - 1], pt], {
@@ -1529,55 +1547,37 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     }
   }
 
+  // ─── Polygon: build what the active tool asks for ─────────────────────────
+  function finishPolygon(mode: ToolMode) {
+    const p = pendingRef.current;
+    const verts = p.polyVerts ?? [];
+    pendingRef.current = { phase: 'idle' };
+    polygonClosedRef.current = true;
+    if (verts.length < 3) return;
+
+    saveSnapshot();
+    const board = boardRef.current!;
+    // Remove all ghost lines
+    (p.polyLines ?? []).forEach(l => {
+      try { board.removeObject(l); } catch { /**/ }
+    });
+
+    const vertexIds = verts.map((v: { id: string }) => v.id);
+    for (const rec of polygonElements(mode, vertexIds, nextElId('pg'))) {
+      const { error } = createElement(board, rec, board.objects);
+      if (error) { onNotifyRef.current?.(error); continue; }
+      elementsRef.current.push(rec);
+    }
+
+    onDirty();
+  }
+
   // ─── Double-click: finish polygon ─────────────────────────────────────────
   function handleOverlayDblClick() {
     const p = pendingRef.current;
     const curTool = toolRef.current;
-    if (
-      (curTool === 'polygon' || curTool === 'polygon_filled' || curTool === 'polygon_open') &&
-      p.phase === 'polygon' &&
-      (p.polyVerts?.length ?? 0) >= 2
-    ) {
-      saveSnapshot();
-      const board = boardRef.current!;
-      // Remove all ghost lines
-      (p.polyLines ?? []).forEach(l => {
-        try { board.removeObject(l); } catch { /**/ }
-      });
-      const verts = p.polyVerts!;
-      const open  = curTool === 'polygon_open';
-      const filled = curTool === 'polygon_filled';
-      const id = nextElId(open ? 'pl' : 'pg');
-
-      if (open) {
-        // Polyline = chain of segments
-        for (let i = 0; i < verts.length - 1; i++) {
-          const segId = `${id}_s${i}`;
-          board.create('segment', [verts[i], verts[i + 1]], {
-            id: segId, strokeColor: '#1e3c96', strokeWidth: 2, withLabel: false,
-          });
-          elementsRef.current.push({
-            type: 'segment', id: segId,
-            parents: [verts[i].id, verts[i + 1].id],
-            attrs: { strokeColor: '#1e3c96', strokeWidth: 2, withLabel: false },
-          });
-        }
-      } else {
-        const attrs: Record<string, unknown> = {
-          strokeColor: '#1e3c96', strokeWidth: 2,
-          fillColor: filled ? '#1e3c9622' : 'none',
-          withLabel: false, borders: { withLabel: false },
-        };
-        board.create('polygon', verts, { id, ...attrs });
-        elementsRef.current.push({
-          type: 'polygon', id,
-          parents: verts.map((v: { id: string }) => v.id),
-          attrs,
-        });
-      }
-
-      pendingRef.current = { phase: 'idle' };
-      onDirty();
+    if (isPolygonTool(curTool) && p.phase === 'polygon' && (p.polyVerts?.length ?? 0) >= 3) {
+      finishPolygon(curTool);
     }
   }
 

@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import {
   applyScene,
   planScene,
+  polygonElements,
   setSceneChrome,
   syncPositions,
   takeScene,
@@ -171,5 +172,49 @@ describe('undo against the real engine', () => {
   it('leaves a board with no axes alone instead of failing', () => {
     const b = newBoard({ axis: false, grid: false });
     expect(() => setSceneChrome(b, { axis: true, grid: true })).not.toThrow();
+  });
+});
+
+describe('the polygon tray', () => {
+  const corners = [
+    el({ type: 'point', id: 'v0', parents: [0, 0], attrs: { name: 'A' } }),
+    el({ type: 'point', id: 'v1', parents: [4, 0], attrs: { name: 'B' } }),
+    el({ type: 'point', id: 'v2', parents: [4, 3], attrs: { name: 'C' } }),
+    el({ type: 'point', id: 'v3', parents: [0, 3], attrs: { name: 'D' } }),
+  ];
+  const vertexIds = corners.map((c) => c.id);
+
+  it('leaves the polygon alone for the first row, borders and all', () => {
+    const plan = polygonElements('polygon', vertexIds, 'pg1');
+    expect(plan).toEqual([
+      expect.objectContaining({ type: 'polygon', id: 'pg1', parents: vertexIds }),
+    ]);
+    const b = newBoard();
+    load(b, [...corners, ...plan]);
+    expect(b.objects.pg1.borders.every((l: any) => l.visProp.visible)).toBe(true);
+  });
+
+  it('adds a closed ring of segments for the second row and hides the borders they replace', () => {
+    const plan = polygonElements('polygon_and_edges', vertexIds, 'pg1');
+    expect(plan.map((e) => e.type)).toEqual(['polygon', 'segment', 'segment', 'segment', 'segment']);
+    expect(plan.slice(1).map((e) => e.parents)).toEqual([
+      ['v0', 'v1'], ['v1', 'v2'], ['v2', 'v3'], ['v3', 'v0'],
+    ]);
+    const b = newBoard();
+    load(b, [...corners, ...plan]);
+    expect(b.objects.pg1.borders.every((l: any) => l.visProp.visible === false)).toBe(true);
+    // the ring closes on itself instead of leaving one side open
+    expect(b.objects.pg1_s3.point1).toBe(b.objects.v3);
+    expect(b.objects.pg1_s3.point2).toBe(b.objects.v0);
+  });
+
+  it('leaves only the edges for the third row', () => {
+    const plan = polygonElements('polygon_edges', vertexIds, 'pg1');
+    expect(plan.every((e) => e.type === 'segment')).toBe(true);
+    expect(plan).toHaveLength(4);
+    const b = newBoard();
+    load(b, [...corners, ...plan]);
+    expect(b.objects.pg1).toBeUndefined();
+    expect(b.objects.pg1_s0.point2).toBe(b.objects.v1);
   });
 });
