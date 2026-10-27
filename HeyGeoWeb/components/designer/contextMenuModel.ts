@@ -40,11 +40,12 @@ export type ContextRow =
   | ContextItem;
 
 /** GSP's four point styles; the numbers are JSXGraph point radii in pixels. */
+/** GSP's four point sizes. `label` is the Vietnamese the body copy shows. */
 export const POINT_STYLES = [
-  { label: 'Chấm', size: 1 },
-  { label: 'Nhỏ', size: 2 },
-  { label: 'Trung bình', size: 3 },
-  { label: 'Lớn', size: 5 },
+  { label: 'Chấm', en: 'Dot', size: 1 },
+  { label: 'Nhỏ', en: 'Small', size: 2 },
+  { label: 'Trung bình', en: 'Medium', size: 3 },
+  { label: 'Lớn', en: 'Large', size: 5 },
 ] as const;
 
 /** GSP's four line widths, on the 1–4 scale this designer already draws with. */

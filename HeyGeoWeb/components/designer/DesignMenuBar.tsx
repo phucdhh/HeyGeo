@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { ToolMode, CanvasHandle } from './designTypes';
-import { COLOR_SWATCHES } from './contextMenuModel';
+import { COLOR_SWATCHES, POINT_STYLES } from './contextMenuModel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MenuItemDef {
@@ -290,12 +290,12 @@ export default function DesignMenuBar({
           ],
         },
         {
+          // A point's size, not a line's: strokeWidth would only thicken its ring.
           label: 'Point Style',
-          submenu: [
-            { label: 'Large',       action: () => canvasRef.current?.updateSelectedStrokeWidth(6) },
-            { label: 'Medium',      action: () => canvasRef.current?.updateSelectedStrokeWidth(4) },
-            { label: 'Small',       action: () => canvasRef.current?.updateSelectedStrokeWidth(2) },
-          ],
+          submenu: POINT_STYLES.map((s) => ({
+            label: s.en,
+            action: () => canvasRef.current?.updateSelectedPointSize(s.size),
+          })),
         },
         {
           label: 'Font',
