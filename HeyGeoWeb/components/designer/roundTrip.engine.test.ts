@@ -112,6 +112,21 @@ const kitchenSink = (): HeyGeoElement[] => [
     type: 'text', id: 'mCoord', parents: [-7, 7, 'G'],
     attrs: { fontSize: 13, measure: { op: 'coordinates', args: ['G'], label: 'G', precision: 2 } },
   }),
+  // what a desktop file writes for an arc, a sector and a filled shape: the
+  // curve measured along itself, its sweep, and an area in square centimetres
+  el({ type: 'circumcirclearc', id: 'ccarc', parents: ['A', 'B', 'O'], attrs: {} }),
+  el({
+    type: 'text', id: 'mArc', parents: [-8, -3, 'cung AB'],
+    attrs: { fontSize: 13, measure: { op: 'arcLength', args: ['arc1'], label: 'cung AB', precision: 2, unit: ' cm' } },
+  }),
+  el({
+    type: 'text', id: 'mArcAng', parents: [-8, -4, 'β'],
+    attrs: { fontSize: 13, measure: { op: 'arcAngle', args: ['ccarc'], label: 'β', precision: 1, unit: '°' } },
+  }),
+  el({
+    type: 'text', id: 'mArea', parents: [-8, -5, 'ABO'],
+    attrs: { fontSize: 13, measure: { op: 'area', args: ['pg1'], label: 'ABO', precision: 2, unit: ' cm²', scale: 2 } },
+  }),
 ];
 
 /**
@@ -211,6 +226,11 @@ describe('a saved document rebuilds the same drawing', () => {
     expect(drawn.length).toBeGreaterThan(60);
     expect(drawn.join('\n')).toMatch(/AB = \d+\.\d+ cm/);
     expect(drawn.join('\n')).toMatch(/left=\d{2,3}px/);
+    // the arc and area descriptors really compute; none of them is the '…' a
+    // descriptor the engine could not read would leave behind
+    expect(drawn.join('\n')).toMatch(/cung AB = \d+\.\d+ cm/);
+    expect(drawn.join('\n')).toMatch(/β = \d+\.\d+°/);
+    expect(drawn.join('\n')).toMatch(/ABO = 14\.00 cm²/);
 
     expect(drawing(second)).toEqual(drawing(first));
   });

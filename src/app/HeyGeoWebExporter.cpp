@@ -309,7 +309,8 @@ static QString measureLabelText(G_valueObject *valObj)
 // --------------------------------------------------------------------------
 // measureSpecFor -- the attrs.measure descriptor for a non-coord G_MEASURE.
 //   Returns an empty object for the types the web has no declarative op for
-//   (area, arc length) and for coord measures, which have their own ops.
+//   (an equation measure, a length taken off anything but a segment, a
+//   circle or an arc) and for coord measures, which have their own ops.
 // --------------------------------------------------------------------------
 static QJsonObject measureSpecFor(G_ref *ref,
                                   const QMap<G_ref*, QString> &idMap,
@@ -355,7 +356,10 @@ static QJsonObject measureSpecFor(G_ref *ref,
         if (par[0]->getType() == G_CIRCLE)
             return specOrNull(QStringLiteral("circumference"), { sid },
                               QStringLiteral(" cm"), cmF);
-        return QJsonObject(); // G_ARC arc-length: no declarative op yet
+        if (par[0]->getType() == G_ARC)
+            return specOrNull(QStringLiteral("arcLength"), { sid },
+                              QStringLiteral(" cm"), cmF);
+        return QJsonObject();
     }
 
     case G_RADIUS_MEASURE: {
@@ -366,7 +370,14 @@ static QJsonObject measureSpecFor(G_ref *ref,
     }
 
     case G_ANGLE_MEASURE: {
-        if ((int)par.size() < 3) return QJsonObject(); // arc case: skip
+        if ((int)par.size() < 3) {
+            // an angle taken straight off an arc is the sweep the arc covers
+            if ((int)par.size() == 1 && par[0] && par[0]->getType() == G_ARC)
+                return specOrNull(QStringLiteral("arcAngle"),
+                                  { objId(par[0]) },
+                                  QStringLiteral("\u00b0"));
+            return QJsonObject();
+        }
         // par = [wing, vertex, wing]; the web op takes the same order.
         return specOrNull(QStringLiteral("angle"),
                           { objId(par[0]), objId(par[1]), objId(par[2]) },
@@ -390,6 +401,18 @@ static QJsonObject measureSpecFor(G_ref *ref,
     case G_SLOPE_MEASURE: {
         if (par.empty()) return QJsonObject(); // segment, line or ray
         return specOrNull(QStringLiteral("slope"), { objId(par[0]) });
+    }
+
+    case G_AREA_MEASURE: {
+        if (par.empty() || !(par[0]->getType() & G_FILLED)) return QJsonObject();
+        // A polygon, an interior and a sector all carry their area on the board
+        // element; only an arc segment is the sector minus the triangle its
+        // chord closes, which is what the desktop works out.
+        const bool segment = (par[0]->getType() == G_ARCSEGMENT);
+        return specOrNull(segment ? QStringLiteral("segmentArea")
+                                  : QStringLiteral("area"),
+                          { objId(par[0]) },
+                          QStringLiteral(" cm\u00b2"), cmF * cmF);
     }
 
     default:

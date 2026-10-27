@@ -75,6 +75,9 @@ export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
   ray:            { jxg: 'line',           parents: 2, attrs: { firstArrow: [0, 0], lastArrow: [1, 1] } },
   circle:         { jxg: 'circle',         parents: 2 },
   arc:            { jxg: 'arc',            parents: 3 },
+  // the exporter's spelling for an arc given by the three points it passes
+  // through, its centre being whatever circle goes through them
+  circumcirclearc: { jxg: 'circumcirclearc', parents: 3 },
   sector:         { jxg: 'sector',         parents: 3 },
   angle:          { jxg: 'angle',          parents: 3 },
   // hasInnerPoints belongs to the registry rather than to each document:

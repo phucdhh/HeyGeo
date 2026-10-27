@@ -26,7 +26,10 @@ export type MeasureOp =
   | 'length'          // args: [segment | line | ray]
   | 'radius'          // args: [circle | arc]
   | 'circumference'   // args: [circle]
-  | 'area'            // args: [polygon]
+  | 'arcLength'       // args: [arc] — the curved part, not the chord
+  | 'arcAngle'        // args: [arc] — the sweep it covers
+  | 'segmentArea'     // args: [arc] — the bow between the arc and its chord
+  | 'area'            // args: [polygon | circle | sector]
   | 'perimeter'       // args: [polygon]
   | 'angle'           // args: [point, vertex, point]
   | 'ratio'           // args: [segment, segment]
@@ -164,6 +167,29 @@ function pointToSegment(p: Any, a: Any, b: Any): number {
   return Math.hypot(p.X() - (a.X() + t * vx), p.Y() - (a.Y() + t * vy));
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function num(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/**
+ * What an arc element covers: its radius and the sweep in radians. JSXGraph
+ * draws an arc counterclockwise from its first point to its second, whatever
+ * order the three defining points came in, so the sweep is that turn.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function arcGeometry(o: Any): { r: number; sweep: number } | null {
+  const centre = o?.center;
+  const start = o?.radiuspoint ?? o?.point2;
+  const end = o?.anglepoint ?? o?.point3;
+  if (!(centre?.X && start?.X && end?.X && o?.Radius)) return null;
+  const r = num(o.Radius());
+  if (r === null) return null;
+  const a0 = Math.atan2(start.Y() - centre.Y(), start.X() - centre.X());
+  const a1 = Math.atan2(end.Y() - centre.Y(), end.X() - centre.X());
+  return { r, sweep: ((a1 - a0) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) };
+}
+
 /**
  * The value a measurement shows, or null when it is a text-shaped op
  * (coordinates and equations) or a parent is missing from the board.
@@ -179,7 +205,6 @@ export function measureValue(board: Any, spec: MeasureSpec, seen: Set<string> = 
 function geometricValue(board: Any, spec: MeasureSpec, seen: Set<string>): number | null {
   const { op, args } = spec;
   const [a, b, c] = args.map((id) => live(board, id));
-  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
   switch (op) {
     case 'calculate':
@@ -196,6 +221,20 @@ function geometricValue(board: Any, spec: MeasureSpec, seen: Set<string>): numbe
       return a?.Radius ? num(a.Radius()) : null;
     case 'circumference':
       return a?.Radius ? num(2 * Math.PI * a.Radius()) : null;
+    case 'arcLength': {
+      const arc = arcGeometry(a);
+      return arc === null ? null : num(arc.r * arc.sweep);
+    }
+    case 'arcAngle': {
+      const arc = arcGeometry(a);
+      return arc === null ? null : num(arc.sweep * (180 / Math.PI));
+    }
+    case 'segmentArea': {
+      // The desktop's G_arcSegment: the sector the arc sweeps minus the
+      // triangle its chord closes.
+      const arc = arcGeometry(a);
+      return arc === null ? null : num(0.5 * arc.r * arc.r * (arc.sweep - Math.sin(arc.sweep)));
+    }
     case 'area':
       return a?.Area ? num(Math.abs(a.Area())) : null;
     case 'perimeter':

@@ -17,6 +17,12 @@ type Obj = any;
 const point = (x: number, y: number): Obj => ({ X: () => x, Y: () => y });
 const segment = (a: Obj, b: Obj): Obj => ({ point1: a, point2: b });
 const circle = (c: Obj, r: number): Obj => ({ center: c, Radius: () => r });
+/** An arc the way JSXGraph builds one: a centre, a start point, an end point. */
+const arc = (c: Obj, start: Obj, end: Obj): Obj => ({
+  center: c, radiuspoint: start, anglepoint: end,
+  Radius: () => Math.hypot(start.X() - c.X(), start.Y() - c.Y()),
+});
+const sector = (a: Obj, area: number): Obj => ({ ...a, Area: () => area });
 const polygon = (verts: Obj[], area: number, per: number): Obj => ({
   vertices: verts,
   Area: () => area,
@@ -39,6 +45,9 @@ const WORLD: Record<string, Obj> = {
   diag: segment(point(0, 0), point(2, 4)),
   half: segment(point(0, 0), point(2, 0)),
   c: circle(point(1, 2), 3),
+  quarter: arc(point(1, 1), point(3, 1), point(1, 3)),
+  threeQuarter: arc(point(0, 0), point(2, 0), point(0, -2)),
+  pie: sector(arc(point(1, 1), point(3, 1), point(1, 3)), Math.PI),
   tri: polygon([point(0, 0), point(4, 0), point(0, 3)], -6, 12),
   sl: { Value: () => 7 },
 };
@@ -79,6 +88,28 @@ describe('measureValue', () => {
     expect(measureValue(b(), spec({ op: 'perimeter', args: ['tri'] }))).toBe(12);
   });
 
+  it('measures the curved part of an arc, the way the desktop draws it', () => {
+    expect(measureValue(b(), spec({ op: 'arcLength', args: ['quarter'] }))).toBeCloseTo(Math.PI, 6);
+    // JSXGraph turns counterclockwise as far as the end point, so this is the long way round
+    expect(measureValue(b(), spec({ op: 'arcLength', args: ['threeQuarter'] }))).toBeCloseTo(3 * Math.PI, 6);
+    expect(measureValue(b(), spec({ op: 'arcAngle', args: ['quarter'] }))).toBeCloseTo(90, 6);
+    expect(measureValue(b(), spec({ op: 'arcAngle', args: ['threeQuarter'] }))).toBeCloseTo(270, 6);
+  });
+
+  it('areas a sector and the bow of an arc segment', () => {
+    expect(measureValue(b(), spec({ op: 'area', args: ['pie'] }))).toBeCloseTo(Math.PI, 6);
+    // the desktop's G_arcSegment: the sector the arc sweeps, minus its triangle
+    expect(measureValue(b(), spec({ op: 'segmentArea', args: ['quarter'] })))
+      .toBeCloseTo(2 * (Math.PI / 2 - 1), 6);
+    expect(measureValue(b(), spec({ op: 'segmentArea', args: ['threeQuarter'] })))
+      .toBeCloseTo(2 * (3 * Math.PI / 2 + 1), 6);
+  });
+
+  it('has no arc measurement in a parent that is not an arc', () => {
+    expect(measureValue(b(), spec({ op: 'arcLength', args: ['c'] }))).toBeNull();
+    expect(measureValue(b(), spec({ op: 'segmentArea', args: ['ghost'] }))).toBeNull();
+  });
+
   it('measures the angle from the first wing to the second, like the desktop', () => {
     expect(measureValue(b(), spec({ op: 'angle', args: ['N', 'A', 'U'] }))).toBeCloseTo(270, 6);
     expect(measureValue(b(), spec({ op: 'angle', args: ['U', 'A', 'N'] }))).toBeCloseTo(90, 6);
@@ -115,6 +146,17 @@ describe('measureCaption', () => {
 
   it('leaves the label out when the caption is the value alone', () => {
     expect(measureCaption(b(), spec({ op: 'length', args: ['s'] }))).toBe('4.00');
+  });
+
+  it('prints an arc measurement with the unit the desktop puts on it', () => {
+    expect(measureCaption(b(), spec({ op: 'arcLength', args: ['quarter'], label: 'cung AB', unit: ' cm' })))
+      .toBe('cung AB = 3.14 cm');
+    expect(measureCaption(b(), spec({ op: 'arcAngle', args: ['threeQuarter'], label: 'α', unit: '°' })))
+      .toBe('α = 270.00°');
+    expect(measureCaption(b(), spec({ op: 'segmentArea', args: ['quarter'], label: 'AB', unit: ' cm²' })))
+      .toBe('AB = 1.14 cm²');
+    // the desktop squares its centimetres-per-unit for an area
+    expect(measureCaption(b(), spec({ op: 'area', args: ['pie'], scale: 2, unit: ' cm²' }))).toBe('6.28 cm²');
   });
 
   it('shows the two forms the web designer used to write by hand', () => {

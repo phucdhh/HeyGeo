@@ -576,3 +576,74 @@ describe('a calculation over the real board', () => {
     expect(shown(r.elMap.c1)).toBe('…');
   });
 });
+
+// The desktop measures an arc by its curve, not its chord, and areas a sector
+// or an arc segment. Both arrive as descriptors now, so the numbers the web
+// prints have to come out of the element the board actually drew.
+describe('an arc measured over the real board', () => {
+  const shown = (obj: unknown): string => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t: any = obj;
+    return String(t?.plaintext ?? '');
+  };
+  const caption = (op: string, args: string[], label: string, over: Record<string, unknown> = {}) =>
+    spec({
+      type: 'text', id: `${op}${args.join('')}`, parents: [0, 9, label],
+      attrs: { measure: { op, args, label, precision: 2, ...over } },
+    });
+
+  // A is the centre, S the first point, E the one the arc turns to: a quarter
+  // of a circle of radius 2, so the curve is π long.
+  const QUARTER = [
+    spec({ type: 'point', id: 'A', parents: [1, 1] }),
+    spec({ type: 'point', id: 'S', parents: [3, 1] }),
+    spec({ type: 'point', id: 'E', parents: [1, 3] }),
+    spec({ type: 'arc', id: 'ar', parents: ['A', 'S', 'E'] }),
+    spec({ type: 'sector', id: 'se', parents: ['A', 'S', 'E'] }),
+    caption('arcLength', ['ar'], 'cung', { unit: ' cm' }),
+    caption('arcAngle', ['ar'], 'α', { unit: '°' }),
+    caption('segmentArea', ['ar'], 'chúng', { unit: ' cm²' }),
+    caption('area', ['se'], 'quạt', { unit: ' cm²' }),
+  ];
+
+  it('measures the curve the board drew', () => {
+    const b = newBoard();
+    const r = loader(b, QUARTER);
+    expect(r.errors).toEqual([]);
+    b.update();
+    expect(shown(r.elMap['arcLengthar'])).toBe('cung = 3.14 cm');
+    expect(shown(r.elMap['arcAnglear'])).toBe('α = 90.00°');
+    // the bow between the curve and its chord
+    expect(shown(r.elMap['segmentAreaar'])).toBe('chúng = 1.14 cm²');
+    expect(shown(r.elMap['arease'])).toBe('quạt = 3.14 cm²');
+  });
+
+  it('follows the arc when its end point goes the long way round', () => {
+    const b = newBoard();
+    const r = loader(b, QUARTER);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (r.elMap.E as any).moveTo([1, -1]);
+    b.update();
+    expect(shown(r.elMap['arcAnglear'])).toBe('α = 270.00°');
+    expect(shown(r.elMap['arcLengthar'])).toBe('cung = 9.42 cm');
+    expect(shown(r.elMap['segmentAreaar'])).toBe('chúng = 11.42 cm²');
+  });
+
+  it('measures the arc through three points too', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'S', parents: [3, 1] }),
+      spec({ type: 'point', id: 'E', parents: [1, 3] }),
+      spec({ type: 'point', id: 'A', parents: [1, 1] }),
+      spec({ type: 'circumcirclearc', id: 'ca', parents: ['E', 'A', 'S'] }),
+      caption('arcLength', ['ca'], 'cung'),
+      caption('arcAngle', ['ca'], 'α', { unit: '°' }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    // from E through A to S: the circumcentre is (2, 2), the radius √2, and the
+    // arc is exactly the half turn that leaves out the corner at (3, 3)
+    expect(shown(r.elMap['arcAngleca'])).toBe('α = 180.00°');
+    expect(shown(r.elMap['arcLengthca'])).toBe(`cung = ${(Math.PI * Math.SQRT2).toFixed(2)}`);
+  });
+});
