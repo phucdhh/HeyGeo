@@ -1,7 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ToolMode } from './designTypes';
+import {
+  isActiveVariation,
+  TOOL_FAMILIES,
+  variationLabel,
+  type ArrowMode,
+  type ToolFamily,
+  type ToolVariation,
+} from './toolboxModel';
 
 // ─── SVG Icon components (match HeyGeoToolBar.cpp programmatic icons) ─────────
 
@@ -18,6 +26,29 @@ function IconSelection() {
         fill={C_MAIN}
       />
       <polygon points="20,22 25,26 20,26" fill={C_MAIN} />
+    </svg>
+  );
+}
+
+// Rotate arrow – a curved arrow turning about a marked centre.
+function IconArrowRotate() {
+  return (
+    <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 14 A 8 8 0 1 1 14 22" stroke={C_MAIN} strokeWidth="2" strokeLinecap="round" fill="none" />
+      <polygon points="14,26 10,19 18,19" fill={C_MAIN} />
+      <circle cx="14" cy="14" r="2" fill={C_ACC} />
+    </svg>
+  );
+}
+
+// Dilate arrow – a circle growing away from a fixed centre.
+function IconArrowDilate() {
+  return (
+    <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="7" cy="21" r="2" fill={C_ACC} />
+      <line x1="9" y1="19" x2="20" y2="8" stroke={C_MAIN} strokeWidth="2" />
+      <polygon points="23,5 23,12 16,5" fill={C_MAIN} />
+      <circle cx="17" cy="15" r="5" stroke={C_MAIN} strokeWidth="1.6" fill="none" />
     </svg>
   );
 }
@@ -196,78 +227,69 @@ function IconChevron() {
   );
 }
 
-// ─── Sub-tool flyout data ──────────────────────────────────────────────────────
-const STRAIGHT_SUBTOOLS: { mode: ToolMode; label: string; icon: React.ReactNode }[] = [
-  { mode: 'segment', label: 'Đoạn thẳng (D)', icon: <IconSegment /> },
-  { mode: 'ray',     label: 'Tia (R)',         icon: <IconRay /> },
-  { mode: 'line',    label: 'Đường thẳng (L)', icon: <IconLine /> },
-];
+// ─── Which icon a row shows ───────────────────────────────────────────────────
+// The three arrows are one tool, so the arrow glyph is chosen by its drag mode.
+const TOOL_ICONS: Record<string, React.ReactNode> = {
+  selection:      <IconSelection />,
+  arrow_rotate:   <IconArrowRotate />,
+  arrow_dilate:   <IconArrowDilate />,
+  point:          <IconPoint />,
+  compass:        <IconCompass />,
+  arc:            <IconArc />,
+  segment:        <IconSegment />,
+  ray:            <IconRay />,
+  line:           <IconLine />,
+  polygon:        <IconPolygon />,
+  polygon_filled: <IconPolygon filled />,
+  polygon_open:   <IconPolyline />,
+  slider:         <IconSlider />,
+  text:           <IconText />,
+  pen:            <IconPen />,
+  info:           <IconInfo />,
+  custom:         <IconCustom />,
+};
 
-const POLYGON_SUBTOOLS: { mode: ToolMode; label: string; icon: React.ReactNode }[] = [
-  { mode: 'polygon',        label: 'Đa giác (G)',          icon: <IconPolygon /> },
-  { mode: 'polygon_filled', label: 'Đa giác tô màu (F)',   icon: <IconPolygon filled /> },
-  { mode: 'polygon_open',   label: 'Đường gấp khúc (O)',   icon: <IconPolyline /> },
-];
-
-// ─── Individual tool button ────────────────────────────────────────────────────
-interface ToolBtnProps {
-  active: boolean;
-  icon: React.ReactNode;
-  title: string;
-  onClick: () => void;
-  hasSubmenu?: boolean;
-  onSubmenuOpen?: () => void;
+function iconOf(v: ToolVariation | undefined, familyId: ToolFamily['id']): React.ReactNode {
+  // Only the custom tray has no variation to point at.
+  if (!v) return familyId === 'custom' ? TOOL_ICONS.custom : TOOL_ICONS.selection;
+  if (v.tool === 'selection') {
+    return v.arrow === 'rotate' ? TOOL_ICONS.arrow_rotate
+         : v.arrow === 'dilate' ? TOOL_ICONS.arrow_dilate
+         : TOOL_ICONS.selection;
+  }
+  return TOOL_ICONS[v.tool] ?? TOOL_ICONS.custom;
 }
 
-function ToolBtn({ active, icon, title, onClick, hasSubmenu, onSubmenuOpen }: ToolBtnProps) {
-  return (
-    <div className="relative flex items-center w-full">
-      <button
-        title={title}
-        onClick={onClick}
-        className={[
-          'flex-1 flex items-center justify-center w-10 h-10 rounded transition-colors',
-          active
-            ? 'bg-brand-600 text-white shadow-inner'
-            : 'hover:bg-gray-200 text-gray-700',
-        ].join(' ')}
-      >
-        <span className="w-6 h-6">{icon}</span>
-      </button>
-      {hasSubmenu && (
-        <button
-          tabIndex={-1}
-          onClick={(e) => { e.stopPropagation(); onSubmenuOpen?.(); }}
-          className="absolute right-0.5 bottom-0.5 text-gray-400 hover:text-gray-700 p-0.5 rounded"
-          title="Xem thêm"
-        >
-          <IconChevron />
-        </button>
-      )}
-    </div>
-  );
-}
+/** Tools grouped apart in the GSP toolbox. */
+const SEPARATOR_BEFORE = new Set<ToolFamily['id']>(['compass', 'text', 'info']);
 
-// ─── Flyout submenu ────────────────────────────────────────────────────────────
+// ─── Tray flyout ──────────────────────────────────────────────────────────────
 interface FlyoutProps {
-  items: { mode: ToolMode; label: string; icon: React.ReactNode }[];
-  onSelect: (mode: ToolMode) => void;
+  familyId: ToolFamily['id'];
+  items: ToolVariation[];
+  isCurrent: (v: ToolVariation) => boolean;
+  onSelect: (v: ToolVariation) => void;
   onClose: () => void;
 }
 
-function Flyout({ items, onSelect, onClose }: FlyoutProps) {
+function Flyout({ familyId, items, isCurrent, onSelect, onClose }: FlyoutProps) {
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute left-full top-0 ml-1 z-50 bg-white rounded-lg shadow-xl border border-gray-200 py-1 w-48">
+      <div className="absolute left-full top-0 ml-1 z-50 bg-white rounded-lg shadow-xl border border-gray-200 py-1 w-56">
         {items.map((item) => (
           <button
-            key={item.mode}
-            onClick={() => { onSelect(item.mode); onClose(); }}
-            className="flex items-center gap-3 w-full px-3 py-2 text-sm text-gray-700 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+            key={item.arrow ?? item.tool}
+            onClick={() => onSelect(item)}
+            className={[
+              'flex items-center gap-3 w-full px-3 py-2 text-sm transition-colors',
+              isCurrent(item)
+                ? 'bg-brand-50 text-brand-700 font-medium'
+                : 'text-gray-700 hover:bg-brand-50 hover:text-brand-700',
+            ].join(' ')}
           >
-            <span className="w-6 h-6 flex-shrink-0">{item.icon}</span>
-            {item.label}
+            <span className="w-6 h-6 flex-shrink-0">{iconOf(item, familyId)}</span>
+            {variationLabel(item)}
           </button>
         ))}
       </div>
@@ -275,154 +297,136 @@ function Flyout({ items, onSelect, onClose }: FlyoutProps) {
   );
 }
 
-// ─── Divider ──────────────────────────────────────────────────────────────────
-function Separator() {
-  return <div className="border-t border-gray-300 my-1 mx-2" />;
+// ─── One toolbox row ──────────────────────────────────────────────────────────
+interface RowProps {
+  family: ToolFamily;
+  /** The variation this row is on, or undefined for an empty tray. */
+  current?: ToolVariation;
+  active: boolean;
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  onSelect: (v: ToolVariation) => void;
+  onEmptyTray: () => void;
+}
+
+/**
+ * A single click activates the tool; holding the icon pops the tray, which is
+ * how GSP opens it (tools.htm: "press and hold the icon in the Toolbox until a
+ * menu pops out"). The chevron stays as the visible affordance for the same
+ * tray, since nothing on the web suggests that holding works.
+ */
+function ToolRow({ family, current, active, open, onOpen, onClose, onSelect, onEmptyTray }: RowProps) {
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heldOpen = useRef(false);
+  useEffect(() => () => { if (holdTimer.current) clearTimeout(holdTimer.current); }, []);
+
+  function beginHold() {
+    if (family.variations.length < 2) return;
+    holdTimer.current = setTimeout(() => {
+      holdTimer.current = null;
+      heldOpen.current = true;
+      onOpen();
+    }, 450);
+  }
+
+  function cancelHold() {
+    if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; }
+  }
+
+  function click() {
+    const openedByHold = heldOpen.current;
+    heldOpen.current = false;
+    if (openedByHold) return;
+    if (current) onSelect(current);
+    else onEmptyTray();
+  }
+
+  return (
+    <div className="relative w-full">
+      <div className="relative flex items-center w-full">
+        <button
+          title={current ? variationLabel(current) : 'Công cụ tuỳ chỉnh'}
+          onPointerDown={beginHold}
+          onPointerUp={cancelHold}
+          onPointerLeave={cancelHold}
+          onClick={click}
+          className={[
+            'flex-1 flex items-center justify-center w-10 h-10 rounded transition-colors',
+            active
+              ? 'bg-brand-600 text-white shadow-inner'
+              : 'hover:bg-gray-200 text-gray-700',
+          ].join(' ')}
+        >
+          <span className="w-6 h-6">{iconOf(current, family.id)}</span>
+        </button>
+        {family.variations.length > 1 && (
+          <button
+            tabIndex={-1}
+            onClick={(e) => { e.stopPropagation(); onOpen(); }}
+            className="absolute right-0.5 bottom-0.5 text-gray-400 hover:text-gray-700 p-0.5 rounded"
+            title="Xem thêm"
+          >
+            <IconChevron />
+          </button>
+        )}
+      </div>
+      {open && (
+        <Flyout
+          familyId={family.id}
+          items={family.variations}
+          isCurrent={(v) => v === current}
+          onSelect={onSelect}
+          onClose={onClose}
+        />
+      )}
+    </div>
+  );
 }
 
 // ─── DesignToolbar ─────────────────────────────────────────────────────────────
 interface Props {
   tool: ToolMode;
-  onToolChange: (mode: ToolMode) => void;
+  arrow: ArrowMode;
+  /** The arrow families carry a drag mode; other tools leave it as it was. */
+  onToolChange: (mode: ToolMode, arrow?: ArrowMode) => void;
   onUnderDevelopment?: () => void;
 }
 
-export default function DesignToolbar({ tool, onToolChange, onUnderDevelopment }: Props) {
-  const [flyout, setFlyout] = useState<'straight' | 'polygon' | null>(null);
-  const [activeStraight, setActiveStraight] = useState<ToolMode>('segment');
-  const [activePolygon,  setActivePolygon]  = useState<ToolMode>('polygon');
+export default function DesignToolbar({ tool, arrow, onToolChange, onUnderDevelopment }: Props) {
+  const [openFamily, setOpenFamily] = useState<ToolFamily['id'] | null>(null);
 
-  const isStraight = tool === 'segment' || tool === 'ray' || tool === 'line';
-  const isPolygon  = tool === 'polygon' || tool === 'polygon_filled' || tool === 'polygon_open';
-
-  function selectStraight(mode: ToolMode) {
-    setActiveStraight(mode);
-    onToolChange(mode);
-    setFlyout(null);
+  function choose(v: ToolVariation) {
+    onToolChange(v.tool, v.arrow);
+    if (v.tool === 'pen') onUnderDevelopment?.();
+    setOpenFamily(null);
   }
-
-  function selectPolygon(mode: ToolMode) {
-    setActivePolygon(mode);
-    onToolChange(mode);
-    setFlyout(null);
-  }
-
-  // Current icon for straight/polygon group
-  const straightIcon = STRAIGHT_SUBTOOLS.find(t => t.mode === activeStraight)?.icon ?? <IconSegment />;
-  const polygonIcon  = POLYGON_SUBTOOLS.find (t => t.mode === activePolygon )?.icon ?? <IconPolygon />;
 
   return (
     <div
       className="relative flex flex-col items-center gap-0.5 w-12 bg-gray-100 border-r border-gray-300 py-2 shadow-inner select-none z-10"
       style={{ minHeight: 0 }}
     >
-      {/* ── 1. Selection ─────────────────────────────────────────────── */}
-      <ToolBtn
-        active={tool === 'selection'}
-        icon={<IconSelection />}
-        title="Chọn / Di chuyển (S)"
-        onClick={() => onToolChange('selection')}
-      />
-
-      {/* ── 2. Point ─────────────────────────────────────────────────── */}
-      <ToolBtn
-        active={tool === 'point'}
-        icon={<IconPoint />}
-        title="Điểm (P)"
-        onClick={() => onToolChange('point')}
-      />
-
-      <Separator />
-
-      {/* ── 3. Compass / Circle ─────────────────────────────────────── */}
-      <ToolBtn
-        active={tool === 'compass'}
-        icon={<IconCompass />}
-        title="Đường tròn – tâm + điểm trên (C)"
-        onClick={() => onToolChange('compass')}
-      />
-
-      {/* ── 4. Straight Edge group: Segment / Ray / Line ─────────────── */}
-      <div className="relative w-full">
-        <ToolBtn
-          active={isStraight}
-          icon={straightIcon}
-          title={STRAIGHT_SUBTOOLS.find(t => t.mode === activeStraight)?.label ?? 'Đoạn thẳng'}
-          onClick={() => onToolChange(activeStraight)}
-          hasSubmenu
-          onSubmenuOpen={() => setFlyout('straight')}
-        />
-        {flyout === 'straight' && (
-          <Flyout
-            items={STRAIGHT_SUBTOOLS}
-            onSelect={selectStraight}
-            onClose={() => setFlyout(null)}
-          />
-        )}
-      </div>
-
-      {/* ── 5. Polygon group ─────────────────────────────────────────── */}
-      <div className="relative w-full">
-        <ToolBtn
-          active={isPolygon}
-          icon={polygonIcon}
-          title={POLYGON_SUBTOOLS.find(t => t.mode === activePolygon)?.label ?? 'Đa giác'}
-          onClick={() => onToolChange(activePolygon)}
-          hasSubmenu
-          onSubmenuOpen={() => setFlyout('polygon')}
-        />
-        {flyout === 'polygon' && (
-          <Flyout
-            items={POLYGON_SUBTOOLS}
-            onSelect={selectPolygon}
-            onClose={() => setFlyout(null)}
-          />
-        )}
-      </div>
-
-      {/* ── 6. Slider ────────────────────────────────────────────── */}
-      <ToolBtn
-        active={tool === 'slider'}
-        icon={<IconSlider />}
-        title="Thanh trượt – nhấp (1) điểm đầu, nhấp (2) điểm cuối (V)"
-        onClick={() => onToolChange('slider')}
-      />
-
-      <Separator />
-
-      {/* ── 7. Text ────────────────────────────────────────────── */}
-      <ToolBtn
-        active={tool === 'text'}
-        icon={<IconText />}
-        title="Văn bản / Nhãn – ẩn/hiện nhãn đối tượng (T)"
-        onClick={() => onToolChange('text')}
-      />
-
-      {/* ── 7. Pen (Mark) ────────────────────────────────────────────── */}
-      <ToolBtn
-        active={tool === 'pen'}
-        icon={<IconPen />}
-        title="Bút đánh dấu – mark đoạn thẳng, góc (X)"
-        onClick={() => { onToolChange('pen'); onUnderDevelopment?.(); }}
-      />
-
-      <Separator />
-
-      {/* ── 8. Information ───────────────────────────────────────────── */}
-      <ToolBtn
-        active={tool === 'info'}
-        icon={<IconInfo />}
-        title="Thông tin – nhấp đối tượng để xem chi tiết (I)"
-        onClick={() => onToolChange('info')}
-      />
-
-      {/* ── 9. Custom Tool ───────────────────────────────────────────── */}
-      <ToolBtn
-        active={false}
-        icon={<IconCustom />}
-        title="Công cụ tùy chỉnh – chạy các dựng hình người dùng định nghĩa"
-        onClick={() => onUnderDevelopment?.()}
-      />
+      {TOOL_FAMILIES.map((family) => {
+        const rowCurrent = family.variations.find((v) => isActiveVariation(v, tool, arrow));
+        return (
+          <div key={family.id} className="contents">
+            {SEPARATOR_BEFORE.has(family.id) && (
+              <div className="border-t border-gray-300 my-1 mx-2 w-full" />
+            )}
+            <ToolRow
+              family={family}
+              current={rowCurrent}
+              active={!!rowCurrent}
+              open={openFamily === family.id}
+              onOpen={() => setOpenFamily(family.id)}
+              onClose={() => setOpenFamily(null)}
+              onSelect={choose}
+              onEmptyTray={() => onUnderDevelopment?.()}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

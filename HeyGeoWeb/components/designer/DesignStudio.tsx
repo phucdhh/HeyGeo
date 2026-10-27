@@ -30,6 +30,11 @@ import type {
   SliderPos,
 } from './designTypes';
 import { emptyData, TOOL_SHORTCUTS } from './designTypes';
+import {
+  cycleFamily,
+  cycleVariation,
+  type ArrowMode,
+} from './toolboxModel';
 
 import DesignMenuBar         from './DesignMenuBar';
 import DesignToolbar         from './DesignToolbar';
@@ -54,6 +59,8 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
   const fileInputRef  = useRef<HTMLInputElement | null>(null);
 
   const [tool,     setTool]     = useState<ToolMode>('selection');
+  /** What a drag does while `tool === 'selection'`; other tools ignore it. */
+  const [arrow,    setArrow]    = useState<ArrowMode>('translate');
   const [isDirty,  setIsDirty]  = useState(false);
   const [showAxis, setShowAxis] = useState(initialData?.axis ?? false);
   const [showGrid, setShowGrid] = useState(initialData?.grid ?? false);
@@ -137,9 +144,17 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
   }
 
   // ─── Tool changes ─────────────────────────────────────────────────────────
-  function handleToolChange(mode: ToolMode) {
+  function handleToolChange(mode: ToolMode, arrowMode?: ArrowMode) {
     setTool(mode);
+    if (arrowMode) setArrow(arrowMode);
   }
+
+  // The keydown listener below is installed once, so it reads the toolbox
+  // position from refs rather than from the state it first closed over.
+  const toolRef  = useRef(tool);
+  const arrowRef = useRef(arrow);
+  useEffect(() => { toolRef.current = tool; }, [tool]);
+  useEffect(() => { arrowRef.current = arrow; }, [arrow]);
 
   // ─── Dirty flag ───────────────────────────────────────────────────────────
   const handleDirty = useCallback(() => {
@@ -169,6 +184,19 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         if (e.key === '=') { e.preventDefault(); canvasRef.current?.zoomIn(); return; }
         if (e.key === '-') { e.preventDefault(); canvasRef.current?.zoomOut(); return; }
         if (e.key === '0') { e.preventDefault(); canvasRef.current?.zoomFit(); return; }
+        return;
+      }
+      // Shift+arrow is the GSP toolbox keyboard: Left/Right changes the
+      // variation of the current tool, Up/Down moves through the toolbox.
+      if (e.shiftKey && e.key.startsWith('Arrow')) {
+        const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+        const next = e.key === 'ArrowLeft' || e.key === 'ArrowRight'
+          ? cycleVariation(toolRef.current, arrowRef.current, dir)
+          : cycleFamily(toolRef.current, arrowRef.current, dir);
+        if (next) {
+          e.preventDefault();
+          handleToolChange(next.tool, next.arrow);
+        }
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -369,7 +397,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
       {/* ── Main area: toolbar | canvas | properties ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left toolbar */}
-        <DesignToolbar tool={tool} onToolChange={handleToolChange} onUnderDevelopment={notifyUnderDev} />
+        <DesignToolbar tool={tool} arrow={arrow} onToolChange={handleToolChange} onUnderDevelopment={notifyUnderDev} />
 
         {/* Canvas – fills all remaining space */}
         <DesignCanvas
@@ -394,6 +422,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
       {/* ── Status bar ── */}
       <DesignStatusBar
           tool={tool}
+          arrow={arrow}
           cursor={cursor}
           elementCount={elementCount}
           selectedCount={selected.length}
