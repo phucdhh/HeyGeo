@@ -59,6 +59,41 @@ function axis(o: Any): [Any, Any] | null {
   return o?.point1 && o?.point2 ? [o.point1, o.point2] : null;
 }
 
+// ─── Arrow dragging ───────────────────────────────────────────────────────────
+
+/**
+ * The map a rotate or dilate arrow drag applies to the selection. The pointer
+ * travelled from `start` to `pointer` around `center`, and the objects follow it
+ * rigidly: rotate keeps the distance to the centre, dilate keeps the direction.
+ *
+ * This is the one place the arrow maths lives, and it is pure — the drag is
+ * measured from the positions frozen when the pointer went down, because the
+ * board has already moved the grabbed object by the time the drag is handled.
+ */
+export function arrowDragMap(
+  mode: 'rotate' | 'dilate',
+  center: [number, number],
+  start: [number, number],
+  pointer: [number, number],
+): (x: number, y: number) => [number, number] {
+  const [cx, cy] = center;
+  const dx0 = start[0] - cx, dy0 = start[1] - cy;
+  const dx1 = pointer[0] - cx, dy1 = pointer[1] - cy;
+
+  if (mode === 'rotate') {
+    const d = Math.atan2(dy1, dx1) - Math.atan2(dy0, dx0);
+    const cos = Math.cos(d);
+    const sin = Math.sin(d);
+    return (x, y) => {
+      const ux = x - cx, uy = y - cy;
+      return [cx + ux * cos - uy * sin, cy + ux * sin + uy * cos];
+    };
+  }
+  const r0 = Math.hypot(dx0, dy0);
+  const k = r0 > 1e-9 ? Math.hypot(dx1, dy1) / r0 : 1;
+  return (x, y) => [cx + (x - cx) * k, cy + (y - cy) * k];
+}
+
 /**
  * Where the image of `srcId` sits, as closures JSXGraph can call every frame.
  * A missing or broken partner yields the source position, so a half-loaded

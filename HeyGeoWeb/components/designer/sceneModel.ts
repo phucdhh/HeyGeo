@@ -283,6 +283,34 @@ function liveMap(board: LiveBoard, made: Map<string, unknown>): Record<string, u
 // ─── Live geometry → document ─────────────────────────────────────────────────
 
 /**
+ * The points a selection is made of. A line, circle or polygon has no geometry
+ * of its own: moving its defining points moves the object, which is what both
+ * the Transform menu and the rotate/dilate arrows need to know.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function gatherSelectionPoints(sel: any[]): any[] {
+  const POINT_ELTS = ['point', 'glider', 'midpoint', 'intersection', 'slider'];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const out = new Map<string, any>();
+  for (const o of sel) {
+    if (POINT_ELTS.includes(o.elType)) {
+      out.set(o.id, o);
+    } else if (['segment', 'line', 'ray'].includes(o.elType)) {
+      if (o.point1) out.set(o.point1.id, o.point1);
+      if (o.point2) out.set(o.point2.id, o.point2);
+    } else if (o.elType === 'circle') {
+      const c = o.center ?? o.point1;
+      if (c) out.set(c.id, c);
+      if (o.point2) out.set(o.point2.id, o.point2);
+    } else if (o.elType === 'polygon') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const v of o.vertices ?? []) if (v && v.id) out.set(v.id, v);
+    }
+  }
+  return [...out.values()];
+}
+
+/**
  * Dragging moves the board object, not the document. Without this write-back a
  * dragged point is saved at its creation coordinates and undo snaps it straight
  * back there. Coordinates are rounded because a drag hands back float noise.

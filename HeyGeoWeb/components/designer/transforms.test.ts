@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  arrowDragMap,
   imageClosures,
   imageDeps,
   isImageSpec,
@@ -126,5 +127,54 @@ describe('imageClosures', () => {
 
   it('is an identity for an op it does not know', () => {
     expect(pos(board(), 'A', { op: 'shear' as ImageSpec['op'], of: [] })).toEqual([2, 1]);
+  });
+});
+
+/**
+ * The rotate and dilate arrows move the whole selection from one map, measured
+ * from where the pointer went down. Everything a drag gets wrong — compounding,
+ * stuttering across the half-turn, dividing by zero — shows up here.
+ */
+describe('arrowDragMap', () => {
+  it('turns the selection by the angle the pointer travelled', () => {
+    const [x, y] = arrowDragMap('rotate', [0, 0], [2, 0], [0, 2])(2, 0);
+    expect(x).toBeCloseTo(0);
+    expect(y).toBeCloseTo(2);
+  });
+
+  it('keeps every point at its distance from the marked centre', () => {
+    const map = arrowDragMap('rotate', [0, 0], [1, 0], [-0.5, 0.8660254]);
+    expect(Math.hypot(...map(3, 4))).toBeCloseTo(5);
+  });
+
+  it('leaves the marked centre where it was', () => {
+    expect(arrowDragMap('rotate', [1, 1], [3, 1], [1, 3])(1, 1)).toEqual([1, 1]);
+    expect(arrowDragMap('dilate', [1, 1], [3, 1], [5, 1])(1, 1)).toEqual([1, 1]);
+  });
+
+  it('does not stutter when the pointer crosses the half-turn line', () => {
+    const [x, y] = arrowDragMap('rotate', [0, 0], [-2, -0.001], [-2, 0.001])(3, 0);
+    expect(x).toBeCloseTo(3);
+    expect(y).toBeCloseTo(0);
+  });
+
+  it('is the identity while the pointer is where it started', () => {
+    const [x, y] = arrowDragMap('rotate', [2, 5], [7, 5], [7, 5])(4, 9);
+    expect(x).toBeCloseTo(4);
+    expect(y).toBeCloseTo(9);
+  });
+
+  it('scales by the ratio of the two pointer distances', () => {
+    expect(arrowDragMap('dilate', [0, 0], [2, 0], [5, 0])(2, 2)).toEqual([5, 5]);
+    expect(arrowDragMap('dilate', [1, 1], [5, 1], [2, 1])(9, 1)).toEqual([3, 1]);
+  });
+
+  it('takes the distance from the centre, not the direction of travel', () => {
+    // pointer moved a quarter turn at the same radius: nothing grows
+    expect(arrowDragMap('dilate', [0, 0], [2, 0], [0, 2])(4, 0)).toEqual([4, 0]);
+  });
+
+  it('refuses to divide by zero when the grab is on the centre', () => {
+    expect(arrowDragMap('dilate', [0, 0], [0, 0], [3, 4])(1, 1)).toEqual([1, 1]);
   });
 });

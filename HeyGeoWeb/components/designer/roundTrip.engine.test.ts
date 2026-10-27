@@ -15,7 +15,8 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { applyScene, syncPositions, takeScene } from './sceneModel';
+import { applyScene, coordParents, gatherSelectionPoints, syncPositions, takeScene } from './sceneModel';
+import { arrowDragMap } from './transforms';
 import type { HeyGeoElement } from './designTypes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -348,5 +349,90 @@ describe('a document exported from the desktop app', () => {
 
     expect(String(b.objects.mea0.plaintext)).toContain('= 1.50');
     expect(String(b.objects.mea1.plaintext)).toContain('(1.50; 0.50)');
+  });
+});
+
+/**
+ * P1.4 — what the rotate and dilate arrows do to a document.
+ *
+ * The arrows freeze the free points of the selection when the pointer goes down,
+ * move those through one map every frame and let JSXGraph recompute everything
+ * built on them. This is the part of the drag that reaches the saved file: which
+ * points get frozen, and whether the turned construction is what reloads.
+ */
+describe('an arrow drag on the selection', () => {
+  type Frozen = { id: string; x: number; y: number };
+
+  /** The points the canvas would freeze, exactly as beginArrowDrag collects them. */
+  const freeze = (b: any, elements: HeyGeoElement[], sel: any[]): Frozen[] => {
+    const free = new Set(
+      elements.filter((e) => coordParents(e) !== null).map((e) => e.id),
+    );
+    return gatherSelectionPoints(sel)
+      .filter((p: any) => free.has(p.id))
+      .map((p: any) => ({ id: p.id, x: p.X(), y: p.Y() }));
+  };
+
+  const drag = (b: any, base: Frozen[], map: (x: number, y: number) => [number, number]) => {
+    for (const p of base) b.objects[p.id].moveTo(map(p.x, p.y));
+    b.update();
+  };
+
+  it('freezes the free points of a selection, not the ones built on them', () => {
+    const b = newBoard();
+    const elements = load(b, kitchenSink()).elements;
+    b.update();
+    // the line through A and B: A and B move, the midpoint M follows on its own
+    expect(freeze(b, elements, [b.objects.mirror, b.objects.M]).map((p) => p.id).sort())
+      .toEqual(['A', 'B']);
+  });
+
+  it('turns the selection about the marked centre and saves the turn', () => {
+    const b = newBoard();
+    const elements = load(b, kitchenSink()).elements;
+    b.update();
+    const A0 = { x: b.objects.A.X(), y: b.objects.A.Y() };
+    const len0 = Math.hypot(b.objects.B.X() - A0.x, b.objects.B.Y() - A0.y);
+    const base = freeze(b, elements, [b.objects.mirror]);
+
+    // pointer travelled a quarter turn counter-clockwise about the origin
+    drag(b, base, arrowDragMap('rotate', [0, 0], [3, 0], [0, 3]));
+
+    expect(b.objects.A.X()).toBeCloseTo(-A0.y);
+    expect(b.objects.A.Y()).toBeCloseTo(A0.x);
+    expect(Math.hypot(b.objects.B.X() - b.objects.A.X(), b.objects.B.Y() - b.objects.A.Y()))
+      .toBeCloseTo(len0);
+    // the midpoint was never touched, and is still the midpoint
+    expect(b.objects.M.X()).toBeCloseTo((b.objects.A.X() + b.objects.B.X()) / 2);
+
+    expect(syncPositions(elements, b)).toBe(true);
+    const after = drawing(b);
+    const reloaded = newBoard();
+    load(reloaded, JSON.parse(JSON.stringify(elements)));
+    reloaded.update();
+    expect(drawing(reloaded)).toEqual(after);
+  });
+
+  it('scales the selection away from the centre and keeps the ratio on reload', () => {
+    const b = newBoard();
+    const elements = load(b, kitchenSink()).elements;
+    b.update();
+    const A0 = { x: b.objects.A.X(), y: b.objects.A.Y() };
+    const base = freeze(b, elements, [b.objects.sAB]);
+
+    // pointer moved from distance 1 to distance 3: k = 3
+    drag(b, base, arrowDragMap('dilate', [0, 0], [1, 0], [3, 0]));
+
+    expect(b.objects.A.X()).toBeCloseTo(3 * A0.x);
+    expect(b.objects.A.Y()).toBeCloseTo(3 * A0.y);
+    const direction0 = Math.atan2(A0.y, A0.x);
+    expect(Math.atan2(b.objects.A.Y(), b.objects.A.X())).toBeCloseTo(direction0);
+
+    expect(syncPositions(elements, b)).toBe(true);
+    const reloaded = newBoard();
+    load(reloaded, JSON.parse(JSON.stringify(elements)));
+    reloaded.update();
+    expect(reloaded.objects.A.X()).toBeCloseTo(b.objects.A.X());
+    expect(reloaded.objects.A.Y()).toBeCloseTo(b.objects.A.Y());
   });
 });

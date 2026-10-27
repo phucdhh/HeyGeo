@@ -403,6 +403,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         <DesignCanvas
           ref={canvasRef}
           tool={tool}
+          arrow={arrow}
           initialData={initialData}
           onCursorMove={setCursor}
           onSelectionChange={handleSelectionChange}

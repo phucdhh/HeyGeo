@@ -21,10 +21,12 @@ import type {
 import { emptyData } from './designTypes';
 import { createElement } from './elementRegistry';
 import { anchorClosures, type AnchorSpec, type MeasureSpec } from './measurement';
-import { imageClosures, type ImageSpec } from './transforms';
+import { arrowDragMap, imageClosures, type ImageSpec } from './transforms';
 import {
   applyScene,
   clearHistory,
+  coordParents,
+  gatherSelectionPoints,
   planScene,
   pushCapped,
   setSceneChrome,
@@ -33,6 +35,7 @@ import {
   withDependents,
   type SceneSnapshot,
 } from './sceneModel';
+import type { ArrowMode } from './toolboxModel';
 
 // ─── JSXGraph accessor (engine global, loaded from /vendor by lib/jsxgraph;
 //     extends the global declared in JSXGraphViewer) ────────────────────────
@@ -316,6 +319,9 @@ type SelDecoration =
   | { kind: 'circle';  cx: number; cy: number; r: number }
   | { kind: 'polygon'; points: string };
 
+/** The marked centre in screen pixels; `key` is what the 60 fps loop compares. */
+type CenterMark = { key: string; sx: number; sy: number };
+
 // Compute two far screen-space points that define the direction of a JSXGraph
 // line element whose point1/point2 may be unreliable (parallel/perpendicular/bisector).
 // Uses the element's stdform: stdform[0] + stdform[1]*x + stdform[2]*y = 0 (user coords).
@@ -428,6 +434,8 @@ function toSelectedInfo(obj: any): SelectedElementInfo {
 // ─── Props & Ref ──────────────────────────────────────────────────────────────
 interface Props {
   tool: ToolMode;
+  /** While `tool === 'selection'`, this decides what a drag does. */
+  arrow: ArrowMode;
   initialData?: HeyGeoData | null;
   onCursorMove: (c: CursorCoords) => void;
   onSelectionChange: (els: SelectedElementInfo[]) => void;
@@ -438,7 +446,7 @@ interface Props {
 }
 
 const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
-  { tool, initialData, onCursorMove, onSelectionChange, onDirty, onOpenProperties, onOpenSliderConfig, onNotify },
+  { tool, arrow, initialData, onCursorMove, onSelectionChange, onDirty, onOpenProperties, onOpenSliderConfig, onNotify },
   ref,
 ) {
   const BOARD_ID = 'heygeo-design-board';
@@ -488,6 +496,32 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
   // Tool interaction state
   const toolRef     = useRef<ToolMode>(tool);
+  const arrowRef    = useRef<ArrowMode>(arrow);
+
+  // ─── Rotate / dilate arrow dragging ────────────────────────────────────────
+  // Those two arrows select exactly like the translate arrow; only a drag
+  // differs — it turns or scales the whole selection about the marked centre.
+  // Everything is measured from the drag-start snapshot, never incrementally,
+  // so the frame JSXGraph spends moving the grabbed object is overwritten
+  // instead of compounding.
+  interface ArrowDrag {
+    mode:   'rotate' | 'dilate';
+    center: [number, number];
+    start:  [number, number];
+    base:   { id: string; x: number; y: number }[];
+  }
+  const arrowDragRef = useRef<ArrowDrag | null>(null);
+  /** Pointer position when the arrow drag began, in user coords. */
+  const arrowStartRef = useRef<[number, number] | null>(null);
+  /** Latest pointer event anywhere in the window, used to read the pointer. */
+  const pointerRef = useRef<PointerEvent | null>(null);
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => { pointerRef.current = e; };
+    window.addEventListener('pointermove', onMove, true);
+    return () => window.removeEventListener('pointermove', onMove, true);
+  }, []);
+
   const pendingRef  = useRef<{
     phase: 'idle' | 'pt2' | 'pt3' | 'polygon' | 'slider_pt2';
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -512,6 +546,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   const objectClickedRef = useRef(false);
   // GSP-style selection decorations rendered as SVG overlay
   const [selDecorations, setSelDecorations] = useState<SelDecoration[]>([]);
+  // The marked centre, left on the page as an open circle like Sketchpad does
+  const [centerMark, setCenterMark] = useState<CenterMark | null>(null);
+  const centerMarkRef = useRef<CenterMark | null>(null);
 
   // Keep toolRef in sync with prop
   useEffect(() => {
@@ -535,6 +572,13 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool]);
 
+  // Switching the arrow mode mid-drag must not leave a frozen transform behind.
+  useEffect(() => {
+    arrowRef.current = arrow;
+    arrowDragRef.current = null;
+    arrowStartRef.current = null;
+  }, [arrow]);
+
   // ─── Snapshot helpers ─────────────────────────────────────────────────────
   /**
    * The document plus the board's live positions. A drag moves the geometry
@@ -550,6 +594,90 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function saveSnapshot() {
     pushCapped(undoStack.current, currentScene());
     redoStack.current = [];
+  }
+
+  // ─── Arrow dragging (rotate / dilate about the marked centre) ──────────────
+  /** Pointer position in user coords, from the tracked pointer events. */
+  function pointerUserCoords(): [number, number] | null {
+    const board = boardRef.current;
+    const container = board?.containerObj as HTMLElement | undefined;
+    const evt = pointerRef.current;
+    if (!board || !container || !evt) return null;
+    const c = eventToCoords(board, container, evt);
+    return [c.x, c.y];
+  }
+
+  /**
+   * Freeze what the drag works from: the centre, where the pointer was grabbed
+   * and where every free point of the selection started. Null when the drag
+   * cannot be a transform, which leaves it a plain translate.
+   */
+  function beginArrowDrag(): ArrowDrag | null {
+    const board = boardRef.current;
+    const mode = arrowRef.current;
+    if (!board || mode === 'translate') return null;
+
+    const cInfo = marksRef.current.center;
+    const centerPt = cInfo ? board.objects[cInfo.id] : null;
+    if (!centerPt) {
+      onNotifyRef.current?.(
+        mode === 'rotate'
+          ? 'Chưa đánh dấu tâm quay. Nhấp đúp vào một điểm để đánh dấu tâm.'
+          : 'Chưa đánh dấu tâm co giãn. Nhấp đúp vào một điểm để đánh dấu tâm.',
+      );
+      return null;
+    }
+    const start = arrowStartRef.current;
+    if (!start) return null;
+
+    // Only points the document places by coordinates can be moved; a midpoint or
+    // an intersection follows whatever it was built from.
+    const freeIds = new Set(
+      elementsRef.current.filter((el) => coordParents(el) !== null).map((el) => el.id),
+    );
+    const base = gatherSelectionPoints(selectedRef.current)
+      .filter((p) => freeIds.has(p.id))
+      .map((p) => ({ id: p.id, x: p.X(), y: p.Y() }));
+    if (base.length === 0) {
+      onNotifyRef.current?.('Vùng chọn không có điểm tự do nào để biến đổi.');
+      return null;
+    }
+    return { mode, center: [centerPt.X(), centerPt.Y()], start, base };
+  }
+
+  /** Move the frozen points so the pointer sits at the angle / ratio it reached. */
+  function applyArrowDrag(): void {
+    const board = boardRef.current;
+    if (!board) return;
+    if (!arrowDragRef.current) {
+      arrowDragRef.current = beginArrowDrag();
+      if (!arrowDragRef.current) return;
+    }
+    const { mode, center, start, base } = arrowDragRef.current;
+    const p = pointerUserCoords();
+    if (!p) return;
+
+    const map = arrowDragMap(mode, center, start, p);
+    for (const b of base) {
+      const obj = board.objects[b.id];
+      if (typeof obj?.moveTo === 'function') obj.moveTo(map(b.x, b.y));
+    }
+    board.update();
+    setSelDecorations(computeDecorations(selectedRef.current, board));
+  }
+
+  /** Called from an element's 'down': remembers the grab point for a later drag. */
+  function noteArrowDragStart(evt: MouseEvent): void {
+    arrowDragRef.current = null;
+    arrowStartRef.current = null;
+    if (arrowRef.current === 'translate' || toolRef.current !== 'selection') return;
+    const board = boardRef.current;
+    const container = board?.containerObj as HTMLElement | undefined;
+    if (!board || !container) return;
+    // GSP turns the selection so that whatever is under the cursor follows it,
+    // so the drag is measured from the pointer, not from the object's own point.
+    const c = eventToCoords(board, container, evt);
+    arrowStartRef.current = [c.x, c.y];
   }
 
   // Elements dropped while loading used to disappear without a trace, which made
@@ -816,15 +944,33 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   const rubberBandRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   useEffect(() => { rubberBandRef.current = rubberBand; }, [rubberBand]);
 
-  // ─── Selection decoration interval loop ─────────────────────────────────
+  // ─── Decoration interval loop ─────────────────────────────────────────────
   // Runs at ~60 fps to keep SVG decorators in sync as points are dragged / board panned.
   useEffect(() => {
     const id = setInterval(() => {
-      if (selectedRef.current.length === 0 || !boardRef.current) return;
-      setSelDecorations(computeDecorations(selectedRef.current, boardRef.current));
+      const board = boardRef.current;
+      if (!board) return;
+      if (selectedRef.current.length > 0) {
+        setSelDecorations(computeDecorations(selectedRef.current, board));
+      }
+      const next = readCenterMark(board);
+      if (next?.key !== centerMarkRef.current?.key) {
+        centerMarkRef.current = next;
+        setCenterMark(next);
+      }
     }, 16);
     return () => clearInterval(id);
   }, []);
+
+  /** Screen position of the marked centre, refreshed by the decoration loop. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function readCenterMark(board: any): CenterMark | null {
+    const cInfo = marksRef.current.center;
+    if (!cInfo) return null;
+    const sc = board.objects[cInfo.id]?.coords?.scrCoords;
+    if (!sc) return null;
+    return { key: `${cInfo.id}:${Math.round(sc[1])}:${Math.round(sc[2])}`, sx: sc[1], sy: sc[2] };
+  }
 
   // ─── Attach board-level events (click on objects for selection/info) ──────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -856,6 +1002,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
             // Remember where the drag starts, but only spend an undo step on it
             // if the pointer actually moves something.
             dragBaseRef.current = currentScene();
+            noteArrowDragStart(evt);
             evt.stopPropagation?.();
           }
         });
@@ -867,6 +1014,17 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
             dragBaseRef.current = null;
           }
           if (toolRef.current !== 'selection') return;
+          if (arrowRef.current !== 'translate') {
+            // An arrow drag transforms the whole selection, so it must not
+            // collapse a multi-selection down to the object under the cursor.
+            if (!selectedRef.current.includes(obj)) {
+              selectedRef.current = [obj];
+              setSelDecorations(computeDecorations([obj], board));
+              onSelectionChange(selectedRef.current.map(toSelectedInfo));
+            }
+            applyArrowDrag();
+            return;
+          }
           if (selectedRef.current.length === 1 && selectedRef.current[0] === obj) return;
           selectedRef.current = [obj];
           setSelDecorations(computeDecorations([obj], board));
@@ -875,6 +1033,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         // ── drop: a moved object has to land back in the document ───────────
         obj.on('up', () => {
           dragBaseRef.current = null;
+          arrowDragRef.current = null;
+          arrowStartRef.current = null;
           if (toolRef.current !== 'selection') return;
           if (syncPositions(elementsRef.current, board)) {
             setSelDecorations(computeDecorations(selectedRef.current, board));
@@ -1581,28 +1741,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     }
 
     // 1. Gather all unique points that need to be transformed
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pointsMap = new Map<string, any>();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    sel.forEach((o: any) => {
-      if (POINT_ELTS.includes(o.elType)) {
-        pointsMap.set(o.id, o);
-      } else if (['segment', 'line', 'ray'].includes(o.elType)) {
-        if (o.point1) pointsMap.set(o.point1.id, o.point1);
-        if (o.point2) pointsMap.set(o.point2.id, o.point2);
-      } else if (o.elType === 'circle') {
-        const c = o.center ?? o.point1;
-        if (c) pointsMap.set(c.id, c);
-        if (o.point2) pointsMap.set(o.point2.id, o.point2);
-      } else if (o.elType === 'polygon') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (o.vertices ?? []).forEach((v: any) => {
-          if (v && v.id) pointsMap.set(v.id, v);
-        });
-      }
-    });
+    const basePoints = gatherSelectionPoints(sel);
 
-    if (pointsMap.size === 0) {
+    if (basePoints.length === 0) {
       onNotifyRef.current?.('Không tìm thấy đối tượng nào có thể biến hình.');
       return false;
     }
@@ -1615,7 +1756,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const newObjects: any[] = [];
 
-    pointsMap.forEach((origPt) => {
+    basePoints.forEach((origPt) => {
       const [fnX, fnY] = imageClosures(board, origPt.id, image);
       const newId = nextElId('pt');
       const baseName = origPt.name ? `${origPt.name}'` : '';
@@ -2723,6 +2864,20 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
               }
               return null;
             })}
+          </svg>
+        )}
+
+        {/* The marked centre: the point a rotate/dilate arrow turns around.
+            Sketchpad leaves an open circle on it so the page says what a drag
+            will pivot on before the drag happens. */}
+        {centerMark && (
+          <svg style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            pointerEvents: 'none', overflow: 'visible', zIndex: 7,
+          }}>
+            <circle cx={centerMark.sx} cy={centerMark.sy} r="8"
+              fill="none" stroke="#1e3c96" strokeWidth="1.2" strokeDasharray="3 2" />
           </svg>
         )}
 
