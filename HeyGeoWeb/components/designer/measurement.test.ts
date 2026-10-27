@@ -7,6 +7,7 @@ import {
   measureClosure,
   measureDeps,
   measureValue,
+  registerMeasure,
   type MeasureSpec,
 } from './measurement';
 
@@ -161,6 +162,67 @@ describe('measureCaption', () => {
     const broken = { X: () => { throw new Error('no layout'); }, Y: () => 0 };
     const closure = measureClosure(board({ A: broken, B: WORLD.B }), spec({ op: 'distance', args: ['A', 'B'] }));
     expect(closure()).toBe('…');
+  });
+});
+
+describe('the calculate measurement', () => {
+  it('adds the numbers two other captions display', () => {
+    const b1 = b();
+    registerMeasure(b1, 'AB', { op: 'distance', args: ['A', 'B'], precision: 2 });
+    registerMeasure(b1, 's', { op: 'length', args: ['s'], precision: 2 });
+    expect(measureValue(b1, spec({ op: 'calculate', args: ['AB', 's'], expr: '#0+#1' }))).toBe(9);
+  });
+
+  it('reads the centimetres an operand shows, not the board units it was drawn in', () => {
+    const b1 = b();
+    // AB is 5 board units, which this document displays as 10 cm — and a
+    // calculation of it has to use the 10 the reader sees.
+    registerMeasure(b1, 'AB', { op: 'distance', args: ['A', 'B'], scale: 2 });
+    expect(measureValue(b1, spec({ op: 'calculate', args: ['AB'], expr: '#0*3' }))).toBe(30);
+  });
+
+  it('calculates with a slider as happily as with a measurement', () => {
+    expect(measureValue(b(), spec({ op: 'calculate', args: ['sl'], expr: '#0^2' }))).toBe(49);
+  });
+
+  it('writes the expression as the caption label, the way Sketchpad does', () => {
+    const b1 = b();
+    registerMeasure(b1, 'AB', { op: 'distance', args: ['A', 'B'] });
+    registerMeasure(b1, 's', { op: 'length', args: ['s'] });
+    expect(measureCaption(b1, spec({ op: 'calculate', args: ['AB', 's'], expr: '#0/#1', label: 'AB/s' })))
+      .toBe('AB/s = 1.25');
+  });
+
+  it('keeps recalculating while the geometry moves', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const movable: any = { X: () => 0, Y: () => 0 };
+    const b1 = board({ A: movable, B: WORLD.B });
+    registerMeasure(b1, 'AB', { op: 'distance', args: ['A', 'B'] });
+    const closure = measureClosure(b1, spec({ op: 'calculate', args: ['AB'], expr: '#0*2', label: 'p' }));
+    expect(closure()).toBe('p = 10.00');
+    movable.X = () => 1;
+    movable.Y = () => 0;
+    expect(closure()).toBe('p = 8.94');
+  });
+
+  it('has no number when an operand has none', () => {
+    const b1 = b();
+    registerMeasure(b1, 'AB', { op: 'distance', args: ['A', 'ghost'] });
+    expect(measureCaption(b1, spec({ op: 'calculate', args: ['AB'], expr: '#0+1', label: 'C1' }))).toBe('…');
+    expect(measureCaption(b1, spec({ op: 'calculate', args: ['gone'], expr: '#0+1', label: 'C1' }))).toBe('…');
+  });
+
+  it('stops at a missing operand instead of recursing forever', () => {
+    const b1 = b();
+    // C2 is half of C1 and C1 is twice C2: a document should not be able to say
+    // this, but saying it must not hang the page either.
+    registerMeasure(b1, 'C1', { op: 'calculate', args: ['C2'], expr: '2*#0' });
+    registerMeasure(b1, 'C2', { op: 'calculate', args: ['C1'], expr: '#0/2' });
+    expect(measureValue(b1, spec({ op: 'calculate', args: ['C1'], expr: '#0+1' }))).toBeNull();
+  });
+
+  it('is the only op that needs an expression', () => {
+    expect(measureValue(b(), spec({ op: 'calculate', args: [], label: 'C1' }))).toBeNull();
   });
 });
 

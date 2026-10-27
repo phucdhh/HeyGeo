@@ -513,3 +513,66 @@ describe('the Display attributes the Context menu writes', () => {
     expect((r.elMap.A as any).visProp.trace).toBe(true);
   });
 });
+
+// A desktop calculation used to arrive as the number the exporter had already
+// worked out. With a declarative op it arrives as the expression, so the board
+// has to answer the same number — and keep answering it as the geometry moves.
+describe('a calculation over the real board', () => {
+  const shown = (obj: unknown): string => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t: any = obj;
+    return String(t?.plaintext ?? '');
+  };
+
+  const elements = [
+    spec({ type: 'point', id: 'A', parents: [1, 1] }),
+    spec({ type: 'point', id: 'B', parents: [4, 5] }),
+    spec({ type: 'segment', id: 'seg', parents: ['A', 'B'] }),
+    spec({
+      type: 'text', id: 'm1', parents: [0, 6, 'AB'],
+      attrs: { measure: { op: 'length', args: ['seg'], label: 'AB', precision: 2 } },
+    }),
+    spec({
+      type: 'text', id: 'c1', parents: [0, 7, 'AB/2'],
+      attrs: {
+        measure: {
+          op: 'calculate', args: ['m1'], expr: '#0/2', label: 'AB/2', precision: 2,
+        },
+      },
+    }),
+  ];
+
+  it('reads the number its operands display', () => {
+    const b = newBoard();
+    const r = loader(b, elements);
+    expect(r.errors).toEqual([]);
+    b.update();
+    expect(shown(r.elMap.m1)).toBe('AB = 5.00');
+    expect(shown(r.elMap.c1)).toBe('AB/2 = 2.50');
+  });
+
+  it('recalculates when a point it depends on moves', () => {
+    const b = newBoard();
+    const r = loader(b, elements);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (r.elMap.B as any).moveTo([1, 1]);
+    b.update();
+    expect(shown(r.elMap.m1)).toBe('AB = 0.00');
+    expect(shown(r.elMap.c1)).toBe('AB/2 = 0.00');
+  });
+
+  it('refuses a calculation that asks for an operand the document never listed', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [1, 1] }),
+      spec({ type: 'point', id: 'B', parents: [2, 1] }),
+      spec({
+        type: 'text', id: 'c1', parents: [0, 3, 'C1'],
+        attrs: { measure: { op: 'calculate', args: ['A', 'B'], expr: '#0+#5', label: 'C1' } },
+      }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    expect(shown(r.elMap.c1)).toBe('…');
+  });
+});

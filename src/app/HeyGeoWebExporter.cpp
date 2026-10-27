@@ -398,6 +398,193 @@ static QJsonObject measureSpecFor(G_ref *ref,
 }
 
 // --------------------------------------------------------------------------
+// coordMeasureSpec -- the attrs.measure of a measure taken against the
+//   document coordinate system.  Its frame is named by the coordsys's own
+//   origin and unit points, so the web recomputes it on every drag.
+// --------------------------------------------------------------------------
+static QJsonObject coordMeasureSpec(G_ref *ref,
+                                    const HeyGeoDocument *doc,
+                                    const QMap<G_ref*, QString> &idMap)
+{
+    const int descType = ref->getDescendType();
+    if (descType != G_COORDINATES_MEASURE && descType != G_ABSCISSA_MEASURE &&
+        descType != G_ORDINATE_MEASURE    && descType != G_COORD_DISTANCE_MEASURE)
+        return QJsonObject();
+
+    const G_refs &par = ref->getParentsConst();
+    if (par.empty()) return QJsonObject();
+    auto objId = [&](G_ref *r) -> QString { return r ? idMap.value(r, QString()) : QString(); };
+
+    // Find csRef in this measure's parents first (new files),
+    // then fall back to a document scan (for old files).
+    G_ref *csRef = nullptr;
+    for (int i = 0; i < (int)par.size(); ++i) {
+        if (par[i] && par[i]->getType() == G_COORDSYS && !par[i]->getDeleted()) {
+            csRef = par[i]; break;
+        }
+    }
+    if (!csRef) {
+        for (int i = 0; i < doc->getNumRefs(); ++i) {
+            G_ref *r = doc->getRef(i);
+            if (r && r->getType() == G_COORDSYS && !r->getDeleted()) {
+                csRef = r; break;
+            }
+        }
+    }
+    if (!csRef) return QJsonObject();
+
+    // O and U come from the coordsys's own parents, so the descriptor names
+    // them and the web recomputes the frame on every drag.
+    const G_refs &csPar = csRef->getParentsConst();
+    QString oId = (csPar.size() >= 1) ? objId(csPar[0]) : QString();
+    QString uId = (csPar.size() >= 2) ? objId(csPar[1]) : QString();
+
+    // par[0] is always the first measured point.
+    QString p0Id   = objId(par[0]);
+    QString label0 = par[0]->getLabel().getText();
+
+    // Second point (coord distance only): first G_POINT in par[1..n].
+    QString p1Id, label1;
+    if (descType == G_COORD_DISTANCE_MEASURE) {
+        for (int i = 1; i < (int)par.size(); ++i) {
+            if (par[i] && par[i]->getType() == G_POINT) {
+                p1Id   = objId(par[i]);
+                label1 = par[i]->getLabel().getText();
+                break;
+            }
+        }
+    }
+
+    if (oId.isEmpty() || uId.isEmpty() || p0Id.isEmpty()) return QJsonObject();
+
+    const QStringList frame{ oId, uId, p0Id };
+    G_valueObject *valObj = dynamic_cast<G_valueObject *>(ref->getObject());
+    const QString label = measureLabelText(valObj);
+    switch (descType) {
+    case G_ABSCISSA_MEASURE:
+        return measureSpec(QStringLiteral("relativeAbscissa"), frame,
+            QStringLiteral("x<sub>%1</sub>").arg(label0));
+    case G_ORDINATE_MEASURE:
+        return measureSpec(QStringLiteral("relativeOrdinate"), frame,
+            QStringLiteral("y<sub>%1</sub>").arg(label0));
+    case G_COORDINATES_MEASURE:
+        return measureSpec(QStringLiteral("relativeCoordinates"), frame, label0);
+    case G_COORD_DISTANCE_MEASURE:
+        if (p1Id.isEmpty()) return QJsonObject();
+        return measureSpec(QStringLiteral("relativeDistance"),
+            QStringList{ oId, uId, p0Id, p1Id }, label0 + label1);
+    default:
+        return QJsonObject();
+    }
+}
+
+static QJsonObject measureSpecForAny(G_ref *ref,
+                                     const HeyGeoDocument *doc,
+                                     const QMap<G_ref*, QString> &idMap,
+                                     double cmF);
+
+// --------------------------------------------------------------------------
+// calcMeasureSpec -- attrs.measure for a G_CALCULATE: the formula as infix
+//   text, with #0, #1 … standing for the values its parents display.  The web
+//   evaluates that text with its own interpreter (HeyGeoWeb/components/
+//   designer/expression.ts), so what travels in the JSON is an expression, not
+//   a JavaScript body and not the number the desktop had already worked out.
+//   Anything the interpreter has no rule for -- a stacked radical, a unit
+//   symbol, a parent whose own caption is frozen -- returns empty, and the
+//   element keeps the static caption it used to get.
+// --------------------------------------------------------------------------
+static QJsonObject calcMeasureSpec(G_ref *ref,
+                                   const HeyGeoDocument *doc,
+                                   const QMap<G_ref*, QString> &idMap,
+                                   double cmF)
+{
+    G_calculateObject *calcObj = dynamic_cast<G_calculateObject *>(ref->getObject());
+    if (!calcObj) return QJsonObject();
+
+    const QString ugly = KFormula::toUgly(calcObj->getFormulaString());
+    if (ugly.isEmpty()) return QJsonObject();
+
+    const G_refs &par = ref->getParentsConst();
+    QStringList args;
+    QVector<QString> slot(par.size());   // parent -> its index in args
+    QString expr;
+
+    for (int i = 0; i < ugly.length(); ++i) {
+        const int code = ugly[i].unicode();
+        if (!IS_REFERENCE(code)) {
+            const QChar ch = ugly[i];
+            const bool arithmetic =
+                ch == QLatin1Char('.') || ch == QLatin1Char(',') ||
+                ch == QLatin1Char(' ')  || ch == QLatin1Char('+') ||
+                ch == QLatin1Char('-')  || ch == QLatin1Char('*') ||
+                ch == QLatin1Char('/')  || ch == QLatin1Char('^') ||
+                ch == QLatin1Char('(')  || ch == QLatin1Char(')') ||
+                ch == QLatin1Char('[')  || ch == QLatin1Char(']');
+            const bool name =
+                (ch >= QLatin1Char('a') && ch <= QLatin1Char('z')) ||
+                (ch >= QLatin1Char('A') && ch <= QLatin1Char('Z')) ||
+                (ch >= QLatin1Char('0') && ch <= QLatin1Char('9')) ||
+                ch == QChar(0x03c0);                    // π
+            if (!arithmetic && !name) return QJsonObject();
+            expr += ch;
+            continue;
+        }
+
+        const int idx = code - REFERENCE_ABOVE;
+        if (idx < 0 || idx >= (int)par.size() || !par[idx]) return QJsonObject();
+        if (slot[idx].isEmpty()) {
+            const int ptype = par[idx]->getType();
+            if (ptype != G_PARAMETER && !(ptype & (G_MEASURE | G_CALCULATE)))
+                return QJsonObject();
+            // A parent the web cannot recompute has no number to lend.
+            if (ptype != G_PARAMETER &&
+                measureSpecForAny(par[idx], doc, idMap, cmF).isEmpty())
+                return QJsonObject();
+            const QString id = idMap.value(par[idx], QString());
+            if (id.isEmpty()) return QJsonObject();
+            args << id;
+            slot[idx] = QString::number(args.size() - 1);
+        }
+        expr += QLatin1Char('#') + slot[idx];
+    }
+    if (expr.isEmpty()) return QJsonObject();
+
+    // The suffix G_calculateObject::update() puts after the number comes from
+    // the same dimensional analysis, so the web caption reads alike.
+    QString unit;
+    const UnitType ut = calcObj->getLhs()->evaluateUnit();
+    if      (ut.L == 1 && ut.A == 0) unit = QStringLiteral(" cm");
+    else if (ut.L == 2 && ut.A == 0) unit = QStringLiteral(" cm\u00b2");
+    else if (ut.L == 0 && ut.A == 1) unit = QStringLiteral("\u00b0");
+
+    QJsonObject spec = measureSpec(QStringLiteral("calculate"), args,
+                                   expandCalcLabel(calcObj, par), unit);
+    spec[QStringLiteral("expr")] = expr;
+    return spec;
+}
+
+// --------------------------------------------------------------------------
+// measureSpecForAny -- the attrs.measure a value ref would be exported with,
+//   whatever its kind.  Both the element itself and a calculation that reads
+//   it ask this, so a caption is live in the browser for exactly the measures
+//   the web can recompute.
+// --------------------------------------------------------------------------
+static QJsonObject measureSpecForAny(G_ref *ref,
+                                     const HeyGeoDocument *doc,
+                                     const QMap<G_ref*, QString> &idMap,
+                                     double cmF)
+{
+    if (!ref || !idMap.contains(ref)) return QJsonObject();
+    if (ref->getType() == G_MEASURE) {
+        QJsonObject coord = coordMeasureSpec(ref, doc, idMap);
+        return !coord.isEmpty() ? coord : measureSpecFor(ref, idMap, cmF);
+    }
+    if (ref->getType() == G_CALCULATE)
+        return calcMeasureSpec(ref, doc, idMap, cmF);
+    return QJsonObject();
+}
+
+// --------------------------------------------------------------------------
 // appendElements -- convert one HeyGeo ref to JSXGraph element(s)
 // --------------------------------------------------------------------------
 
@@ -407,7 +594,6 @@ void HeyGeoWebExporter::appendElements(G_ref *ref,
                                         const HeyGeoViewCtx &ctx,
                                         QJsonArray &elements)
 {
-    Q_UNUSED(doc);
     if (!idMap.contains(ref)) return;
 
     const QString myId = idMap[ref];
@@ -1107,92 +1293,9 @@ void HeyGeoWebExporter::appendElements(G_ref *ref,
         el[QStringLiteral("type")] = QStringLiteral("text");
         el[QStringLiteral("id")]   = myId;
 
-        int descType = ref->getDescendType();
-        QJsonObject measure;
-
-        if (ref->getType() == G_MEASURE) {
-            // ── Coord measures: relative to the document coordinate system ────
-            bool isCoordMeasure = (descType == G_COORDINATES_MEASURE ||
-                                   descType == G_ABSCISSA_MEASURE    ||
-                                   descType == G_ORDINATE_MEASURE    ||
-                                   descType == G_COORD_DISTANCE_MEASURE);
-
-            if (isCoordMeasure && !par.empty()) {
-                // Find csRef in this measure's parents first (new files),
-                // then fall back to a document scan (for old files).
-                G_ref *csRef = nullptr;
-                for (int i = 0; i < (int)par.size(); ++i) {
-                    if (par[i] && par[i]->getType() == G_COORDSYS && !par[i]->getDeleted()) {
-                        csRef = par[i]; break;
-                    }
-                }
-                if (!csRef) {
-                    for (int i = 0; i < doc->getNumRefs(); ++i) {
-                        G_ref *r = doc->getRef(i);
-                        if (r && r->getType() == G_COORDSYS && !r->getDeleted()) {
-                            csRef = r; break;
-                        }
-                    }
-                }
-
-                if (csRef) {
-                    // O and U come from the coordsys's own parents, so the
-                    // descriptor names them and the web recomputes the frame on
-                    // every drag.
-                    const G_refs &csPar = csRef->getParentsConst();
-                    QString oId = (csPar.size() >= 1) ? pid(csPar[0], idMap) : QString();
-                    QString uId = (csPar.size() >= 2) ? pid(csPar[1], idMap) : QString();
-
-                    // par[0] is always the first measured point.
-                    QString p0Id   = pid(par[0], idMap);
-                    QString label0 = par[0]->getLabel().getText();
-
-                    // Second point (coord distance only): first G_POINT in par[1..n].
-                    QString p1Id, label1;
-                    if (descType == G_COORD_DISTANCE_MEASURE) {
-                        for (int i = 1; i < (int)par.size(); ++i) {
-                            if (par[i] && par[i]->getType() == G_POINT) {
-                                p1Id   = pid(par[i], idMap);
-                                label1 = par[i]->getLabel().getText();
-                                break;
-                            }
-                        }
-                    }
-
-                    bool hasDynamic = !oId.isEmpty() && !uId.isEmpty() && !p0Id.isEmpty();
-                    const QStringList frame{ oId, uId, p0Id };
-                    if (hasDynamic) {
-                        switch (descType) {
-                        case G_ABSCISSA_MEASURE:
-                            measure = measureSpec(QStringLiteral("relativeAbscissa"), frame,
-                                QStringLiteral("x<sub>%1</sub>").arg(label0));
-                            break;
-                        case G_ORDINATE_MEASURE:
-                            measure = measureSpec(QStringLiteral("relativeOrdinate"), frame,
-                                QStringLiteral("y<sub>%1</sub>").arg(label0));
-                            break;
-                        case G_COORDINATES_MEASURE:
-                            measure = measureSpec(QStringLiteral("relativeCoordinates"),
-                                                  frame, label0);
-                            break;
-                        case G_COORD_DISTANCE_MEASURE:
-                            if (!p1Id.isEmpty())
-                                measure = measureSpec(QStringLiteral("relativeDistance"),
-                                    QStringList{ oId, uId, p0Id, p1Id },
-                                    label0 + label1);
-                            break;
-                        default: break;
-                        }
-                    }
-                }
-            }
-
-            // ── Non-coord (or coord with no coordsys found): its own descriptor ──
-            if (measure.isEmpty())
-                measure = measureSpecFor(ref, idMap, cmF);
-        }
-        // A G_CALCULATE gets no descriptor: an arbitrary formula has no
-        // declarative op yet, so it exports as the caption the desktop shows.
+        // A live caption when the web can recompute this one: a measure reads
+        // the geometry, a calculation reads the numbers other captions show.
+        QJsonObject measure = measureSpecForAny(ref, doc, idMap, cmF);
 
         // ── Emit element ──────────────────────────────────────────────────────
         // Resolve text color from the ref's drawstyle (respects per-object
@@ -1214,11 +1317,18 @@ void HeyGeoWebExporter::appendElements(G_ref *ref,
             // 1 say where it sits and index 2 is only the label it leads with.
             caption = measure.value(QStringLiteral("label")).toString();
         } else if (ref->getType() == G_CALCULATE && valObj) {
-            QString formulaLabel =
+            // G_calculateObject::update() already put "formula = value" into the
+            // display text, so the expanded formula is only a prefix when the
+            // text has not got one yet.
+            const QString text = valObj->getDisplayText();
+            const QString formulaLabel =
                 expandCalcLabel(dynamic_cast<G_calculateObject *>(valObj), par);
-            caption = formulaLabel.isEmpty()
-                      ? valObj->getDisplayText()
-                      : formulaLabel + QStringLiteral(" = ") + valObj->getDisplayText();
+            if (formulaLabel.isEmpty() || text.startsWith(formulaLabel))
+                caption = text;
+            else
+                caption = text.isEmpty()
+                          ? formulaLabel
+                          : formulaLabel + QStringLiteral(" = ") + text;
         } else {
             caption = valObj && !valObj->getDisplayText().isEmpty()
                       ? valObj->getDisplayText() : ref->getLabel().getText();

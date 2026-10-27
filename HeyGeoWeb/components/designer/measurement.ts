@@ -15,6 +15,7 @@
  * board objects. It is the only place that knows how each measurement is
  * computed, so the desktop exporter can be pointed at the same descriptors.
  */
+import { evalExpression } from './expression';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -39,12 +40,18 @@ export type MeasureOp =
   | 'relativeAbscissa'    // args: [origin, unit, point]
   | 'relativeOrdinate'    // args: [origin, unit, point]
   | 'relativeDistance'    // args: [origin, unit, point, point]
+  | 'calculate'       // args: the measurements and sliders `expr` reads
   | 'value';          // args: [slider]
 
 export interface MeasureSpec {
   op: MeasureOp;
   /** Element ids the value is computed from. */
   args: string[];
+  /**
+   * The infix expression a `calculate` shows, with `#0`, `#1` … standing for
+   * the args, and nothing else — see expression.ts, which evaluates it.
+   */
+  expr?: string;
   /** Text before " = ". Omitted means the caption is the value alone. */
   label?: string;
   /** Decimals shown; matches the two or three the previous sources used. */
@@ -98,6 +105,48 @@ function live(board: Any, id: string): Any {
   return board?.objects?.[id];
 }
 
+// ─── What each board is measuring ────────────────────────────────────────────
+// A calculation reads the numbers other measurements display, and those numbers
+// come from *their* descriptors. The descriptors live in the document, so every
+// board keeps the ones it was built from here, keyed by element id.
+//
+// A descriptor change rebuilds the element — attrs.measure is part of its
+// construction key — so this map can never hold one the board is not using.
+const boardDescriptors = new WeakMap<object, Map<string, MeasureSpec>>();
+
+/** Remember a descriptor while its element lives on this board. */
+export function registerMeasure(board: Any, id: string, spec: MeasureSpec): void {
+  if (!board) return;
+  let byId = boardDescriptors.get(board);
+  if (!byId) { byId = new Map(); boardDescriptors.set(board, byId); }
+  byId.set(id, spec);
+}
+
+/** The descriptor a board element measures, when it measures anything. */
+export function descriptorOf(board: Any, id: string): MeasureSpec | null {
+  return boardDescriptors.get(board)?.get(id) ?? null;
+}
+
+/**
+ * The number `#i` stands for: what the referenced measurement displays,
+ * centimetres-per-unit and all, because that is the number the desktop's own
+ * formula evaluator pulled out of its parent. A slider is its value; anything
+ * with no descriptor the web can recompute has no number to offer.
+ *
+ * `seen` carries the ids already being evaluated, so a document whose
+ * calculations reference each other stops at a missing operand instead of
+ * recursing until the tab dies.
+ */
+function operandValue(board: Any, id: string | undefined, seen: Set<string>): number | null {
+  if (!id || seen.has(id)) return null;
+  const spec = descriptorOf(board, id);
+  if (spec) return measureValue(board, spec, new Set([...seen, id]));
+  const obj = live(board, id);
+  if (!obj) return null;
+  const raw = obj.Value ? obj.Value() : obj.X?.();
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sep(a: Any, b: Any): number {
   const dx = a.X() - b.X();
@@ -120,19 +169,21 @@ function pointToSegment(p: Any, a: Any, b: Any): number {
  * (coordinates and equations) or a parent is missing from the board.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function measureValue(board: Any, spec: MeasureSpec): number | null {
-  const raw = geometricValue(board, spec);
+export function measureValue(board: Any, spec: MeasureSpec, seen: Set<string> = new Set()): number | null {
+  const raw = geometricValue(board, spec, seen);
   if (raw === null || spec.scale === undefined) return raw;
   return raw * spec.scale;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function geometricValue(board: Any, spec: MeasureSpec): number | null {
+function geometricValue(board: Any, spec: MeasureSpec, seen: Set<string>): number | null {
   const { op, args } = spec;
   const [a, b, c] = args.map((id) => live(board, id));
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
   switch (op) {
+    case 'calculate':
+      return spec.expr ? evalExpression(spec.expr, (i) => operandValue(board, args[i], seen)) : null;
     case 'distance':
       return a && b ? sep(a, b) : null;
     case 'pointSegmentDistance': {

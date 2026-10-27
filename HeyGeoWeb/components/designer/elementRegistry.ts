@@ -17,6 +17,8 @@ import {
   isAnchorSpec,
   isMeasureSpec,
   measureClosure,
+  registerMeasure,
+  type MeasureSpec,
 } from './measurement';
 import { migrateLegacyMeasure } from './legacyMeasure';
 import { migrateLegacyTransform } from './legacyTransform';
@@ -263,6 +265,9 @@ export function createElement(
       ...(entry.attrs ?? {}),
       ...attrs,
     });
+    // A calculation reads the numbers its operands measure, so the descriptor
+    // has to stay with the board that is drawing it.
+    if (el.id && isMeasureSpec(el.attrs?.measure)) registerMeasure(board, el.id, el.attrs!.measure as MeasureSpec);
     return { obj };
   } catch (e) {
     return { obj: null, error: `${el.type}: ${(e as Error).message}` };
