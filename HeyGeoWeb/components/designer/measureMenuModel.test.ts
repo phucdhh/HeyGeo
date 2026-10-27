@@ -1,0 +1,132 @@
+import { describe, expect, it } from 'vitest';
+import { measureItems } from './measureMenuModel';
+import type { HeyGeoElement } from './designTypes';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type Parent = HeyGeoElement['parents'][number];
+
+const el = (type: string, id: string, parents: Parent[] = [], name = ''): HeyGeoElement => ({
+  type, id, parents, attrs: name ? { name } : {},
+});
+
+const WORLD: HeyGeoElement[] = [
+  el('point', 'A', [0, 0], 'A'),
+  el('point', 'B', [4, 0], 'B'),
+  el('point', 'C', [0, 3], 'C'),
+  el('point', 'D', [4, 3], 'D'),
+  el('midpoint', 'M', ['A', 'B'], 'M'),
+  el('glider', 'G', [1, 1, 'k'], 'G'),
+  el('segment', 's1', ['A', 'B']),
+  el('segment', 's2', ['C', 'D']),
+  el('segment', 'd1', ['A', 'C'], 'd'),
+  el('line', 'L', ['B', 'C']),
+  el('circle', 'k', ['A', 'B'], 'k'),
+  el('arc', 'arc1', ['A', 'B', 'C']),
+  el('polygon', 'poly1', ['A', 'B', 'C', 'D']),
+  el('sector', 'sec1', ['A', 'B', 'C']),
+  el('slider', 'sl1', [[-5, -5], [-1, -5], [0, 10, 5]]),
+];
+
+const find = (selection: string[], id: string) =>
+  measureItems(WORLD, selection).find((i) => i.id === id)!;
+const offered = (selection: string[], id: string) => find(selection, id).spec;
+
+describe('the Measure menu', () => {
+  it('lists the desktop menu in order', () => {
+    expect(measureItems(WORLD, []).map((i) => i.id)).toEqual([
+      'length', 'distance', 'perimeter', 'circumference', 'angle', 'area',
+      'arcAngle', 'arcLength', 'radius', 'ratio', 'value',
+      'coordinates', 'abscissa', 'ordinate', 'slope', 'equation',
+    ]);
+  });
+
+  it('greys the whole menu out for nothing', () => {
+    for (const item of measureItems(WORLD, [])) expect(item.spec).toBeNull();
+    for (const item of measureItems(WORLD, ['A'])) {
+      if (!['coordinates', 'abscissa', 'ordinate'].includes(item.id)) {
+        expect(item.spec, item.id).toBeNull();
+      }
+    }
+  });
+
+  it('names a segment by the points it stands on', () => {
+    expect(offered(['s1'], 'length')).toEqual({
+      op: 'length', args: ['s1'], label: 'AB', precision: 2, unit: ' cm',
+    });
+    // and by its own name once the designer has given it one
+    expect(offered(['d1'], 'length')).toMatchObject({ label: 'd' });
+  });
+
+  it('measures two points between themselves and a point to a line the short way', () => {
+    expect(offered(['A', 'B'], 'distance')).toMatchObject({
+      op: 'distance', args: ['A', 'B'], label: 'AB',
+    });
+    expect(offered(['A', 'L'], 'distance')).toMatchObject({
+      op: 'pointSegmentDistance', args: ['A', 'L'],
+    });
+    // whichever way round they were picked, the point comes first
+    expect(offered(['L', 'A'], 'distance')).toMatchObject({ args: ['A', 'L'] });
+    // three points are not a distance
+    expect(offered(['A', 'B', 'C'], 'distance')).toBeNull();
+  });
+
+  it('takes the angle with the second pick as its vertex', () => {
+    expect(offered(['A', 'B', 'C'], 'angle')).toEqual({
+      op: 'angle', args: ['A', 'B', 'C'], label: 'm\u2220ABC', precision: 2, unit: '\u00b0',
+    });
+    expect(offered(['A', 'C'], 'angle')).toBeNull();
+    expect(offered(['A', 'B', 'k'], 'angle')).toBeNull();
+  });
+
+  it('areas a shape, and an arc the bow it closes', () => {
+    expect(offered(['poly1'], 'area')).toMatchObject({ op: 'area', label: 'Area ABCD' });
+    expect(offered(['k'], 'area')).toMatchObject({ op: 'area', label: 'Area k' });
+    expect(offered(['sec1'], 'area')).toMatchObject({ op: 'area', label: 'Area ABC' });
+    expect(offered(['arc1'], 'area')).toMatchObject({ op: 'segmentArea', label: 'Area ABC' });
+    expect(offered(['A'], 'area')).toBeNull();
+  });
+
+  it('reads an arc three ways', () => {
+    expect(offered(['arc1'], 'arcAngle')).toMatchObject({ op: 'arcAngle', label: 'm\u2220ABC', unit: '\u00b0' });
+    expect(offered(['arc1'], 'arcLength')).toMatchObject({ op: 'arcLength', label: 'ABC', unit: ' cm' });
+    expect(offered(['arc1'], 'radius')).toMatchObject({ op: 'radius', label: 'Radius ABC', unit: ' cm' });
+    // a circle has no arc to measure along
+    expect(offered(['k'], 'arcLength')).toBeNull();
+  });
+
+  it('ratios two segments and circles round to their own items', () => {
+    expect(offered(['s1', 's2'], 'ratio')).toMatchObject({ op: 'ratio', label: 'AB/CD' });
+    expect(offered(['s1'], 'ratio')).toBeNull();
+    expect(offered(['poly1'], 'perimeter')).toMatchObject({ op: 'perimeter', label: 'Perimeter ABCD' });
+    expect(offered(['k'], 'circumference')).toMatchObject({ op: 'circumference', label: 'Circumference k' });
+  });
+
+  it('measures any point, however it was made', () => {
+    for (const id of ['A', 'M', 'G']) {
+      expect(offered([id], 'coordinates')).toMatchObject({ op: 'coordinates', label: WORLD.find((e) => e.id === id)!.attrs.name });
+      expect(offered([id], 'abscissa')).toMatchObject({ label: `x<sub>${WORLD.find((e) => e.id === id)!.attrs.name}</sub>` });
+      expect(offered([id], 'ordinate')).toMatchObject({ label: `y<sub>${WORLD.find((e) => e.id === id)!.attrs.name}</sub>` });
+    }
+    expect(offered(['s1'], 'coordinates')).toBeNull();
+  });
+
+  it('gives the slope of anything straight and the equation of a line or a circle', () => {
+    expect(offered(['L'], 'slope')).toMatchObject({ op: 'slope', label: 'Slope BC' });
+    expect(offered(['s1'], 'slope')).toMatchObject({ op: 'slope' });
+    expect(offered(['k'], 'slope')).toBeNull();
+    expect(offered(['L'], 'equation')).toMatchObject({ op: 'equationLine' });
+    expect(offered(['k'], 'equation')).toMatchObject({ op: 'equationCircle', label: 'Equation k' });
+    // the desktop rules a segment out of an equation
+    expect(offered(['s1'], 'equation')).toBeNull();
+  });
+
+  it('reads a slider as a number of its own', () => {
+    expect(offered(['sl1'], 'value')).toEqual({ op: 'value', args: ['sl1'], label: 'sl1', precision: 2 });
+  });
+
+  it('offers nothing whose geometry has left the board', () => {
+    expect(offered(['ghost'], 'coordinates')).toBeNull();
+    const noEndpoints = [el('segment', 's9', ['A', 'gone'])];
+    expect(measureItems(noEndpoints, ['s9']).find((i) => i.id === 'length')!.spec).toBeNull();
+  });
+});
