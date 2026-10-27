@@ -62,21 +62,27 @@ function axis(o: Any): [Any, Any] | null {
 // ─── Arrow dragging ───────────────────────────────────────────────────────────
 
 /**
- * The map a rotate or dilate arrow drag applies to the selection. The pointer
- * travelled from `start` to `pointer` around `center`, and the objects follow it
- * rigidly: rotate keeps the distance to the centre, dilate keeps the direction.
+ * The map an arrow drag applies to the selection. Selecting is the same in all
+ * three modes; only this differs: translate carries the pointer's travel to
+ * every point, rotate keeps each point's distance to the centre, dilate keeps
+ * its direction. `center` is the marked centre and is only used by the two that
+ * pivot on it.
  *
  * This is the one place the arrow maths lives, and it is pure — the drag is
  * measured from the positions frozen when the pointer went down, because the
  * board has already moved the grabbed object by the time the drag is handled.
  */
 export function arrowDragMap(
-  mode: 'rotate' | 'dilate',
-  center: [number, number],
+  mode: 'translate' | 'rotate' | 'dilate',
+  center: [number, number] | null,
   start: [number, number],
   pointer: [number, number],
 ): (x: number, y: number) => [number, number] {
-  const [cx, cy] = center;
+  if (mode === 'translate') {
+    const dx = pointer[0] - start[0], dy = pointer[1] - start[1];
+    return (x, y) => [x + dx, y + dy];
+  }
+  const [cx, cy] = center ?? [0, 0];
   const dx0 = start[0] - cx, dy0 = start[1] - cy;
   const dx1 = pointer[0] - cx, dy1 = pointer[1] - cy;
 

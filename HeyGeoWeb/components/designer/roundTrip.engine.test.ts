@@ -435,4 +435,29 @@ describe('an arrow drag on the selection', () => {
     expect(reloaded.objects.A.X()).toBeCloseTo(b.objects.A.X());
     expect(reloaded.objects.A.Y()).toBeCloseTo(b.objects.A.Y());
   });
+
+  it('carries the whole group with the translate arrow, not only what was grabbed', () => {
+    const b = newBoard();
+    const elements = load(b, kitchenSink()).elements;
+    b.update();
+    const A0 = { x: b.objects.A.X(), y: b.objects.A.Y() };
+    const B0 = { x: b.objects.B.X(), y: b.objects.B.Y() };
+    // the group Sketchpad moves: a segment and a midpoint picked with Shift+click
+    const base = freeze(b, elements, [b.objects.sAB, b.objects.M]);
+
+    drag(b, base, arrowDragMap('translate', null, [0, 0], [1.5, -2]));
+
+    expect(b.objects.A.X()).toBeCloseTo(A0.x + 1.5);
+    expect(b.objects.A.Y()).toBeCloseTo(A0.y - 2);
+    expect(b.objects.B.X()).toBeCloseTo(B0.x + 1.5);
+    // the midpoint kept its role while both endpoints travelled together
+    expect(b.objects.M.X()).toBeCloseTo((b.objects.A.X() + b.objects.B.X()) / 2);
+
+    expect(syncPositions(elements, b)).toBe(true);
+    const after = drawing(b);
+    const reloaded = newBoard();
+    load(reloaded, JSON.parse(JSON.stringify(elements)));
+    reloaded.update();
+    expect(drawing(reloaded)).toEqual(after);
+  });
 });

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   applyScene,
+  findObjectsAt,
   planScene,
   polygonElements,
   setSceneChrome,
@@ -17,6 +18,10 @@ import type { HeyGeoElement } from './designTypes';
 let JXG: any;
 function newBoard(opts: Record<string, unknown> = {}) {
   const div = document.createElement('div');
+  // jsdom lays nothing out, so the board needs its size written on it; without
+  // this every screen coordinate JSXGraph computes is zero.
+  div.style.width = '800px';
+  div.style.height = '600px';
   document.body.appendChild(div);
   return JXG.JSXGraph.initBoard(div, {
     boundingbox: [-8, 8, 8, -8],
@@ -216,5 +221,25 @@ describe('the polygon tray', () => {
     load(b, [...corners, ...plan]);
     expect(b.objects.pg1).toBeUndefined();
     expect(b.objects.pg1_s0.point2).toBe(b.objects.v1);
+  });
+
+  it('selects the polygon wherever its interior is clicked', () => {
+    const b = newBoard();
+    load(b, [...corners, ...polygonElements('polygon', vertexIds, 'pg1')]);
+    b.update();
+    // user coords → the screen coords the hit test is written in
+    const at = (ux: number, uy: number): [number, number] => [
+      b.origin.scrCoords[1] + ux * b.unitX,
+      b.origin.scrCoords[2] - uy * b.unitY,
+    ];
+    const SELECTABLE = ['point', 'segment', 'circle', 'polygon'];
+    const hit = (ux: number, uy: number) =>
+      findObjectsAt(b, ...at(ux, uy), SELECTABLE, 8).filter((o: any) => o.elType === 'polygon');
+
+    expect(hit(2, 1.5).map((o: any) => o.id)).toEqual(['pg1']);    // inside
+    expect(hit(2, 3).map((o: any) => o.id)).toEqual(['pg1']);       // on the top edge
+    expect(hit(6, 6)).toEqual([]);                                  // outside the shape
+    // the border lines belong to the polygon and are not objects of their own
+    expect(findObjectsAt(b, ...at(2, 3), ['segment'], 8)).toEqual([]);
   });
 });

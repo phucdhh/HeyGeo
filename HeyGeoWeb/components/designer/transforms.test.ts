@@ -136,6 +136,16 @@ describe('imageClosures', () => {
  * stuttering across the half-turn, dividing by zero — shows up here.
  */
 describe('arrowDragMap', () => {
+  it('carries the pointer travel to every point of the group', () => {
+    const map = arrowDragMap('translate', null, [1, 1], [3, -1]);
+    expect(map(0, 0)).toEqual([2, -2]);
+    expect(map(5, 5)).toEqual([7, 3]);
+  });
+
+  it('moves nothing while the translate pointer is where it started', () => {
+    expect(arrowDragMap('translate', null, [4, 4], [4, 4])(9, -2)).toEqual([9, -2]);
+  });
+
   it('turns the selection by the angle the pointer travelled', () => {
     const [x, y] = arrowDragMap('rotate', [0, 0], [2, 0], [0, 2])(2, 0);
     expect(x).toBeCloseTo(0);

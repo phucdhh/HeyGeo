@@ -75,7 +75,10 @@ export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
   arc:            { jxg: 'arc',            parents: 3 },
   sector:         { jxg: 'sector',         parents: 3 },
   angle:          { jxg: 'angle',          parents: 3 },
-  polygon:        { jxg: 'polygon',        parents: atLeast(3) },
+  // hasInnerPoints belongs to the registry rather than to each document:
+  // Sketchpad lets a click anywhere inside the shape select it, and a document
+  // saved before that was decided should behave like one written after it.
+  polygon:        { jxg: 'polygon',        parents: atLeast(3), attrs: { hasInnerPoints: true } },
   // parents are [[x1,y1],[x2,y2],[min,value,max]] — three coordinate arrays
   slider:         { jxg: 'slider',         parents: 3 },
   // parents are [x, y, caption] — only the anchor pair may reference elements.

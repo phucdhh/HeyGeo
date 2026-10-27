@@ -26,6 +26,7 @@ import {
   applyScene,
   clearHistory,
   coordParents,
+  findObjectsAt,
   gatherSelectionPoints,
   planScene,
   polygonElements,
@@ -193,81 +194,6 @@ function eventToCoords(
   const sy = evt.clientY - rect.top;
   const uc = new (jxg()).Coords((jxg()).COORDS_BY_SCREEN, [sx, sy], board).usrCoords;
   return { x: uc[1], y: uc[2], sx, sy };
-}
-
-// ─── Find geometric objects near screen coords (for construct tools) ──────────
-// Returns objects of the requested types within `tolerance` pixels.
-function findObjectsAt(
-  board: JXGBoard,
-  sx: number,
-  sy: number,
-  types: string[],
-  tolerance = 12,
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-): any[] {
-  const result: unknown[] = [];
-  for (const id in board.objects) {
-    const obj = board.objects[id];
-    if (obj.visProp?.visible === false) continue;
-    if (typeof obj.id === 'string' && obj.id.startsWith('ghost_')) continue;
-    if (!types.includes(obj.elType)) continue;
-    if (['point', 'glider', 'midpoint', 'intersection', 'slider'].includes(obj.elType)) {
-      const sc = obj.coords?.scrCoords;
-      if (sc) {
-        const d = Math.sqrt((sc[1] - sx) ** 2 + (sc[2] - sy) ** 2);
-        if (d <= tolerance) result.push(obj);
-      }
-    } else if (['line','segment','ray','parallel','perpendicular','bisector'].includes(obj.elType)) {
-      if (['parallel','perpendicular','bisector'].includes(obj.elType)) {
-        // These elements have unreliable point1/point2 positions.
-        // Use stdform (ax + by + c = 0 in user coords) for accurate distance.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sf = obj.stdform as number[] | undefined;
-        if (sf && sf.length >= 3) {
-          const [c, a, b] = sf;
-          const nlen = Math.sqrt(a * a + b * b);
-          if (nlen < 1e-10) continue;
-          const ox = board.origin.scrCoords[1] as number;
-          const oy = board.origin.scrCoords[2] as number;
-          const uX = board.unitX as number, uY = board.unitY as number;
-          const userX = (sx - ox) / uX;
-          const userY = (oy - sy) / uY;
-          const distUser = Math.abs(c + a * userX + b * userY) / nlen;
-          // Convert user distance to screen pixels through the line's normal
-          const distScr = distUser * Math.sqrt((a * uX) ** 2 + (b * uY) ** 2) / nlen;
-          if (distScr <= tolerance) result.push(obj);
-        }
-      } else {
-        const p1 = obj.point1?.coords?.scrCoords;
-        const p2 = obj.point2?.coords?.scrCoords;
-        if (p1 && p2) {
-          const dx = p2[1] - p1[1], dy = p2[2] - p1[2];
-          const len2 = dx * dx + dy * dy;
-          if (len2 < 1) continue;
-          const t = ((sx - p1[1]) * dx + (sy - p1[2]) * dy) / len2;
-          const tC = obj.elType === 'segment' ? Math.max(0, Math.min(1, t)) : t;
-          const dist = Math.sqrt((sx - (p1[1] + tC * dx)) ** 2 + (sy - (p1[2] + tC * dy)) ** 2);
-          if (dist <= tolerance) result.push(obj);
-        }
-      }
-    } else if (obj.elType === 'circle' || obj.elType === 'arc') {
-      const csc = (obj.center ?? obj.point1)?.coords?.scrCoords;
-      const p2sc = obj.point2?.coords?.scrCoords;
-      if (csc && p2sc) {
-        const screenR = Math.sqrt((p2sc[1] - csc[1]) ** 2 + (p2sc[2] - csc[2]) ** 2);
-        const d = Math.sqrt((sx - csc[1]) ** 2 + (sy - csc[2]) ** 2);
-        if (Math.abs(d - screenR) <= tolerance) result.push(obj);
-      }
-    } else if (obj.elType === 'text') {
-      const sc = obj.coords?.scrCoords;
-      if (sc) {
-        const d = Math.sqrt((sc[1] - sx) ** 2 + (sc[2] - sy) ** 2);
-        if (d <= tolerance * 2) result.push(obj);
-      }
-    }
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return result as any[];
 }
 
 // ─── Rubber-band geometry helpers ────────────────────────────────────────────
@@ -506,8 +432,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   // so the frame JSXGraph spends moving the grabbed object is overwritten
   // instead of compounding.
   interface ArrowDrag {
-    mode:   'rotate' | 'dilate';
-    center: [number, number];
+    mode:   ArrowMode;
+    /** The marked centre; null for the translate arrow, which pivots on nothing. */
+    center: [number, number] | null;
     start:  [number, number];
     base:   { id: string; x: number; y: number }[];
   }
@@ -619,17 +546,21 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function beginArrowDrag(): ArrowDrag | null {
     const board = boardRef.current;
     const mode = arrowRef.current;
-    if (!board || mode === 'translate') return null;
+    if (!board) return null;
 
-    const cInfo = marksRef.current.center;
-    const centerPt = cInfo ? board.objects[cInfo.id] : null;
-    if (!centerPt) {
-      onNotifyRef.current?.(
-        mode === 'rotate'
-          ? 'Chưa đánh dấu tâm quay. Nhấp đúp vào một điểm để đánh dấu tâm.'
-          : 'Chưa đánh dấu tâm co giãn. Nhấp đúp vào một điểm để đánh dấu tâm.',
-      );
-      return null;
+    let center: [number, number] | null = null;
+    if (mode !== 'translate') {
+      const cInfo = marksRef.current.center;
+      const centerPt = cInfo ? board.objects[cInfo.id] : null;
+      if (!centerPt) {
+        onNotifyRef.current?.(
+          mode === 'rotate'
+            ? 'Chưa đánh dấu tâm quay. Nhấp đúp vào một điểm để đánh dấu tâm.'
+            : 'Chưa đánh dấu tâm co giãn. Nhấp đúp vào một điểm để đánh dấu tâm.',
+        );
+        return null;
+      }
+      center = [centerPt.X(), centerPt.Y()];
     }
     const start = arrowStartRef.current;
     if (!start) return null;
@@ -643,10 +574,12 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       .filter((p) => freeIds.has(p.id))
       .map((p) => ({ id: p.id, x: p.X(), y: p.Y() }));
     if (base.length === 0) {
-      onNotifyRef.current?.('Vùng chọn không có điểm tự do nào để biến đổi.');
+      if (mode !== 'translate') {
+        onNotifyRef.current?.('Vùng chọn không có điểm tự do nào để biến đổi.');
+      }
       return null;
     }
-    return { mode, center: [centerPt.X(), centerPt.Y()], start, base };
+    return { mode, center, start, base };
   }
 
   /** Move the frozen points so the pointer sits at the angle / ratio it reached. */
@@ -674,7 +607,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function noteArrowDragStart(evt: MouseEvent): void {
     arrowDragRef.current = null;
     arrowStartRef.current = null;
-    if (arrowRef.current === 'translate' || toolRef.current !== 'selection') return;
+    if (toolRef.current !== 'selection') return;
     const board = boardRef.current;
     const container = board?.containerObj as HTMLElement | undefined;
     if (!board || !container) return;
@@ -1018,9 +951,10 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
             dragBaseRef.current = null;
           }
           if (toolRef.current !== 'selection') return;
-          if (arrowRef.current !== 'translate') {
-            // An arrow drag transforms the whole selection, so it must not
-            // collapse a multi-selection down to the object under the cursor.
+          // Rotate and dilate always work on the whole selection. The translate
+          // arrow joins them when more than one object is selected: dragging a
+          // member of a group moves the group, which is what Sketchpad does.
+          if (arrowRef.current !== 'translate' || selectedRef.current.length > 1) {
             if (!selectedRef.current.includes(obj)) {
               selectedRef.current = [obj];
               setSelDecorations(computeDecorations([obj], board));
@@ -1081,14 +1015,14 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const sy = evt.clientY - rect.top;
       const SELECTABLE = [...POINT_ELTS,
                           'line', 'segment', 'ray', 'parallel', 'perpendicular', 'bisector',
-                          'circle', 'arc'];
+                          'circle', 'arc', 'polygon'];
       const hits = findObjectsAt(board, sx, sy, SELECTABLE, 12);
       // Prioritise point-like elements: if any point is within 12px, pick the
       // closest one instead of whatever came first in board.objects iteration.
       const ptHits  = hits.filter(o => POINT_ELTS.includes(o.elType));
       const best = ptHits.length > 0 ? ptHits[0] : hits[0];
       if (best) {
-        handleObjectClick(best);
+        handleObjectClick(best, evt.shiftKey);
         objectClickedRef.current = true; // prevent container mousedown from clearing selection
       } else {
         objectClickedRef.current = false; // no object hit — allow single-click deselect
@@ -1103,7 +1037,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const sy = evt.clientY - rect.top;
       const DBLCLICK_TYPES = [...POINT_ELTS,
                               'line', 'segment', 'ray', 'parallel', 'perpendicular', 'bisector',
-                              'circle', 'arc', 'text'];
+                              'circle', 'arc', 'text', 'polygon'];
       const hits = findObjectsAt(board, sx, sy, DBLCLICK_TYPES, 15);
       const ptHits = hits.filter(o => POINT_ELTS.includes(o.elType));
       const best = ptHits.length > 0 ? ptHits[0] : hits[0];
@@ -1134,14 +1068,18 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     setSelDecorations([]);
   }
 
-  // Click toggles the object in/out of selection (no Shift required).
+  // A click makes the object the whole selection, but lands harmlessly when it
+  // hits a member of a group: the group has to stay selected to be dragged.
+  // Shift+click adds an object to the selection or takes it back out.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function handleObjectClick(obj: any) {
-    const idx = selectedRef.current.indexOf(obj);
-    if (idx === -1) {
-      selectedRef.current.push(obj);
-    } else {
-      selectedRef.current.splice(idx, 1);
+  function handleObjectClick(obj: any, additive: boolean) {
+    const sel = selectedRef.current;
+    if (additive) {
+      const idx = sel.indexOf(obj);
+      if (idx === -1) sel.push(obj);
+      else sel.splice(idx, 1);
+    } else if (!sel.includes(obj)) {
+      selectedRef.current = [obj];
     }
     // Decorations updated by the interval loop; fire immediately too
     setSelDecorations(computeDecorations(selectedRef.current, boardRef.current));

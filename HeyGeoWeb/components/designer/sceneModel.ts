@@ -53,6 +53,9 @@ export function clearHistory(...stacks: SceneSnapshot[][]): void {
 const j = (v: unknown) => JSON.stringify(v ?? null);
 const round = (v: number) => (Number.isFinite(v) ? Number(v.toFixed(6)) : v);
 
+/** The board element types that have a position of their own. */
+const POINT_ELTS = ['point', 'glider', 'midpoint', 'intersection', 'slider'];
+
 // ─── Dependency graph ────────────────────────────────────────────────────────
 
 /**
@@ -289,7 +292,6 @@ function liveMap(board: LiveBoard, made: Map<string, unknown>): Record<string, u
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function gatherSelectionPoints(sel: any[]): any[] {
-  const POINT_ELTS = ['point', 'glider', 'midpoint', 'intersection', 'slider'];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const out = new Map<string, any>();
   for (const o of sel) {
@@ -346,6 +348,92 @@ export function polygonElements(
     });
   }
   return out;
+}
+
+/**
+ * Objects of the requested types within `tolerance` pixels of a screen point.
+ * The construct tools and the selection arrow both ask the board what is under
+ * the cursor, and JSXGraph's own hit areas are too thin for a segment to be a
+ * reliable answer.
+ */
+export function findObjectsAt(
+  board: LiveBoard,
+  sx: number,
+  sy: number,
+  types: string[],
+  tolerance = 12,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+): any[] {
+  const result: unknown[] = [];
+  for (const id in board.objects) {
+    const obj = board.objects[id];
+    if (obj.visProp?.visible === false) continue;
+    if (typeof obj.id === 'string' && obj.id.startsWith('ghost_')) continue;
+    // A polygon's border lines are not objects of the document; clicking one
+    // selects the polygon in Sketchpad, so it does here too.
+    if (obj.parentPolygon) continue;
+    if (!types.includes(obj.elType)) continue;
+    if (POINT_ELTS.includes(obj.elType)) {
+      const sc = obj.coords?.scrCoords;
+      if (sc) {
+        const d = Math.sqrt((sc[1] - sx) ** 2 + (sc[2] - sy) ** 2);
+        if (d <= tolerance) result.push(obj);
+      }
+    } else if (['line','segment','ray','parallel','perpendicular','bisector'].includes(obj.elType)) {
+      if (['parallel','perpendicular','bisector'].includes(obj.elType)) {
+        // These elements have unreliable point1/point2 positions.
+        // Use stdform (ax + by + c = 0 in user coords) for accurate distance.
+        const sf = obj.stdform as number[] | undefined;
+        if (sf && sf.length >= 3) {
+          const [c, a, b] = sf;
+          const nlen = Math.sqrt(a * a + b * b);
+          if (nlen < 1e-10) continue;
+          const ox = board.origin.scrCoords[1] as number;
+          const oy = board.origin.scrCoords[2] as number;
+          const uX = board.unitX as number, uY = board.unitY as number;
+          const userX = (sx - ox) / uX;
+          const userY = (oy - sy) / uY;
+          const distUser = Math.abs(c + a * userX + b * userY) / nlen;
+          // Convert user distance to screen pixels through the line's normal
+          const distScr = distUser * Math.sqrt((a * uX) ** 2 + (b * uY) ** 2) / nlen;
+          if (distScr <= tolerance) result.push(obj);
+        }
+      } else {
+        const p1 = obj.point1?.coords?.scrCoords;
+        const p2 = obj.point2?.coords?.scrCoords;
+        if (p1 && p2) {
+          const dx = p2[1] - p1[1], dy = p2[2] - p1[2];
+          const len2 = dx * dx + dy * dy;
+          if (len2 < 1) continue;
+          const t = ((sx - p1[1]) * dx + (sy - p1[2]) * dy) / len2;
+          const tC = obj.elType === 'segment' ? Math.max(0, Math.min(1, t)) : t;
+          const dist = Math.sqrt((sx - (p1[1] + tC * dx)) ** 2 + (sy - (p1[2] + tC * dy)) ** 2);
+          if (dist <= tolerance) result.push(obj);
+        }
+      }
+    } else if (obj.elType === 'circle' || obj.elType === 'arc') {
+      const csc = (obj.center ?? obj.point1)?.coords?.scrCoords;
+      const p2sc = obj.point2?.coords?.scrCoords;
+      if (csc && p2sc) {
+        const screenR = Math.sqrt((p2sc[1] - csc[1]) ** 2 + (p2sc[2] - csc[2]) ** 2);
+        const d = Math.sqrt((sx - csc[1]) ** 2 + (sy - csc[2]) ** 2);
+        if (Math.abs(d - screenR) <= tolerance) result.push(obj);
+      }
+    } else if (obj.elType === 'polygon') {
+      // hasPoint is written in screen coords, like everything else here, and
+      // answers for the whole interior because the registry gives a polygon
+      // hasInnerPoints — which is how Sketchpad lets a click inside select it.
+      if (obj.hasPoint?.(sx, sy)) result.push(obj);
+    } else if (obj.elType === 'text') {
+      const sc = obj.coords?.scrCoords;
+      if (sc) {
+        const d = Math.sqrt((sc[1] - sx) ** 2 + (sc[2] - sy) ** 2);
+        if (d <= tolerance * 2) result.push(obj);
+      }
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return result as any[];
 }
 
 /**
