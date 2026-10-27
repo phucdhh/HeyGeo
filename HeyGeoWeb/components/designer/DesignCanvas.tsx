@@ -1063,6 +1063,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function highlightObj(_obj: any, _on: boolean) { /**/ }
 
   function clearSelection() {
+    // The last rung of the Escape ladder is "do nothing", so an empty selection
+    // must not churn the parents with a fresh empty array.
+    if (selectedRef.current.length === 0) return;
     selectedRef.current = [];
     onSelectionChange([]);
     setSelDecorations([]);
@@ -1140,7 +1143,10 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   }
 
   // ─── Cancel current pending tool sequence ─────────────────────────────────
-  function cancelTool() {
+  // Answers whether a construction was actually in flight, which is how Escape
+  // knows whether to stop here or step down to clearing the selection.
+  function cancelTool(): boolean {
+    const hadConstruction = pendingRef.current.phase !== 'idle';
     removeGhost();
     // Remove ghost poly lines
     const pl = pendingRef.current.polyLines ?? [];
@@ -1155,6 +1161,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     pendingRef.current = { phase: 'idle' };
     sliderPosRef.current = null;
     setSnapPos(null);
+    return hadConstruction;
   }
 
   // ─── Tool interaction: overlay click ──────────────────────────────────────
@@ -1581,16 +1588,6 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     }
   }
 
-  // ─── Key handler (Escape = cancel, Delete = remove selected) ──────────────
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') cancelTool();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // ─── Init board on JSXGraph load ─────────────────────────────────────────
   function initBoard() {
     if (boardRef.current) return;
@@ -2014,6 +2011,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     },
 
     cancelCurrentTool: cancelTool,
+    clearSelection,
 
     confirmSlider: (cfg: SliderConfig) => {
       const board = boardRef.current;

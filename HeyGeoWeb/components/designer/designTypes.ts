@@ -195,7 +195,8 @@ export interface CanvasHandle {
   confirmSlider?: (cfg: SliderConfig) => void;
   startAnimation?: (id: string) => void;
   stopAnimation?: (id: string) => void;
-  cancelCurrentTool: () => void;
+  cancelCurrentTool: () => boolean;
+  clearSelection: () => void;
   // Construct menu (all selection-based: Select-then-act)
   createPointOnObject: () => void;
   createIntersection: () => void;

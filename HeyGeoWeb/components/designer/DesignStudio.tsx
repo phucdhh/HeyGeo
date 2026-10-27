@@ -205,7 +205,9 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         return;
       }
       if (e.key === 'Escape') {
-        canvasRef.current?.cancelCurrentTool();
+        // Sketchpad's Escape walks down a ladder: first the construction in
+        // flight, then the selection, then it does nothing at all.
+        if (!canvasRef.current?.cancelCurrentTool()) canvasRef.current?.clearSelection();
         return;
       }
       const toolShortcut = TOOL_SHORTCUTS[e.key.toLowerCase()];
