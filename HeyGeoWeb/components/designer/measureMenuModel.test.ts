@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { measureItems } from './measureMenuModel';
 import type { HeyGeoElement } from './designTypes';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 type Parent = HeyGeoElement['parents'][number];
 
 const el = (type: string, id: string, parents: Parent[] = [], name = ''): HeyGeoElement => ({
@@ -27,9 +26,10 @@ const WORLD: HeyGeoElement[] = [
   el('slider', 'sl1', [[-5, -5], [-1, -5], [0, 10, 5]]),
 ];
 
-const find = (selection: string[], id: string) =>
-  measureItems(WORLD, selection).find((i) => i.id === id)!;
-const offered = (selection: string[], id: string) => find(selection, id).spec;
+const specs = (selection: string[], id: string) =>
+  measureItems(WORLD, selection).find((i) => i.id === id)!.specs;
+/** The caption a one-object selection writes, or null when the row is greyed. */
+const offered = (selection: string[], id: string) => specs(selection, id)[0] ?? null;
 
 describe('the Measure menu', () => {
   it('lists the desktop menu in order', () => {
@@ -41,10 +41,10 @@ describe('the Measure menu', () => {
   });
 
   it('greys the whole menu out for nothing', () => {
-    for (const item of measureItems(WORLD, [])) expect(item.spec).toBeNull();
+    for (const item of measureItems(WORLD, [])) expect(item.specs, item.id).toEqual([]);
     for (const item of measureItems(WORLD, ['A'])) {
       if (!['coordinates', 'abscissa', 'ordinate'].includes(item.id)) {
-        expect(item.spec, item.id).toBeNull();
+        expect(item.specs, item.id).toEqual([]);
       }
     }
   });
@@ -57,6 +57,13 @@ describe('the Measure menu', () => {
     expect(offered(['d1'], 'length')).toMatchObject({ label: 'd' });
   });
 
+  it('measures everything of one kind the selection holds', () => {
+    // the desktop loops the selection: three segments give three lengths
+    expect(specs(['s1', 's2', 'd1'], 'length').map((s) => s.label)).toEqual(['AB', 'CD', 'd']);
+    // but a mixed selection defines no length at all
+    expect(specs(['s1', 'A'], 'length')).toEqual([]);
+  });
+
   it('measures two points between themselves and a point to a line the short way', () => {
     expect(offered(['A', 'B'], 'distance')).toMatchObject({
       op: 'distance', args: ['A', 'B'], label: 'AB',
@@ -67,7 +74,7 @@ describe('the Measure menu', () => {
     // whichever way round they were picked, the point comes first
     expect(offered(['L', 'A'], 'distance')).toMatchObject({ args: ['A', 'L'] });
     // three points are not a distance
-    expect(offered(['A', 'B', 'C'], 'distance')).toBeNull();
+    expect(specs(['A', 'B', 'C'], 'distance')).toEqual([]);
   });
 
   it('takes the angle with the second pick as its vertex', () => {
@@ -103,11 +110,14 @@ describe('the Measure menu', () => {
 
   it('measures any point, however it was made', () => {
     for (const id of ['A', 'M', 'G']) {
-      expect(offered([id], 'coordinates')).toMatchObject({ op: 'coordinates', label: WORLD.find((e) => e.id === id)!.attrs.name });
-      expect(offered([id], 'abscissa')).toMatchObject({ label: `x<sub>${WORLD.find((e) => e.id === id)!.attrs.name}</sub>` });
-      expect(offered([id], 'ordinate')).toMatchObject({ label: `y<sub>${WORLD.find((e) => e.id === id)!.attrs.name}</sub>` });
+      const label = WORLD.find((e) => e.id === id)!.attrs.name as string;
+      expect(offered([id], 'coordinates')).toMatchObject({ op: 'coordinates', label });
+      expect(offered([id], 'abscissa')).toMatchObject({ label: `x<sub>${label}</sub>` });
+      expect(offered([id], 'ordinate')).toMatchObject({ label: `y<sub>${label}</sub>` });
     }
     expect(offered(['s1'], 'coordinates')).toBeNull();
+    // a handful of points is a handful of coordinates, as it is on the desktop
+    expect(specs(['A', 'B', 'C'], 'coordinates').map((s) => s.label)).toEqual(['A', 'B', 'C']);
   });
 
   it('gives the slope of anything straight and the equation of a line or a circle', () => {
@@ -118,6 +128,7 @@ describe('the Measure menu', () => {
     expect(offered(['k'], 'equation')).toMatchObject({ op: 'equationCircle', label: 'Equation k' });
     // the desktop rules a segment out of an equation
     expect(offered(['s1'], 'equation')).toBeNull();
+    expect(specs(['L', 'k'], 'equation').map((s) => s.op)).toEqual(['equationLine', 'equationCircle']);
   });
 
   it('reads a slider as a number of its own', () => {
@@ -127,6 +138,8 @@ describe('the Measure menu', () => {
   it('offers nothing whose geometry has left the board', () => {
     expect(offered(['ghost'], 'coordinates')).toBeNull();
     const noEndpoints = [el('segment', 's9', ['A', 'gone'])];
-    expect(measureItems(noEndpoints, ['s9']).find((i) => i.id === 'length')!.spec).toBeNull();
+    expect(measureItems(noEndpoints, ['s9']).find((i) => i.id === 'length')!.specs).toEqual([]);
+    // and the row beside it survives: a point among segments loses length only
+    expect(specs(['s1', 'ghost'], 'length')).toEqual([]);
   });
 });

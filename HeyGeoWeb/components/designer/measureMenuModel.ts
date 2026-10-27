@@ -3,26 +3,27 @@
  *
  * Sketchpad greys out the measurements a selection does not define, and HeyGeo
  * desktop does the same in `cans.cpp` with its `canMeasure…()` predicates. This
- * module is that rule for the web, and it also writes the caption: the text
- * before " = " follows `G_measureObject::updatelhs()` so that measuring a
- * segment here reads the same as measuring it on the desktop — "AB", not
- * "length of segment4".
+ * module is that rule for the web, and it writes the captions too: the text
+ * before " = " follows `G_measureObject::updatelhs()`, so measuring a segment
+ * here reads "AB" the way it does on the desktop, not "length of segment4".
  *
  * It is given the document's elements rather than board objects, so it stays
  * pure and so a shape can be named by the points it was built from.
  */
 import { parentIds } from './sceneModel';
 import type { HeyGeoElement } from './designTypes';
-import type { MeasureSpec } from './measurement';
+import type { MeasureOp, MeasureSpec } from './measurement';
 
 /**
- * One row of the Measure menu. `spec` is what the caption measures, or null
- * when the selection does not define that measurement and the row is greyed.
+ * One row of the Measure menu. `specs` is what choosing it writes — one caption
+ * per measured object, because the desktop loops over the selection — and an
+ * empty list means the selection does not define this measurement, so the row
+ * is greyed.
  */
 export interface MeasureItem {
   id: string;
   label: string;
-  spec: MeasureSpec | null;
+  specs: MeasureSpec[];
 }
 
 const POINT_TYPES = ['point', 'glider', 'midpoint', 'intersection'];
@@ -44,10 +45,15 @@ function isPoint(e?: HeyGeoElement) { return !!e && POINT_TYPES.includes(e.type)
 function isSegment(e?: HeyGeoElement) { return e?.type === 'segment'; }
 function isLine(e?: HeyGeoElement) { return !!e && LINE_TYPES.includes(e.type); }
 function isArc(e?: HeyGeoElement) { return !!e && ARC_TYPES.includes(e.type); }
-function isKind(kind: string) { return (e?: HeyGeoElement) => e?.type === kind; }
+function isType(type: string) { return (e?: HeyGeoElement) => e?.type === type; }
+
+/** A measurement the desktop only takes from a single object. */
+function one(picked: (HeyGeoElement | undefined)[], of: (e?: HeyGeoElement) => boolean) {
+  return picked.length === 1 && of(picked[0]);
+}
 
 /** The caption's left-hand text, one template per op, as the desktop writes it. */
-function lhs(op: MeasureSpec['op'], args: string[], ctx: Ctx): string {
+function lhs(op: MeasureOp, args: string[], ctx: Ctx): string {
   const [p0, p1, p2] = args.map(ctx.name);
   const s0 = ctx.shapeName(args[0]);
   switch (op) {
@@ -114,16 +120,16 @@ export function measureItems(
 
   const picked = selection.map((id) => byId.get(id));
   const [a, b, c] = picked;
-  const ids = (...args: (HeyGeoElement | undefined)[]) => args.map((e) => e?.id ?? '');
+  const id = (e?: HeyGeoElement) => e?.id ?? '';
 
   /**
-   * Whether an element still has a place on the board to measure: geometry
-   * deleted from behind it leaves it with no position, even while it is itself
-   * still listed in the document.
+   * Whether a value can still be worked out: geometry deleted from behind an
+   * element leaves it with no position, however much it is itself still listed
+   * in the document.
    */
-  const measurable = (id: string) => {
+  const measurable = (of: string) => {
     const seen = new Set<string>();
-    const stack = [id];
+    const stack = [of];
     while (stack.length > 0) {
       const cur = stack.pop()!;
       if (seen.has(cur)) continue;
@@ -134,53 +140,74 @@ export function measureItems(
     return true;
   };
 
+  /**
+   * One menu row. `groups` are the ids each caption is read from, and a group
+   * that has lost its geometry is dropped instead of left to print "…".
+   */
   const row = (
-    id: string,
+    itemId: string,
     label: string,
-    op: MeasureSpec['op'],
-    args: string[],
+    groups: [MeasureOp, string[]][],
     unit: string,
     offered: boolean,
-  ): MeasureItem => {
-    const ok = offered && args.length > 0 && args.every(measurable);
-    return { id, label, spec: ok ? { op, args, label: lhs(op, args, ctx), precision: 2, ...(unit ? { unit } : {}) } : null };
-  };
+  ): MeasureItem => ({
+    id: itemId,
+    label,
+    specs: offered
+      ? groups
+          .filter(([, args]) => args.length > 0 && args.every(measurable))
+          .map(([op, args]) => ({
+            op,
+            args,
+            label: lhs(op, args, ctx),
+            precision: 2,
+            ...(unit ? { unit } : {}),
+          }))
+      : [],
+  });
+
+  const all = (ids: string[]) => ids.length > 0 && ids.length === picked.length;
+  const points = picked.filter(isPoint).map(id);
+  const segments = picked.filter(isSegment).map(id);
+  const straight = picked.filter((e) => isLine(e) || isSegment(e)).map(id);
 
   // A point and the straight thing beside it: Sketchpad measures the shortest
   // distance to it, two points measure between themselves.
-  const pointToSegment =
-    (isPoint(a) && (isSegment(b) || isLine(b))) || (isPoint(b) && (isSegment(a) || isLine(a)));
-  const distanceArgs = isPoint(a) ? ids(a, b) : ids(b, a);
+  const distance: [MeasureOp, string[]][] =
+    picked.length === 2 && isPoint(a) && isPoint(b)
+      ? [['distance', [id(a), id(b)]]]
+      : picked.length === 2 && isPoint(a) && (isSegment(b) || isLine(b))
+        ? [['pointSegmentDistance', [id(a), id(b)]]]
+        : picked.length === 2 && isPoint(b) && (isSegment(a) || isLine(a))
+          ? [['pointSegmentDistance', [id(b), id(a)]]]
+          : [];
 
   return [
-    row('length', 'Length', 'length', ids(a), CM, picked.length === 1 && isSegment(a)),
-    row('distance', 'Distance', pointToSegment ? 'pointSegmentDistance' : 'distance',
-      picked.length === 2 ? distanceArgs : [], CM,
-      picked.length === 2 && ((isPoint(a) && isPoint(b)) || pointToSegment)),
-    row('perimeter', 'Perimeter', 'perimeter', ids(a), CM,
-      picked.length === 1 && isKind('polygon')(a)),
-    row('circumference', 'Circumference', 'circumference', ids(a), CM,
-      picked.length === 1 && isKind('circle')(a)),
-    row('angle', 'Angle', 'angle', ids(a, b, c), DEG,
+    row('length', 'Length', segments.map((s) => ['length', [s]]), CM, all(segments)),
+    row('distance', 'Distance', distance, CM, distance.length > 0),
+    row('perimeter', 'Perimeter', [['perimeter', [id(a)]]], CM, one(picked, isType('polygon'))),
+    row('circumference', 'Circumference', [['circumference', [id(a)]]], CM,
+      one(picked, isType('circle'))),
+    row('angle', 'Angle', [['angle', [id(a), id(b), id(c)]]], DEG,
       picked.length === 3 && isPoint(a) && isPoint(b) && isPoint(c)),
     // an arc has no area of its own, so it gives the bow between it and its chord
-    row('area', 'Area', isArc(a) ? 'segmentArea' : 'area', ids(a), CM2,
-      picked.length === 1 && (['polygon', 'circle', 'sector'].includes(a?.type ?? '') || isArc(a))),
-    row('arcAngle', 'Arc Angle', 'arcAngle', ids(a), DEG, picked.length === 1 && isArc(a)),
-    row('arcLength', 'Arc Length', 'arcLength', ids(a), CM, picked.length === 1 && isArc(a)),
-    row('radius', 'Radius', 'radius', ids(a), CM,
-      picked.length === 1 && (isKind('circle')(a) || isArc(a))),
-    row('ratio', 'Ratio', 'ratio', ids(a, b), '',
+    row('area', 'Area', [[isArc(a) ? 'segmentArea' : 'area', [id(a)]]], CM2,
+      one(picked, (e) => ['polygon', 'circle', 'sector'].includes(e?.type ?? '') || isArc(e))),
+    row('arcAngle', 'Arc Angle', [['arcAngle', [id(a)]]], DEG, one(picked, isArc)),
+    row('arcLength', 'Arc Length', [['arcLength', [id(a)]]], CM, one(picked, isArc)),
+    row('radius', 'Radius', [['radius', [id(a)]]], CM,
+      one(picked, (e) => isType('circle')(e) || isArc(e))),
+    row('ratio', 'Ratio', [['ratio', [id(a), id(b)]]], '',
       picked.length === 2 && isSegment(a) && isSegment(b)),
-    row('value', 'Value', 'value', ids(a), '', picked.length === 1 && isKind('slider')(a)),
-    row('coordinates', 'Coordinates', 'coordinates', ids(a), '', picked.length === 1 && isPoint(a)),
-    row('abscissa', 'Abscissa (x)', 'abscissa', ids(a), '', picked.length === 1 && isPoint(a)),
-    row('ordinate', 'Ordinate (y)', 'ordinate', ids(a), '', picked.length === 1 && isPoint(a)),
-    row('slope', 'Slope', 'slope', ids(a), '',
-      picked.length === 1 && (isLine(a) || isSegment(a))),
+    row('value', 'Value', [['value', [id(a)]]], '', one(picked, isType('slider'))),
+    row('coordinates', 'Coordinates', points.map((p) => ['coordinates', [p]]), '', all(points)),
+    row('abscissa', 'Abscissa (x)', points.map((p) => ['abscissa', [p]]), '', all(points)),
+    row('ordinate', 'Ordinate (y)', points.map((p) => ['ordinate', [p]]), '', all(points)),
+    row('slope', 'Slope', straight.map((s) => ['slope', [s]]), '', all(straight)),
     // desktop's canMeasureEquation: the equation of a line or of a circle
-    row('equation', 'Equation', a?.type === 'circle' ? 'equationCircle' : 'equationLine',
-      ids(a), '',
-      picked.length === 1 && (isLine(a) || isKind('circle')(a))),
+    row('equation', 'Equation',
+      picked.map((e) => [isType('circle')(e) ? 'equationCircle' : 'equationLine', [id(e)]]),
+      '',
+      picked.length > 0 && picked.every((e) => isLine(e) || isType('circle')(e))),
   ];
 }

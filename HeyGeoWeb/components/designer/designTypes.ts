@@ -1,4 +1,7 @@
 // ─── Tool modes – mirrors HeyGeoView::ToolMode enum from Desktop ─────────────
+import type { MeasureItem } from './measureMenuModel';
+import type { MeasureSpec } from './measurement';
+
 export type ToolMode =
   | 'selection'
   | 'point'
@@ -245,17 +248,13 @@ export interface CanvasHandle {
   clearAllTraces: () => void;
   showAllHidden: () => void;
   // Measure menu
-  measureDistance: () => void;
-  measureAngle: () => void;
-  measureLength: () => void;
-  measureRadius: () => void;
-  measureArea: () => void;
-  measureCoordinates: () => void;
-  measureAbscissa: () => void;
-  measureOrdinate: () => void;
-  measureSlope: () => void;
-  measureEquation: () => void;
-  measurePerimeter: () => void;
+  /**
+   * The menu's rows for the current selection: which are live, what each is
+   * called, and the captions choosing it writes.
+   */
+  measureRows: () => MeasureItem[];
+  /** Write the captions one Measure item offers, as a single undo step. */
+  createMeasure: (measures: MeasureSpec[]) => boolean;
   // Zoom & export
   getZoom: () => number;
   exportSVG: () => string;

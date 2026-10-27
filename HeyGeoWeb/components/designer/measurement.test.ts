@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   anchorClosures,
+  captionAnchor,
   isAnchorSpec,
   isMeasureSpec,
   measureCaption,
@@ -298,6 +299,44 @@ describe('anchorClosures', () => {
     expect(x()).toBeCloseTo(1.5, 6);
     movable.X = () => 5;
     expect(x()).toBeCloseTo(4, 6);
+  });
+});
+
+describe('captionAnchor', () => {
+  it('puts a length under the middle of what it measures', () => {
+    expect(captionAnchor(spec({ op: 'length', args: ['s'] }), [])).toEqual({
+      of: ['s'], dy: -0.5,
+    });
+  });
+
+  it('puts a circle out past its own edge', () => {
+    expect(captionAnchor(spec({ op: 'radius', args: ['c'] }), [])).toEqual({
+      of: ['c'], radiusFactor: 1.1, dy: 0,
+    });
+  });
+
+  it('leaves an area in the middle of the shape', () => {
+    expect(captionAnchor(spec({ op: 'area', args: ['tri'] }), [])).toEqual({ of: ['tri'], dy: 0 });
+  });
+
+  it('puts a point beside the point it reads', () => {
+    expect(captionAnchor(spec({ op: 'coordinates', args: ['P'] }), [])).toEqual({
+      of: ['P'], dx: 0.3, dy: -0.3,
+    });
+  });
+
+  it('belongs under the numerator of a ratio', () => {
+    // both segments give the value, but the caption is about the first one
+    expect(captionAnchor(spec({ op: 'ratio', args: ['s', 'tall'] }), [])).toMatchObject({ of: ['s'] });
+  });
+
+  it('steps a second caption of the same geometry below the first', () => {
+    const first = { attrs: { anchor: { of: ['tri'], dy: 0 } } };
+    expect(captionAnchor(spec({ op: 'area', args: ['tri'] }), [first]).dy).toBeCloseTo(-0.5, 6);
+    // a caption of other geometry does not move for anyone
+    expect(captionAnchor(spec({ op: 'area', args: ['tri'] }), [
+      { attrs: { anchor: { of: ['s'], dy: 0 } } },
+    ]).dy).toBe(0);
   });
 });
 

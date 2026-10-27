@@ -28,7 +28,8 @@ import {
   type ContextRow,
 } from './contextMenuModel';
 import { createElement } from './elementRegistry';
-import { anchorClosures, type AnchorSpec, type MeasureSpec } from './measurement';
+import { anchorClosures, captionAnchor, type MeasureSpec } from './measurement';
+import { measureItems, type MeasureItem } from './measureMenuModel';
 import { arrowDragMap, imageClosures, type ImageSpec } from './transforms';
 import {
   applyScene,
@@ -678,39 +679,59 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   }
 
   // ─── Measurements ─────────────────────────────────────────────────────────
+  // A measurement is ink, not the red a new object is drawn in.
+  const MEASURE_STYLE = { strokeColor: '#1e3c96', fontSize: 13, withLabel: false };
+
   /**
-   * A measurement is a text element carrying descriptors: `attrs.measure` says
-   * what to compute and `attrs.anchor` where to put it. The document stays data
-   * — no JavaScript source is stored, so nothing has to be evaluated to open a
-   * file — and the caption keeps following the geometry because the registry
-   * hands JSXGraph closures built from those descriptors.
+   * Write the captions a Measure menu item offers, beside the geometry each
+   * measures, as one undo step.
+   *
+   * A caption is a text carrying descriptors: `attrs.measure` says what to
+   * compute and `attrs.anchor` where to put it. The document stays data — no
+   * JavaScript source is stored, so nothing has to be evaluated to open a file —
+   * and the caption keeps following the figure because the registry hands
+   * JSXGraph closures built from those descriptors.
    */
-  function addMeasure(
-    id: string,
-    measure: MeasureSpec,
-    anchor: AnchorSpec | null,
-    style: Record<string, unknown>,
-  ): boolean {
+  function createMeasure(measures: MeasureSpec[]): boolean {
     const board = boardRef.current;
     if (!board) return false;
-    const [x, y] = anchor
-      ? anchorClosures(board, anchor)
-      : [() => 0, () => 0];
-    const el: HeyGeoElement = {
-      type: 'text',
-      id,
-      parents: [Number(x().toFixed(4)), Number(y().toFixed(4)), measure.label ?? ''],
-      attrs: anchor ? { ...style, anchor, measure } : { ...style, measure },
-    };
-    const { obj, error } = createElement(board, el, {});
-    if (!obj) {
-      onNotifyRef.current?.(error ?? `Không tạo được ${el.type}`);
+    const built: { el: HeyGeoElement; obj: unknown }[] = [];
+    const errorMessage = (message: string) => {
+      // half a row of captions is not a measurement the designer asked for
+      built.forEach(({ obj }) => board.removeObject(obj as never));
+      onNotifyRef.current?.(message);
       return false;
+    };
+    for (const measure of measures) {
+      // a caption in this batch sees the ones already placed in it, so two of
+      // the same row never print on top of each other
+      const anchor = captionAnchor(measure, [...elementsRef.current, ...built.map((b) => b.el)]);
+      const [x, y] = anchorClosures(board, anchor);
+      const el: HeyGeoElement = {
+        type: 'text',
+        id: nextElId('meas'),
+        parents: [Number(x().toFixed(4)), Number(y().toFixed(4)), measure.label ?? ''],
+        attrs: { ...MEASURE_STYLE, anchor, measure },
+      };
+      const { obj, error } = createElement(board, el, {});
+      if (!obj) return errorMessage(error ?? `Không tạo được ${el.type}`);
+      built.push({ el, obj });
     }
-    elementsRef.current.push(el);
+    if (built.length === 0) return false;
+    saveSnapshot();
+    elementsRef.current.push(...built.map((b) => b.el));
     board.update();
     onDirty();
     return true;
+  }
+
+  /**
+   * The Measure menu for the objects the designer has picked. The menu draws its
+   * greyed rows from this, so an item that looks dead and a measurement that
+   * cannot be made are the same fact.
+   */
+  function measureRows(): MeasureItem[] {
+    return measureItems(elementsRef.current, selectedRef.current.map((o) => o.id));
   }
 
   // ─── Rebuild board from elements[] ────────────────────────────────────────
@@ -2484,59 +2505,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       onDirty();
     },
 
-    measureDistance: () => {
-      if (selectedRef.current.length < 2) return;
-      saveSnapshot();
-      const [a, b] = selectedRef.current;
-      addMeasure(nextElId('meas'),
-        { op: 'distance', args: [a.id, b.id], label: 'd', precision: 3 },
-        { of: [a.id, b.id], dy: 0.5 },
-        { strokeColor: '#c83c3c', fontSize: 14, withLabel: false });
-    },
-
-    measureLength: () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const seg = selectedRef.current.find((o: any) => o.elType === 'segment' || o.elType === 'line');
-      if (!seg) return;
-      saveSnapshot();
-      addMeasure(nextElId('len'),
-        { op: 'length', args: [seg.id], label: 'L', precision: 3 },
-        { of: [seg.id], dy: 0.5 },
-        { strokeColor: '#c83c3c', fontSize: 14, withLabel: false });
-    },
-
-    measureRadius: () => {
-      const sel = selectedRef.current.find((o: { elType: string }) => o.elType === 'circle');
-      if (!sel) return;
-      saveSnapshot();
-      addMeasure(nextElId('meas'),
-        { op: 'radius', args: [sel.id], label: 'r', precision: 3 },
-        { of: [sel.id], radiusFactor: 1.1 },
-        { strokeColor: '#c83c3c', fontSize: 14 });
-    },
-    measureAngle: () => {
-      const board = boardRef.current;
-      if (!board || selectedRef.current.length < 3) return;
-      saveSnapshot();
-      const [a, v, b] = selectedRef.current;
-      const id = nextElId('ang');
-      try {
-        board.create('angle', [a, v, b], { id, strokeColor: '#c83c3c', withLabel: true });
-        elementsRef.current.push({
-          type: 'angle', id, parents: [a.id, v.id, b.id], attrs: {},
-        });
-        onDirty();
-      } catch { /**/ }
-    },
-    measureArea: () => {
-      const poly = selectedRef.current.find((o: { elType: string }) => o.elType === 'polygon');
-      if (!poly) return;
-      saveSnapshot();
-      addMeasure(nextElId('meas'),
-        { op: 'area', args: [poly.id], label: 'A', precision: 3 },
-        { of: [poly.id] },
-        { strokeColor: '#c83c3c', fontSize: 14 });
-    },
+    measureRows,
+    createMeasure,
 
     // ── Transform menu & marks ───────────────────────────────────────────────
     markCenter: () => {
@@ -2715,92 +2685,6 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       }
       board.update();
       onDirty();
-    },
-
-    // ── Measure menu additions ───────────────────────────────────────────────
-    measureCoordinates: () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pts = selectedRef.current.filter((o: any) => POINT_ELTS.includes(o.elType));
-      if (pts.length === 0) return;
-      saveSnapshot();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      pts.forEach((p: any) => addMeasure(nextElId('meas'),
-        { op: 'coordinates', args: [p.id], label: p.name || 'P', precision: 2 },
-        { of: [p.id], dx: 0.3, dy: -0.3 },
-        { strokeColor: '#1e3c96', fontSize: 13, withLabel: false }));
-    },
-
-    measureAbscissa: () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pts = selectedRef.current.filter((o: any) => POINT_ELTS.includes(o.elType));
-      if (pts.length === 0) return;
-      saveSnapshot();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      pts.forEach((p: any) => addMeasure(nextElId('meas'),
-        { op: 'abscissa', args: [p.id], label: `x_{${p.name || 'P'}}`, precision: 2 },
-        { of: [p.id], dx: 0.3, dy: -0.3 },
-        { strokeColor: '#1e3c96', fontSize: 13, withLabel: false }));
-    },
-
-    measureOrdinate: () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pts = selectedRef.current.filter((o: any) => POINT_ELTS.includes(o.elType));
-      if (pts.length === 0) return;
-      saveSnapshot();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      pts.forEach((p: any) => addMeasure(nextElId('meas'),
-        { op: 'ordinate', args: [p.id], label: `y_{${p.name || 'P'}}`, precision: 2 },
-        { of: [p.id], dx: 0.3, dy: -0.3 },
-        { strokeColor: '#1e3c96', fontSize: 13, withLabel: false }));
-    },
-
-    measureSlope: () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const line = selectedRef.current.find((o: any) => ['line', 'segment', 'ray'].includes(o.elType));
-      if (!line || !line.point1 || !line.point2) return;
-      saveSnapshot();
-      addMeasure(nextElId('slope'),
-        { op: 'slope', args: [line.id], label: 'm', precision: 2 },
-        { of: [line.id], dy: 0.4 },
-        { strokeColor: '#1e3c96', fontSize: 13, withLabel: false });
-    },
-
-    measureEquation: () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const obj = selectedRef.current.find((o: any) => ['line', 'segment', 'circle'].includes(o.elType));
-      if (!obj) return;
-      saveSnapshot();
-      if (obj.elType === 'circle') {
-        addMeasure(nextElId('eq'),
-          { op: 'equationCircle', args: [obj.id], precision: 1 },
-          { of: [obj.id], dx: 0.5, dy: -0.5 },
-          { strokeColor: '#1e3c96', fontSize: 13 });
-      } else {
-        addMeasure(nextElId('eq'),
-          { op: 'equationLine', args: [obj.id], precision: 1 },
-          { of: [obj.id], dy: 0.4 },
-          { strokeColor: '#1e3c96', fontSize: 13 });
-      }
-    },
-
-    measurePerimeter: () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const poly = selectedRef.current.find((o: any) => o.elType === 'polygon');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const circ = selectedRef.current.find((o: any) => o.elType === 'circle');
-      if (!poly && !circ) return;
-      saveSnapshot();
-      if (circ) {
-        addMeasure(nextElId('meas'),
-          { op: 'circumference', args: [circ.id], label: 'C', precision: 3 },
-          { of: [circ.id], radiusFactor: 1.1 },
-          { strokeColor: '#c83c3c', fontSize: 14 });
-      } else {
-        addMeasure(nextElId('meas'),
-          { op: 'perimeter', args: [poly!.id], label: 'P', precision: 3 },
-          { of: [poly!.id] },
-          { strokeColor: '#c83c3c', fontSize: 14 });
-      }
     },
 
     getZoom: () => (boardRef.current as unknown as { zoomX?: number })?.zoomX ?? 1,

@@ -7,6 +7,7 @@ import {
   unresolvedParentId,
   type ElementSpec,
 } from './elementRegistry';
+import { anchorClosures, captionAnchor, type MeasureSpec } from './measurement';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let JXG: any;
@@ -645,5 +646,65 @@ describe('an arc measured over the real board', () => {
     // arc is exactly the half turn that leaves out the corner at (3, 3)
     expect(shown(r.elMap['arcAngleca'])).toBe('α = 180.00°');
     expect(shown(r.elMap['arcLengthca'])).toBe(`cung = ${(Math.PI * Math.SQRT2).toFixed(2)}`);
+  });
+});
+
+// Choosing Measure | Area writes its caption beside the shape, through the
+// anchor captionAnchor gives the designer. The number has to keep its place over
+// the shape as the shape is dragged, because that anchor is the only position
+// the document stores.
+describe('a caption the designer places', () => {
+  const polygon = [
+    spec({ type: 'point', id: 'A', parents: [1, 1] }),
+    spec({ type: 'point', id: 'B', parents: [4, 1] }),
+    spec({ type: 'point', id: 'C', parents: [1, 4] }),
+    spec({ type: 'polygon', id: 'poly', parents: ['A', 'B', 'C'] }),
+  ];
+  const area: MeasureSpec = {
+    op: 'area', args: ['poly'], label: 'Area ABC', precision: 2, unit: ' cm\u00b2',
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where = (t: any): [number, number] => [t.XEval(), t.YEval()];
+
+  it('sits on the shape it measures and follows it when the shape moves', () => {
+    const b = newBoard();
+    const r = loader(b, polygon);
+    expect(r.errors).toEqual([]);
+    const anchor = captionAnchor(area, []);
+    const [x, y] = anchorClosures(b, anchor);
+    const cap = loader(b, [
+      spec({
+        type: 'text', id: 'cap', parents: [x(), y(), 'Area ABC'],
+        attrs: { measure: area, anchor },
+      }),
+    ]);
+    expect(cap.errors).toEqual([]);
+    b.update();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text: any = cap.elMap.cap;
+    // JSXGraph closes a polygon by repeating its first vertex, so its centroid
+    // is the average of four points; the caption was placed over that.
+    expect(where(text)).toEqual([1.75, 1.75]);
+    expect(String(text.plaintext)).toBe('Area ABC = 4.50 cm\u00b2');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (r.elMap.C as any).moveTo([1, 7]);
+    b.update();
+    expect(where(text)).toEqual([1.75, 2.5]);
+    expect(String(text.plaintext)).toBe('Area ABC = 9.00 cm\u00b2');
+  });
+
+  it('steps clear of a caption already attached to the same shape', () => {
+    const b = newBoard();
+    const r = loader(b, polygon);
+    expect(r.errors).toEqual([]);
+    const written = [{ attrs: { measure: area, anchor: captionAnchor(area, []) } }];
+    const perimeter: MeasureSpec = {
+      op: 'perimeter', args: ['poly'], label: 'Perimeter ABC', precision: 2, unit: ' cm',
+    };
+    // the area caption already holds the centroid, so the perimeter one goes a
+    // line below its own place: half a line for the shape, half for the caption
+    const [, y] = anchorClosures(b, captionAnchor(perimeter, written));
+    expect(y()).toBeCloseTo(1.75 - 1, 6);
   });
 });

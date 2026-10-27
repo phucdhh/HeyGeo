@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ToolMode, CanvasHandle } from './designTypes';
 import { COLOR_SWATCHES, POINT_STYLES } from './contextMenuModel';
+import { measureItems, type MeasureItem } from './measureMenuModel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MenuItemDef {
@@ -210,6 +211,12 @@ export default function DesignMenuBar({
     };
   }
 
+  // Before the canvas mounts there is no selection to ask about, so the menu
+  // starts with every row greyed rather than with no rows at all.
+  function measureRows(): MeasureItem[] {
+    return canvasRef.current?.measureRows() ?? measureItems([], []);
+  }
+
   // ─── Menu definitions – mirrors GSP Desktop menu order ────────────────
   // File | Edit | Display | Construct | Measure | Number | Transform | Graph | Window | Help
   const menus: MenuDef[] = [
@@ -369,27 +376,15 @@ export default function DesignMenuBar({
 
     // ── Measure ───────────────────────────────────────────────────────────
     {
+      // The same model that writes the captions decides which rows the selection
+      // defines, so a greyed item and a measurement that cannot be made are one
+      // fact instead of two.
       label: 'Measure',
-      items: [
-        { label: 'Length',               action: () => canvasRef.current?.measureLength() },
-        { label: 'Distance',             action: () => canvasRef.current?.measureDistance() },
-        { label: 'Perimeter',            action: () => canvasRef.current?.measurePerimeter() },
-        { label: 'Circumference',        action: () => canvasRef.current?.measurePerimeter() },
-        { label: 'Angle',                action: () => canvasRef.current?.measureAngle() },
-        { label: 'Area',                 action: () => canvasRef.current?.measureArea() },
-        { label: 'Arc Angle',            action: onUnderDevelopment },
-        { label: 'Arc Length',           action: onUnderDevelopment },
-        { label: 'Radius',               action: () => canvasRef.current?.measureRadius() },
-        { label: 'Ratio',                action: onUnderDevelopment },
-        { separator: true },
-        { label: 'Point Value',          action: onUnderDevelopment },
-        { label: 'Coordinates',          action: () => canvasRef.current?.measureCoordinates() },
-        { label: 'Abscissa (x)',         action: () => canvasRef.current?.measureAbscissa() },
-        { label: 'Ordinate (y)',         action: () => canvasRef.current?.measureOrdinate() },
-        { label: 'Coordinate Distance',  action: onUnderDevelopment },
-        { label: 'Slope',                action: () => canvasRef.current?.measureSlope() },
-        { label: 'Equation',             action: () => canvasRef.current?.measureEquation() },
-      ],
+      items: measureRows().map((row) => ({
+        label: row.label,
+        disabled: row.specs.length === 0,
+        action: () => canvasRef.current?.createMeasure(row.specs),
+      })),
     },
 
     // ── Number ────────────────────────────────────────────────────────────

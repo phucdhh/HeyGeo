@@ -403,3 +403,51 @@ export function anchorClosures(board: Any, anchor: AnchorSpec): [() => number, (
   };
   return [x, y];
 }
+
+/** A line of 13 px caption text, in board units. */
+const CAPTION_LINE = 0.5;
+
+/**
+ * Where each kind of measurement is dropped relative to its geometry: a length
+ * under the middle of the thing it was taken from, an area in the shape itself,
+ * a circle's radius out past its edge. Anything not listed goes on the shape.
+ */
+const CAPTION_PLACES: Partial<Record<MeasureOp, { dx?: number; dy?: number; radiusFactor?: number }>> = {
+  distance: { dy: -CAPTION_LINE },
+  pointSegmentDistance: { dy: -CAPTION_LINE },
+  length: { dy: -CAPTION_LINE },
+  arcLength: { dy: -CAPTION_LINE },
+  perimeter: { dy: -CAPTION_LINE },
+  ratio: { dy: -CAPTION_LINE },
+  value: { dy: -CAPTION_LINE },
+  radius: { radiusFactor: 1.1 },
+  circumference: { radiusFactor: 1.1 },
+  coordinates: { dx: 0.3, dy: -0.3 },
+  abscissa: { dx: 0.3, dy: -0.3 },
+  ordinate: { dx: 0.3, dy: -0.3 },
+  slope: { dy: 0.4 },
+  equationLine: { dy: 0.4 },
+  equationCircle: { dx: 0.5, dy: -0.5 },
+};
+
+/**
+ * The anchor for a caption the designer is about to write.
+ *
+ * Sketchpad drops the value beside the geometry it was taken from, and a second
+ * measurement of the same thing lands below the first rather than printed over
+ * it, so `existing` — the elements already in the document — is counted for
+ * captions that follow the same ids.
+ */
+export function captionAnchor(
+  spec: MeasureSpec,
+  existing: { attrs?: Record<string, unknown> }[],
+): AnchorSpec {
+  // a ratio is read from both segments but belongs under the numerator
+  const of = spec.op === 'ratio' ? [spec.args[0]] : spec.args;
+  const key = of.join(',');
+  const taken = existing.filter(
+    (el) => (el.attrs?.anchor as AnchorSpec | undefined)?.of.join(',') === key,
+  ).length;
+  const place = CAPTION_PLACES[spec.op] ?? {};
+  return { of, ...place, dy: (place.dy ?? 0) - taken * CAPTION_LINE };
+}
