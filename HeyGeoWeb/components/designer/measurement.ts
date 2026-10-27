@@ -70,6 +70,19 @@ export interface MeasureSpec {
 }
 
 /**
+ * A relative measurement is its plain counterpart read in the sketch's own
+ * frame, so it names and sits like it: args are [origin, unit, …], the first two
+ * are the frame rather than what is being measured, and the subject comes after
+ * them.
+ */
+export const RELATIVE_OPS: Partial<Record<MeasureOp, MeasureOp>> = {
+  relativeCoordinates: 'coordinates',
+  relativeAbscissa: 'abscissa',
+  relativeOrdinate: 'ordinate',
+  relativeDistance: 'distance',
+};
+
+/**
  * Where a caption sits. `of` names the elements it follows:
  * two ids → their midpoint, a circle/arc → its centre, a segment or line → its
  * midpoint, a polygon → its centroid, one point → that point. `radiusFactor`
@@ -201,6 +214,13 @@ export function measureValue(board: Any, spec: MeasureSpec, seen: Set<string> = 
   return raw * spec.scale;
 }
 
+/** The number a point has in the sketch's own frame, axis by axis. */
+function relativeAxis(board: Any, spec: MeasureSpec): number | null {
+  const rel = relativeCoords(board, spec);
+  if (!rel) return null;
+  return num(spec.op === 'relativeOrdinate' ? rel[1] : rel[0]);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function geometricValue(board: Any, spec: MeasureSpec, seen: Set<string>): number | null {
   const { op, args } = spec;
@@ -264,6 +284,9 @@ function geometricValue(board: Any, spec: MeasureSpec, seen: Set<string>): numbe
       return a?.X ? num(a.X()) : null;
     case 'ordinate':
       return a?.Y ? num(a.Y()) : null;
+    case 'relativeAbscissa':
+    case 'relativeOrdinate':
+      return relativeAxis(board, spec);
     case 'value':
       return a?.Value ? num(a.Value()) : num(a?.X?.());
     default:
@@ -442,12 +465,19 @@ export function captionAnchor(
   spec: MeasureSpec,
   existing: { attrs?: Record<string, unknown> }[],
 ): AnchorSpec {
-  // a ratio is read from both segments but belongs under the numerator
-  const of = spec.op === 'ratio' ? [spec.args[0]] : spec.args;
+  const plain = RELATIVE_OPS[spec.op];
+  // a ratio is read from both segments but belongs under the numerator, and a
+  // caption taken in the sketch's frame belongs under the point it measures
+  // rather than somewhere between its origin and its unit point
+  const of = spec.op === 'ratio'
+    ? [spec.args[0]]
+    : plain
+      ? spec.args.slice(2)
+      : spec.args;
   const key = of.join(',');
   const taken = existing.filter(
     (el) => (el.attrs?.anchor as AnchorSpec | undefined)?.of.join(',') === key,
   ).length;
-  const place = CAPTION_PLACES[spec.op] ?? {};
+  const place = CAPTION_PLACES[plain ?? spec.op] ?? {};
   return { of, ...place, dy: (place.dy ?? 0) - taken * CAPTION_LINE };
 }

@@ -64,7 +64,13 @@ const kitchenSink = (): HeyGeoElement[] => [
   // free points, a vector and a mirror to transform with
   el({ type: 'point', id: 'A', parents: [-3, 1], attrs: { name: 'A' } }),
   el({ type: 'point', id: 'B', parents: [2, 4], attrs: { name: 'B' } }),
-  el({ type: 'point', id: 'O', parents: [0, 0], attrs: { name: 'O' } }),
+  el({ type: 'point', id: 'O', parents: [0, 0], attrs: { name: 'O', coordsys: { unit: 'U' } } }),
+  // the coordinate system Graph marked on O: its unit point, the y-direction
+  // that follows from it, and the two axes drawn through them
+  el({ type: 'point', id: 'U', parents: [2, 0], attrs: { name: 'U' } }),
+  el({ type: 'point', id: 'O_v', parents: ['U'], attrs: { name: '', visible: false, image: { op: 'rotate', of: ['O'], angle: 90 } } }),
+  el({ type: 'line', id: 'O_x', parents: ['O', 'U'], attrs: { name: 'x' } }),
+  el({ type: 'line', id: 'O_y', parents: ['O', 'O_v'], attrs: { name: 'y' } }),
   el({ type: 'point', id: 'V', parents: [3, -2], attrs: { name: 'V' } }),
   el({ type: 'segment', id: 'vec', parents: ['O', 'V'], attrs: { strokeColor: '#888888' } }),
   el({ type: 'line', id: 'mirror', parents: ['A', 'B'], attrs: { dash: 1 } }),
@@ -243,8 +249,26 @@ describe('a saved document rebuilds the same drawing', () => {
     expect(drawing(second)).toEqual(drawing(first));
   });
 
-  it('is unchanged by a second reload, so a save cannot drift', () => {
-    const b1 = newBoard();
+  it('keeps the coordinate system the designer marked', () => {
+    const b = newBoard();
+    const saved = load(b, kitchenSink()).elements;
+    b.update();
+    // the frame is a mark on its origin, so the document carries it as data
+    expect(saved.find((e: HeyGeoElement) => e.id === 'O')!.attrs.coordsys).toEqual({ unit: 'U' });
+
+    const again = newBoard();
+    load(again, JSON.parse(JSON.stringify(saved)));
+    again.update();
+    // and the frame it marks is rebuilt from that mark: the y-direction is the
+    // unit point turned a quarter turn about the origin, so the axes are at right
+    // angles wherever the designer puts the two points
+    expect(again.objects.O_v.X()).toBeCloseTo(0, 6);
+    expect(again.objects.O_v.Y()).toBeCloseTo(2, 6);
+    // JSXGraph never sees the mark: it is stripped like a measurement descriptor
+    expect(again.objects.O.visProp?.coordsys).toBeUndefined();
+  });
+
+  it('is unchanged by a second reload, so a save cannot drift', () => {    const b1 = newBoard();
     const pass1 = load(b1, kitchenSink()).elements;
     b1.update();
     const after1 = drawing(b1);

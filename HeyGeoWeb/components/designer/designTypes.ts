@@ -1,4 +1,5 @@
 // ─── Tool modes – mirrors HeyGeoView::ToolMode enum from Desktop ─────────────
+import type { Coordsys, CoordsysRows } from './coordsysModel';
 import type { MeasureItem } from './measureMenuModel';
 import type { MeasureSpec } from './measurement';
 import type { NumberSource } from './numberMenuModel';
@@ -270,6 +271,18 @@ export interface CanvasHandle {
   beginParameter: () => SliderPos;
   /** The numbers the board shows, for Number | Calculate… to read. */
   numberValues: () => NumberValue[];
+  // Graph menu
+  /**
+   * What Graph | New/Define Coordinate System can do with the document and the
+   * current selection: Sketchpad marks one frame at a time, on its points.
+   */
+  coordsysRows: () => CoordsysRows;
+  /** The frame the designer marked, or null while the board's own is the only one. */
+  coordsysIds: () => Coordsys | null;
+  /** Graph | New Coordinate System: an origin and its unit point, drawn as axes. */
+  newCoordsys: () => boolean;
+  /** Graph | Define Coordinate System…: the frame the picked points describe. */
+  defineCoordsys: () => boolean;
   // Zoom & export
   getZoom: () => number;
   exportSVG: () => string;

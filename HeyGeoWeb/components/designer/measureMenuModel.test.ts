@@ -143,3 +143,47 @@ describe('the Measure menu', () => {
     expect(specs(['s1', 'ghost'], 'length')).toEqual([]);
   });
 });
+
+/** A frame the designer defined: origin at (1,1), its unit point 1.5 units right. */
+const FRAMED: HeyGeoElement[] = [
+  ...WORLD,
+  { type: 'point', id: 'O', parents: [1, 1], attrs: { name: 'O', coordsys: { unit: 'U' } } },
+  el('point', 'U', [2.5, 1], 'U'),
+];
+
+const framed = (selection: string[], id: string) =>
+  measureItems(FRAMED, selection).find((i) => i.id === id)!.specs;
+
+describe('the Measure menu over a frame the designer defined', () => {
+  it('reads a point in that frame instead of in the board', () => {
+    expect(framed(['A'], 'coordinates')).toEqual([
+      { op: 'relativeCoordinates', args: ['O', 'U', 'A'], label: 'A', precision: 2 },
+    ]);
+    expect(framed(['A'], 'abscissa')).toEqual([
+      { op: 'relativeAbscissa', args: ['O', 'U', 'A'], label: 'x<sub>A</sub>', precision: 2 },
+    ]);
+    expect(framed(['A'], 'ordinate')).toMatchObject([
+      { op: 'relativeOrdinate', args: ['O', 'U', 'A'], label: 'y<sub>A</sub>' },
+    ]);
+  });
+
+  it('names the point it measures, not the frame it reads through', () => {
+    expect(framed(['A', 'B', 'C'], 'coordinates').map((s) => s.label)).toEqual(['A', 'B', 'C']);
+    expect(framed(['M'], 'abscissa')[0].label).toBe('x<sub>M</sub>');
+  });
+
+  it('leaves every other row alone', () => {
+    expect(framed(['s1'], 'length')[0]).toMatchObject({ op: 'length', label: 'AB' });
+    expect(framed(['A', 'B'], 'distance')[0]).toMatchObject({ op: 'distance' });
+  });
+
+  it('uses the board frame while nothing is marked', () => {
+    expect(specs(['A'], 'coordinates')[0]).toMatchObject({ op: 'coordinates', args: ['A'] });
+  });
+
+  it('falls back to the board when the frame loses a point', () => {
+    const broken = FRAMED.filter((e) => e.id !== 'U');
+    expect(measureItems(broken, ['A']).find((i) => i.id === 'coordinates')!.specs)
+      .toMatchObject([{ op: 'coordinates', args: ['A'] }]);
+  });
+});

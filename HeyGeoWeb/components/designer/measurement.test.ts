@@ -325,6 +325,15 @@ describe('captionAnchor', () => {
     });
   });
 
+  it('puts a relative caption under the point it measures, not under its frame', () => {
+    // the origin and unit point give the numbers, but the caption belongs to P
+    expect(captionAnchor(spec({ op: 'relativeAbscissa', args: ['O', 'U', 'P'] }), [])).toEqual({
+      of: ['P'], dx: 0.3, dy: -0.3,
+    });
+    expect(captionAnchor(spec({ op: 'relativeCoordinates', args: ['O', 'U', 'P'] }), []))
+      .toMatchObject({ of: ['P'] });
+  });
+
   it('belongs under the numerator of a ratio', () => {
     // both segments give the value, but the caption is about the first one
     expect(captionAnchor(spec({ op: 'ratio', args: ['s', 'tall'] }), [])).toMatchObject({ of: ['s'] });

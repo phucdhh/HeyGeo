@@ -32,6 +32,18 @@ import { createElement } from './elementRegistry';
 import { anchorClosures, captionAnchor, measureValue, type MeasureSpec } from './measurement';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { numberSources, parameterPlace } from './numberMenuModel';
+import {
+  coordsysOf,
+  coordsysRows,
+  defaultFrame,
+  frameElements,
+  frameSelection,
+  hasCoordsys,
+  originCarriesUnit,
+  type Coordsys,
+  type CoordsysRows,
+  type FramePoints,
+} from './coordsysModel';
 import { arrowDragMap, imageClosures, type ImageSpec } from './transforms';
 import {
   applyScene,
@@ -759,6 +771,80 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     });
   }
 
+  // ─── Coordinate system ──────────────────────────────────────────────────────
+  /**
+   * Draw the frame the two points describe, as one undo step.
+   *
+   * A frame is marked on its origin and drawn as two axes through it, so the
+   * origin and unit point the designer already had keep their board objects and
+   * gain only the mark in the document. Half a frame is not what was asked for,
+   * so a failure takes the objects it made back with it.
+   */
+  function addFrame(board: JXGBoard, points: FramePoints): boolean {
+    const made = frameElements(points, elementsRef.current);
+    const live: Record<string, unknown> = { ...board.objects };
+    const built: unknown[] = [];
+    for (const el of made) {
+      if (live[el.id]) continue;
+      const { obj, error } = createElement(board, el, live);
+      if (!obj) {
+        built.forEach((o) => board.removeObject(o as never));
+        onNotifyRef.current?.(error ?? `Không tạo được ${el.type}`);
+        return false;
+      }
+      live[el.id] = obj;
+      built.push(obj);
+    }
+    saveSnapshot();
+    for (const el of made) {
+      const at = elementsRef.current.findIndex((e) => e.id === el.id);
+      if (at >= 0) elementsRef.current[at] = el;
+      else elementsRef.current.push(el);
+    }
+    board.update();
+    onDirty();
+    return true;
+  }
+
+  /** Where a board object stands, in the numbers the document keeps. */
+  function liveCoords(id: string): [number, number] {
+    const o = boardRef.current?.objects[id];
+    return typeof o?.X === 'function'
+      ? [Number(o.X().toFixed(4)), Number(o.Y().toFixed(4))]
+      : [0, 0];
+  }
+
+  /** Graph | New Coordinate System: an origin mid-page with its unit one away. */
+  function newCoordsys(): boolean {
+    const board = boardRef.current;
+    if (!board || hasCoordsys(elementsRef.current)) return false;
+    return addFrame(board, defaultFrame(
+      nextElId('pt'), nextElId('pt'), nextPointName(), nextPointName(),
+    ));
+  }
+
+  /**
+   * Graph | Define Coordinate System…: the frame the picked points describe. One
+   * point becomes the origin and keeps its unit point to itself; two give the
+   * origin and the length of a unit, in the order they were clicked.
+   */
+  function defineCoordsys(): boolean {
+    const board = boardRef.current;
+    if (!board) return false;
+    const picked = frameSelection(elementsRef.current, selectedRef.current.map((o) => o.id));
+    if (picked.length === 0 || hasCoordsys(elementsRef.current)) return false;
+    const [originId, unitId] = picked;
+    const origin = liveCoords(originId);
+    const nameOf = (id: string) => String(
+      elementsRef.current.find((e) => e.id === id)?.attrs?.name ?? id);
+    return addFrame(board, {
+      origin: { id: originId, name: nameOf(originId), coords: origin },
+      unit: unitId
+        ? { id: unitId, name: nameOf(unitId), coords: liveCoords(unitId) }
+        : { id: nextElId('pt'), name: nextPointName(), coords: [origin[0] + 1, origin[1]] },
+    });
+  }
+
   // ─── Rebuild board from elements[] ────────────────────────────────────────
   // Used when a whole new document arrives; a snapshot restore goes through
   // restoreScene instead.
@@ -1058,6 +1144,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           arrowDragRef.current = null;
           arrowStartRef.current = null;
           if (toolRef.current !== 'selection') return;
+          // A frame is rigid: dragging its origin carries its unit point along, so
+          // the unit keeps its length and the axes their angle.
+          const carry = originCarriesUnit(
+            elementsRef.current, (id: string) => board.objects[id], obj.id);
+          if (carry) board.objects[carry.id]?.moveTo(carry.coords);
           if (syncPositions(elementsRef.current, board)) {
             setSelDecorations(computeDecorations(selectedRef.current, board));
             onSelectionChange(selectedRef.current.map(toSelectedInfo));
@@ -2534,6 +2625,13 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     createMeasure,
     beginParameter,
     numberValues,
+
+    coordsysRows: (): CoordsysRows => (
+      coordsysRows(elementsRef.current, selectedRef.current.map((o) => o.id))
+    ),
+    coordsysIds: (): Coordsys | null => coordsysOf(elementsRef.current),
+    newCoordsys,
+    defineCoordsys,
 
     // ── Transform menu & marks ───────────────────────────────────────────────
     markCenter: () => {

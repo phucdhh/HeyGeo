@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ToolMode, CanvasHandle, NumberValue } from './designTypes';
 import { COLOR_SWATCHES, POINT_STYLES } from './contextMenuModel';
+import type { CoordsysRows } from './coordsysModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { canCalculate } from './numberMenuModel';
 
@@ -228,12 +229,19 @@ export default function DesignMenuBar({
   }
 
   /** The numbers the board shows, which is what a calculation may be built from. */
+  /** The numbers the board shows, which is what a calculation may be built from. */
   function numberValues(): NumberValue[] {
     return canvasRef.current?.numberValues() ?? [];
   }
 
+  /** Whether the Graph menu's two frame items have something to mark. */
+  function frameRows(): CoordsysRows {
+    return canvasRef.current?.coordsysRows() ?? { canNew: false, canDefine: false };
+  }
+
   // ─── Menu definitions – mirrors GSP Desktop menu order ────────────────
   // File | Edit | Display | Construct | Measure | Number | Transform | Graph | Window | Help
+  const frames = frameRows();
   const menus: MenuDef[] = [
     // ── File ──────────────────────────────────────────────────────────────
     {
@@ -454,8 +462,19 @@ export default function DesignMenuBar({
     {
       label: 'Graph',
       items: [
-        { label: 'New Coordinate System',         action: onUnderDevelopment },
-        { label: 'Define Axes…',                  action: onUnderDevelopment },
+        // Sketchpad marks one coordinate system at a time, either its own default
+        // or the one the picked points describe, so the second item waits for a
+        // point to be selected and both go grey once a frame is marked.
+        {
+          label: 'New Coordinate System',
+          disabled: !frames.canNew,
+          action: () => canvasRef.current?.newCoordsys(),
+        },
+        {
+          label: 'Define Coordinate System',
+          disabled: !frames.canDefine,
+          action: () => canvasRef.current?.defineCoordsys(),
+        },
         { separator: true },
         { label: 'Plot As (x, y)…',               action: onUnderDevelopment },
         { label: 'Plot Value On Axis…',           action: onUnderDevelopment },

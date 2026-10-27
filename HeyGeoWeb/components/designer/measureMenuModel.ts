@@ -11,8 +11,9 @@
  * pure and so a shape can be named by the points it was built from.
  */
 import { parentIds } from './sceneModel';
+import { coordsysOf } from './coordsysModel';
 import type { HeyGeoElement } from './designTypes';
-import type { MeasureOp, MeasureSpec } from './measurement';
+import { RELATIVE_OPS, type MeasureOp, type MeasureSpec } from './measurement';
 
 /**
  * One row of the Measure menu. `specs` is what choosing it writes — one caption
@@ -54,6 +55,10 @@ function one(picked: (HeyGeoElement | undefined)[], of: (e?: HeyGeoElement) => b
 
 /** The caption's left-hand text, one template per op, as the desktop writes it. */
 function lhs(op: MeasureOp, args: string[], ctx: Ctx): string {
+  // a caption taken in the sketch's frame is named for what it measures, and the
+  // frame's own two points are not part of the name
+  const plain = RELATIVE_OPS[op];
+  if (plain) return lhs(plain, args.slice(2), ctx);
   const [p0, p1, p2] = args.map(ctx.name);
   const s0 = ctx.shapeName(args[0]);
   switch (op) {
@@ -171,6 +176,17 @@ export function measureItems(
   const segments = picked.filter(isSegment).map(id);
   const straight = picked.filter((e) => isLine(e) || isSegment(e)).map(id);
 
+  /**
+   * Where a point's coordinates are read from. Sketchpad measures in the frame
+   * the designer defines; until one is marked, the only frame the board has is
+   * its own, and a caption then shows the board numbers.
+   */
+  const sys = coordsysOf(elements);
+  const frame = sys ? [sys.origin, sys.unit] : [];
+  const pairOp = sys ? 'relativeCoordinates' : 'coordinates';
+  const xOp = sys ? 'relativeAbscissa' : 'abscissa';
+  const yOp = sys ? 'relativeOrdinate' : 'ordinate';
+
   // A point and the straight thing beside it: Sketchpad measures the shortest
   // distance to it, two points measure between themselves.
   const distance: [MeasureOp, string[]][] =
@@ -200,9 +216,9 @@ export function measureItems(
     row('ratio', 'Ratio', [['ratio', [id(a), id(b)]]], '',
       picked.length === 2 && isSegment(a) && isSegment(b)),
     row('value', 'Value', [['value', [id(a)]]], '', one(picked, isType('slider'))),
-    row('coordinates', 'Coordinates', points.map((p) => ['coordinates', [p]]), '', all(points)),
-    row('abscissa', 'Abscissa (x)', points.map((p) => ['abscissa', [p]]), '', all(points)),
-    row('ordinate', 'Ordinate (y)', points.map((p) => ['ordinate', [p]]), '', all(points)),
+    row('coordinates', 'Coordinates', points.map((p) => [pairOp, [...frame, p]]), '', all(points)),
+    row('abscissa', 'Abscissa (x)', points.map((p) => [xOp, [...frame, p]]), '', all(points)),
+    row('ordinate', 'Ordinate (y)', points.map((p) => [yOp, [...frame, p]]), '', all(points)),
     row('slope', 'Slope', straight.map((s) => ['slope', [s]]), '', all(straight)),
     // desktop's canMeasureEquation: the equation of a line or of a circle
     row('equation', 'Equation',

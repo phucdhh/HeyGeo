@@ -9,6 +9,8 @@ import {
 } from './elementRegistry';
 import { anchorClosures, captionAnchor, type MeasureSpec } from './measurement';
 import { calculateSpec, numberSources } from './numberMenuModel';
+import { frameElements } from './coordsysModel';
+import { measureItems } from './measureMenuModel';
 import type { HeyGeoElement } from './designTypes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -759,5 +761,97 @@ describe('a calculation the designer builds', () => {
     r.elMap.sl.setValue(15);
     b.update();
     expect(shown(cap.elMap.cap)).toBe('AB + 2*a = 36.00');
+  });
+});
+
+// Graph | Define Coordinate System marks a frame on one point and writes four
+// more elements beside it; the Measure menu then reads every point through that
+// frame instead of through the board. This is the frame and its numbers on a
+// real board.
+describe('a coordinate system the designer marks', () => {
+  const DOC: HeyGeoElement[] = [
+    ...frameElements(
+      {
+        origin: { id: 'O', name: 'O', coords: [2, 3] },
+        unit: { id: 'U', name: 'U', coords: [4, 3] },
+      },
+      []
+    ),
+    spec({ type: 'point', id: 'P', parents: [5, 4], attrs: { name: 'P' } }) as unknown as HeyGeoElement,
+  ];
+  const frame = DOC.slice(0, 5);
+  const toSpec = (el: HeyGeoElement) =>
+    spec({ type: el.type, id: el.id, parents: [...el.parents], attrs: { ...el.attrs } });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const text = (t: any) => String(t?.plaintext ?? '');
+
+  /** The caption Measure | <row> writes for P, as the menu itself builds it. */
+  const row = (id: string): MeasureSpec =>
+    measureItems(DOC, ['P']).find((i) => i.id === id)!.specs[0];
+
+  /** The point P and the captions, on a board that already holds the frame. */
+  const writeCaptions = (board: any, specs: MeasureSpec[]) =>
+    loader(board, [
+      toSpec(DOC[5]),
+      ...specs.map((s, i) =>
+        spec({
+          type: 'text', id: `c${i}`, parents: [6, 6, s.label ?? ''],
+          attrs: { measure: s, anchor: captionAnchor(s, []) },
+        })),
+    ]);
+
+  it('stands the y-axis a quarter turn away from the unit point', () => {
+    const b = newBoard();
+    const r = loader(b, frame.map(toSpec));
+    expect(r.errors).toEqual([]);
+    b.update();
+
+    // U is two board units right of O, so one axis unit is 2 and the hidden
+    // point that gives the y-axis its direction sits two units above O.
+    expect(r.elMap.O_v.X()).toBeCloseTo(2, 6);
+    expect(r.elMap.O_v.Y()).toBeCloseTo(5, 6);
+    expect(r.elMap.O_x.point1).toBe(r.elMap.O);
+    expect(r.elMap.O_x.point2).toBe(r.elMap.U);
+    expect(r.elMap.O_y.point2).toBe(r.elMap.O_v);
+    expect(r.elMap.O_v.visProp.visible).toBe(false);
+    // the frame mark is the designer's, never JSXGraph's
+    expect(r.elMap.O.visProp.coordsys).toBeUndefined();
+  });
+
+  it('reads a point through the frame the document marked', () => {
+    const b = newBoard();
+    const specs = ['coordinates', 'abscissa', 'ordinate'].map(row);
+    expect(specs.map((s) => s.op)).toEqual(['relativeCoordinates', 'relativeAbscissa', 'relativeOrdinate']);
+    loader(b, frame.map(toSpec));
+    const cap = writeCaptions(b, specs);
+    expect(cap.errors).toEqual([]);
+    b.update();
+
+    // P is 3 board units right of the origin and 1 above it, in a frame whose
+    // unit is 2 board units long.
+    expect(text(cap.elMap.c0)).toBe('P = (1.50; 0.50)');
+    expect(text(cap.elMap.c1)).toContain('1.50');
+    expect(text(cap.elMap.c2)).toContain('0.50');
+  });
+
+  it('keeps the numbers when the frame travels and changes them when its unit does', () => {
+    const b = newBoard();
+    loader(b, frame.map(toSpec));
+    const cap = writeCaptions(b, [row('coordinates')]);
+    b.update();
+    expect(text(cap.elMap.c0)).toBe('P = (1.50; 0.50)');
+
+    // what the canvas does when the origin is dragged: the unit travels with it
+    b.objects.O.moveTo([1, 4]);
+    b.update();
+    b.objects.U.moveTo([3, 4]);
+    b.update();
+    expect(text(cap.elMap.c0)).toBe('P = (2.00; 0.00)');
+
+    // dragging the unit point alone rescales the frame instead
+    b.objects.U.moveTo([3, 3]);
+    b.objects.O.moveTo([2, 3]);
+    b.update();
+    expect(text(cap.elMap.c0)).toBe('P = (3.00; 1.00)');
   });
 });
