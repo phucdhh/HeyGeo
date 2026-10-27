@@ -205,9 +205,11 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         return;
       }
       if (e.key === 'Escape') {
-        // Sketchpad's Escape walks down a ladder: first the construction in
-        // flight, then the selection, then it does nothing at all.
-        if (!canvasRef.current?.cancelCurrentTool()) canvasRef.current?.clearSelection();
+        // Sketchpad's Escape walks down a ladder: first the Context menu, then the
+        // construction in flight, then the selection, then nothing at all.
+        if (!canvasRef.current?.closeContextMenu() && !canvasRef.current?.cancelCurrentTool()) {
+          canvasRef.current?.clearSelection();
+        }
         return;
       }
       const toolShortcut = TOOL_SHORTCUTS[e.key.toLowerCase()];

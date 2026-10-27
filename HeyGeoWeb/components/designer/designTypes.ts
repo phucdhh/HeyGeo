@@ -101,6 +101,20 @@ export const TOOL_HINTS: Record<ToolMode, string> = {
   slider:          'Nhấp (1) điểm đầu – nhấp (2) điểm cuối thanh trượt',
 };
 
+// ─── Element kind vocabulary, shared by the panel and the Context menu ────────
+export const ELEMENT_KIND_LABELS: Record<string, string> = {
+  point: 'Điểm', glider: 'Điểm trên đối tượng', segment: 'Đoạn thẳng',
+  line: 'Đường thẳng', ray: 'Tia', circle: 'Đường tròn', arc: 'Cung tròn',
+  polygon: 'Đa giác', angle: 'Góc', text: 'Văn bản', midpoint: 'Trung điểm',
+  intersection: 'Giao điểm', perpendicular: 'Vuông góc',
+  parallel: 'Song song', bisector: 'Phân giác', slider: 'Thanh trượt',
+  functiongraph: 'Đồ thị hàm số',
+};
+
+export function elementKindLabel(kind: string): string {
+  return ELEMENT_KIND_LABELS[kind] ?? kind;
+}
+
 // Key shortcuts (lowercase)
 export const TOOL_SHORTCUTS: Partial<Record<string, ToolMode>> = {
   s: 'selection',
@@ -197,6 +211,13 @@ export interface CanvasHandle {
   stopAnimation?: (id: string) => void;
   cancelCurrentTool: () => boolean;
   clearSelection: () => void;
+  /** True when Escape dismissed an open Context menu rather than something below it. */
+  closeContextMenu: () => boolean;
+  // Display commands the Context menu reaches directly
+  selectParents: () => void;
+  updateSelectedPointSize: (size: number) => void;
+  bringSelectedForward: () => void;
+  sendSelectedToBack: () => void;
   // Construct menu (all selection-based: Select-then-act)
   createPointOnObject: () => void;
   createIntersection: () => void;

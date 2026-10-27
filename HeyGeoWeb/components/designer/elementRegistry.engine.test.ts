@@ -480,3 +480,36 @@ describe('registry against the real engine', () => {
     expect(out.error).toMatch(/cần 1 đối tượng cha/);
   });
 });
+
+// The Context menu writes these into the document, so a style chosen with the
+// mouse has to survive a save like any other attribute.
+describe('the Display attributes the Context menu writes', () => {
+  it('gives a point the radius GSP calls its style', () => {
+    const b = newBoard();
+    const { obj } = createElement(b, spec({ type: 'point', id: 'p1', parents: [1, 1], attrs: { size: 5 } }));
+    expect(obj.visProp.size).toBe(5);
+  });
+
+  it('stacks an interior by the layer the document carries', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'a', parents: [1, 2] }),
+      spec({ type: 'point', id: 'b', parents: [3, 4] }),
+      spec({ type: 'point', id: 'c', parents: [5, 2] }),
+      spec({ type: 'polygon', id: 'pg', parents: ['a', 'b', 'c'], attrs: { layer: 12 } }),
+    ]);
+    expect(r.errors).toEqual([]);
+    expect((r.elMap.pg as any).visProp.layer).toBe(12);
+  });
+
+  it('reloads a label or a trace that was toggled from the menu', () => {
+    const b = newBoard();
+    const elements = [
+      spec({ type: 'point', id: 'A', parents: [2, 3], attrs: { withLabel: true, trace: true } }),
+    ];
+    const r = loader(b, elements);
+    expect(r.errors).toEqual([]);
+    expect((r.elMap.A as any).visProp.withlabel).toBe(true);
+    expect((r.elMap.A as any).visProp.trace).toBe(true);
+  });
+});

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { ToolMode, CanvasHandle } from './designTypes';
+import { COLOR_SWATCHES } from './contextMenuModel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MenuItemDef {
@@ -52,16 +53,8 @@ interface Props {
 }
 
 // ─── Color palette ────────────────────────────────────────────────────────────
-const COLORS = [
-  { name: 'Black',  value: '#000000' },
-  { name: 'Gray',   value: '#808080' },
-  { name: 'Red',    value: '#d32f2f' },
-  { name: 'Green',  value: '#388e3c' },
-  { name: 'Blue',   value: '#1565c0' },
-  { name: 'Yellow', value: '#f9a825' },
-  { name: 'Purple', value: '#7b1fa2' },
-  { name: 'Cyan',   value: '#00838f' },
-];
+// The eight swatches of Display | Color, shared with the Context menu.
+const COLORS = COLOR_SWATCHES.map((c) => ({ name: c.label, value: c.value }));
 
 // ─── Dropdown menu item renderer ──────────────────────────────────────────────
 function MenuItem({

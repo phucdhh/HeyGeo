@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { elementKindLabel } from './designTypes';
 import type { CanvasHandle, SelectedElementInfo } from './designTypes';
 
 const STROKE_COLORS = [
@@ -59,15 +60,6 @@ export default function DesignPropertiesPanel({ selected, canvasRef }: Props) {
   const [editName, setEditName] = useState('');
   const [nameEditing, setNameEditing] = useState(false);
 
-  const typeLabel: Record<string, string> = {
-    point: 'Điểm', glider: 'Điểm trên đối tượng', segment: 'Đoạn thẳng',
-    line: 'Đường thẳng', ray: 'Tia', circle: 'Đường tròn', arc: 'Cung tròn',
-    polygon: 'Đa giác', angle: 'Góc', text: 'Văn bản', midpoint: 'Trung điểm',
-    intersection: 'Giao điểm', perpendicular: 'Vuông góc',
-    parallel: 'Song song', bisector: 'Phân giác', slider: 'Thanh trượt',
-    functiongraph: 'Đồ thị hàm số',
-  };
-
   const hasFill = el ? FILL_TYPES.includes(el.type) : false;
   const isPoint = el ? ['point', 'glider', 'midpoint', 'intersection'].includes(el.type) : false;
 
@@ -93,7 +85,7 @@ export default function DesignPropertiesPanel({ selected, canvasRef }: Props) {
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-200 bg-gray-100 flex-shrink-0">
         <p className="text-xs font-semibold text-gray-600">
-          {multi ? `${selected.length} đối tượng được chọn` : (typeLabel[el.type] ?? el.type)}
+          {multi ? `${selected.length} đối tượng được chọn` : elementKindLabel(el.type)}
         </p>
         {!multi && el.id && (
           <p className="text-[10px] text-gray-400 mt-0.5 font-mono truncate">ID: {el.id}</p>

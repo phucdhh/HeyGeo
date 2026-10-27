@@ -18,7 +18,15 @@ import type {
   SliderConfig,
   SliderPos,
 } from './designTypes';
-import { emptyData } from './designTypes';
+import { emptyData, elementKindLabel } from './designTypes';
+import DesignContextMenu from './DesignContextMenu';
+import {
+  objectMenu,
+  selectionFacts,
+  sketchMenu,
+  type ContextItem,
+  type ContextRow,
+} from './contextMenuModel';
 import { createElement } from './elementRegistry';
 import { anchorClosures, type AnchorSpec, type MeasureSpec } from './measurement';
 import { arrowDragMap, imageClosures, type ImageSpec } from './transforms';
@@ -58,6 +66,17 @@ function nextPointName() {
 function nextElId(prefix: string) { return `${prefix}_${++_elIdx}`; }
 
 const POINT_ELTS = ['point', 'glider', 'midpoint', 'intersection', 'slider'];
+
+/** What a click or a drag can act on. */
+const SELECTABLE_KINDS = [
+  ...POINT_ELTS,
+  'line', 'segment', 'ray', 'parallel', 'perpendicular', 'bisector',
+  'circle', 'arc', 'polygon',
+];
+
+/** Sketchpad also has a menu for a measurement or a caption, which a click
+ *  cannot select, so the Context menu looks at these as well. */
+const CONTEXT_MENU_KINDS = [...SELECTABLE_KINDS, 'text', 'angle'];
 
 // ─── Serialise board → HeyGeoData ────────────────────────────────────────────
 function boardToData(
@@ -477,6 +496,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   const objectClickedRef = useRef(false);
   // GSP-style selection decorations rendered as SVG overlay
   const [selDecorations, setSelDecorations] = useState<SelDecoration[]>([]);
+  // The Context menu: the rows Sketchpad would show, and where the pointer was.
+  const [menu, setMenu] = useState<{ x: number; y: number; rows: ContextRow[] } | null>(null);
+  const menuRef = useRef(menu);
   // The marked centre, left on the page as an open circle like Sketchpad does
   const [centerMark, setCenterMark] = useState<CenterMark | null>(null);
   const centerMarkRef = useRef<CenterMark | null>(null);
@@ -754,6 +776,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
       if (toolRef.current !== 'selection') return;
       if (evt.button !== 0) return;
+      // On a Mac, Ctrl+click is the Context-menu gesture — GSP's own spelling of
+      // right-click — so it must not clear the selection or start a rubber band.
+      if (evt.ctrlKey && /Mac/.test(navigator.platform)) return;
       // board.on('down') runs first (inside JSXGraph’s event loop) and sets
       // objectClickedRef when an object was hit — skip rubber-band in that case.
       if (objectClickedRef.current) {
@@ -880,6 +905,19 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   // Keep a ref to current rubberBand state for use inside mouseup event closure
   const rubberBandRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   useEffect(() => { rubberBandRef.current = rubberBand; }, [rubberBand]);
+
+  useEffect(() => { menuRef.current = menu; }, [menu]);
+
+  // A click anywhere outside the open Context menu dismisses it, as a native
+  // menu would; the click that opened it arrived before this listener existed.
+  useEffect(() => {
+    if (!menu) return;
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as Element)?.closest('[data-context-menu]')) setMenu(null);
+    };
+    window.addEventListener('mousedown', onDown, true);
+    return () => window.removeEventListener('mousedown', onDown, true);
+  }, [menu]);
 
   // ─── Decoration interval loop ─────────────────────────────────────────────
   // Runs at ~60 fps to keep SVG decorators in sync as points are dragged / board panned.
@@ -1013,10 +1051,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const rect = (board.containerObj as HTMLElement).getBoundingClientRect();
       const sx = evt.clientX - rect.left;
       const sy = evt.clientY - rect.top;
-      const SELECTABLE = [...POINT_ELTS,
-                          'line', 'segment', 'ray', 'parallel', 'perpendicular', 'bisector',
-                          'circle', 'arc', 'polygon'];
-      const hits = findObjectsAt(board, sx, sy, SELECTABLE, 12);
+      const hits = findObjectsAt(board, sx, sy, SELECTABLE_KINDS, 12);
       // Prioritise point-like elements: if any point is within 12px, pick the
       // closest one instead of whatever came first in board.objects iteration.
       const ptHits  = hits.filter(o => POINT_ELTS.includes(o.elType));
@@ -1087,6 +1122,153 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     // Decorations updated by the interval loop; fire immediately too
     setSelDecorations(computeDecorations(selectedRef.current, boardRef.current));
     onSelectionChange(selectedRef.current.map(toSelectedInfo));
+  }
+
+  // ─── Context menu (Sketchpad's right-click, Ctrl+click on a Mac) ──────────
+  /**
+   * True when the object was built out of other objects. GSP only offers Select
+   * Parents then: a free point has nothing above it.
+   */
+  function hasObjectParents(obj: { id: string }): boolean {
+    const board = boardRef.current;
+    const rec = elementsRef.current.find((e) => e.id === obj.id);
+    if (!board || !rec) return false;
+    return rec.parents.some((p) => typeof p === 'string' && !!board.objects[p as string]);
+  }
+
+  function handleContextMenu(evt: React.MouseEvent<HTMLDivElement>) {
+    // Sketchpad never shows the browser's own menu, so neither does this.
+    evt.preventDefault();
+    const board = boardRef.current;
+    const canvas = containerRef.current;
+    if (!board || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const sx = evt.clientX - rect.left;
+    const sy = evt.clientY - rect.top;
+    const hits = findObjectsAt(board, sx, sy, CONTEXT_MENU_KINDS, 12);
+    const ptHits = hits.filter((o) => POINT_ELTS.includes(o.elType));
+    const best = ptHits.length > 0 ? ptHits[0] : hits[0];
+    if (!best) {
+      // Empty space: the sketch menu, which GSP uses as a shortcut to the document.
+      setMenu({
+        x: sx, y: sy,
+        rows: sketchMenu({ grid: metaRef.current.grid, axis: metaRef.current.axis }),
+      });
+      return;
+    }
+    // The menu acts on what it landed on, and a member of a group keeps the
+    // whole group — the same rule a left click follows.
+    if (!selectedRef.current.includes(best)) handleObjectClick(best, false);
+    const targets = selectedRef.current;
+    setMenu({
+      x: sx, y: sy,
+      rows: objectMenu(selectionFacts(targets, elementKindLabel, targets.every(hasObjectParents))),
+    });
+  }
+
+  /** Run the command a menu row stands for; each row is a command the canvas has. */
+  function runContextCommand(item: ContextItem) {
+    setMenu(null);
+    switch (item.id) {
+      case 'select-parents': selectParentsOfSelection(); break;
+      case 'properties': {
+        const first = selectedRef.current[0];
+        if (first) onOpenPropertiesRef.current?.(toSelectedInfo(first));
+        break;
+      }
+      case 'point-style': attrToSelected({ size: Number(item.value) }); break;
+      case 'line-style': attrToSelected({ strokeWidth: Number(item.value) }); break;
+      case 'color': attrToSelected({ strokeColor: String(item.value) }); break;
+      case 'visibility': attrToSelected({ visible: Boolean(item.value) }); break;
+      case 'label': attrToSelected({ withLabel: Boolean(item.value) }); break;
+      case 'trace': attrToSelected({ trace: Boolean(item.value) }); break;
+      case 'layer': shiftSelectedLayer(item.value === 'front' ? 1 : -1); break;
+      case 'select-all': selectAllObjects(); break;
+      case 'grid': setGridVisible(!metaRef.current.grid); break;
+      case 'axis': setAxisVisible(!metaRef.current.axis); break;
+    }
+  }
+
+  /**
+   * One attribute applied to every selected object, drawn, and written back into
+   * the document so a reload keeps it. Every Display command is exactly this.
+   */
+  function attrToSelected(attrs: Record<string, unknown>) {
+    if (selectedRef.current.length === 0) return;
+    saveSnapshot();
+    selectedRef.current.forEach((o) => o.setAttribute(attrs));
+    boardRef.current?.update();
+    const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
+    elementsRef.current.forEach((e) => {
+      if (ids.has(e.id)) Object.assign(e.attrs, attrs);
+    });
+    onSelectionChange(selectedRef.current.map(toSelectedInfo));
+    onDirty();
+  }
+
+  function selectAllObjects() {
+    clearSelection();
+    const board = boardRef.current;
+    if (!board) return;
+    const objs = Object.values(board.objects).filter(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (o: any) => o.elType && o.elType !== 'axis' && o.elType !== 'ticks'
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    selectedRef.current = objs as any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    objs.forEach((o: any) => highlightObj(o, true));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onSelectionChange((objs as any[]).map(toSelectedInfo));
+  }
+
+  // Axes and the grid are always on the board; only their visibility changes.
+  function setAxisVisible(v: boolean) {
+    saveSnapshot();
+    metaRef.current.axis = v;
+    setSceneChrome(boardRef.current, metaRef.current);
+    onDirty();
+  }
+
+  function setGridVisible(v: boolean) {
+    saveSnapshot();
+    metaRef.current.grid = v;
+    setSceneChrome(boardRef.current, metaRef.current);
+    onDirty();
+  }
+
+  /** Sketchpad's Select Parents: the objects these were built from become the selection. */
+  function selectParentsOfSelection() {
+    const board = boardRef.current;
+    if (!board) return;
+    const ids = new Set<string>();
+    for (const obj of selectedRef.current) {
+      const rec = elementsRef.current.find((e) => e.id === obj.id);
+      rec?.parents.forEach((p) => {
+        if (typeof p === 'string' && board.objects[p as string]) ids.add(p as string);
+      });
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parents = [...ids].map((id) => board.objects[id]).filter(Boolean) as any[];
+    if (parents.length === 0) return;
+    selectedRef.current = parents;
+    setSelDecorations(computeDecorations(parents, board));
+    onSelectionChange(parents.map(toSelectedInfo));
+  }
+
+  /**
+   * Bring to Front and Send to Back, which GSP offers only for layered objects.
+   * JSXGraph draws in `layer` order, so one step past the extremes is all the
+   * command has to do, and the number rides along in the document so a reload
+   * stacks the picture the same way.
+   */
+  function shiftSelectedLayer(dir: 1 | -1) {
+    const board = boardRef.current;
+    if (!board || selectedRef.current.length === 0) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const layers = Object.values(board.objects as Record<string, any>)
+      .map((o) => Number(o?.visProp?.layer ?? 0));
+    attrToSelected({ layer: dir === 1 ? Math.max(...layers) + 1 : Math.min(...layers) - 1 });
   }
 
   // ─── Point creation ────────────────────────────────────────────────────────
@@ -1853,36 +2035,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       onDirty();
     },
 
-    selectAll: () => {
-      clearSelection();
-      const board = boardRef.current;
-      if (!board) return;
-      const objs = Object.values(board.objects).filter(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (o: any) => o.elType && o.elType !== 'axis' && o.elType !== 'ticks'
-      );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      selectedRef.current = objs as any[];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      objs.forEach((o: any) => highlightObj(o, true));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      onSelectionChange((objs as any[]).map(toSelectedInfo));
-    },
+    selectAll: selectAllObjects,
 
-    setAxis: (v: boolean) => {
-      saveSnapshot();
-      metaRef.current.axis = v;
-      // Axes are always on the board; only their visibility changes.
-      setSceneChrome(boardRef.current, metaRef.current);
-      onDirty();
-    },
+    setAxis: setAxisVisible,
 
-    setGrid: (v: boolean) => {
-      saveSnapshot();
-      metaRef.current.grid = v;
-      setSceneChrome(boardRef.current, metaRef.current);
-      onDirty();
-    },
+    setGrid: setGridVisible,
 
     zoomIn:  () => boardRef.current?.zoomIn(0, 0),
     zoomOut: () => boardRef.current?.zoomOut(0, 0),
@@ -1890,86 +2047,27 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     setTitle: (t: string) => { metaRef.current.title = t; },
 
-    updateSelectedColor: (color: string) => {
-      saveSnapshot();
-      selectedRef.current.forEach((o: { setAttribute: (a: Record<string,unknown>) => void }) => {
-        o.setAttribute({ strokeColor: color, fillColor: color });
-      });
-      boardRef.current?.update();
-      // Sync to elements
-      const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
-      elementsRef.current.forEach(e => {
-        if (ids.has(e.id)) { e.attrs.strokeColor = color; e.attrs.fillColor = color; }
-      });
-      onSelectionChange(selectedRef.current.map(toSelectedInfo));
-      onDirty();
-    },
+    updateSelectedColor: (color: string) => attrToSelected({ strokeColor: color, fillColor: color }),
 
-    updateSelectedStrokeColor: (color: string) => {
-      saveSnapshot();
-      selectedRef.current.forEach((o: { setAttribute: (a: Record<string,unknown>) => void }) =>
-        o.setAttribute({ strokeColor: color }));
-      boardRef.current?.update();
-      const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
-      elementsRef.current.forEach(e => { if (ids.has(e.id)) e.attrs.strokeColor = color; });
-      onSelectionChange(selectedRef.current.map(toSelectedInfo));
-      onDirty();
-    },
+    updateSelectedStrokeColor: (color: string) => attrToSelected({ strokeColor: color }),
 
-    updateSelectedFillColor: (color: string) => {
-      saveSnapshot();
-      selectedRef.current.forEach((o: { setAttribute: (a: Record<string,unknown>) => void }) =>
-        o.setAttribute({ fillColor: color }));
-      boardRef.current?.update();
-      const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
-      elementsRef.current.forEach(e => { if (ids.has(e.id)) e.attrs.fillColor = color; });
-      onSelectionChange(selectedRef.current.map(toSelectedInfo));
-      onDirty();
-    },
+    updateSelectedFillColor: (color: string) => attrToSelected({ fillColor: color }),
 
-    updateSelectedFillOpacity: (opacity: number) => {
-      saveSnapshot();
-      selectedRef.current.forEach((o: { setAttribute: (a: Record<string,unknown>) => void }) =>
-        o.setAttribute({ fillOpacity: opacity }));
-      boardRef.current?.update();
-      const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
-      elementsRef.current.forEach(e => { if (ids.has(e.id)) e.attrs.fillOpacity = opacity; });
-      onSelectionChange(selectedRef.current.map(toSelectedInfo));
-      onDirty();
-    },
+    updateSelectedFillOpacity: (opacity: number) => attrToSelected({ fillOpacity: opacity }),
 
-    updateSelectedStrokeWidth: (w: number) => {
-      saveSnapshot();
-      selectedRef.current.forEach((o: { setAttribute: (a: Record<string,unknown>) => void }) =>
-        o.setAttribute({ strokeWidth: w }));
-      boardRef.current?.update();
-      const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
-      elementsRef.current.forEach(e => { if (ids.has(e.id)) e.attrs.strokeWidth = w; });
-      onSelectionChange(selectedRef.current.map(toSelectedInfo));
-      onDirty();
-    },
+    updateSelectedStrokeWidth: (w: number) => attrToSelected({ strokeWidth: w }),
 
-    updateSelectedDash: (d: number) => {
-      saveSnapshot();
-      selectedRef.current.forEach((o: { setAttribute: (a: Record<string,unknown>) => void }) =>
-        o.setAttribute({ dash: d }));
-      boardRef.current?.update();
-      const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
-      elementsRef.current.forEach(e => { if (ids.has(e.id)) e.attrs.dash = d; });
-      onSelectionChange(selectedRef.current.map(toSelectedInfo));
-      onDirty();
-    },
+    updateSelectedDash: (d: number) => attrToSelected({ dash: d }),
 
-    updateSelectedVisible: (v: boolean) => {
-      saveSnapshot();
-      selectedRef.current.forEach((o: { setAttribute: (a: Record<string,unknown>) => void }) =>
-        o.setAttribute({ visible: v }));
-      boardRef.current?.update();
-      const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
-      elementsRef.current.forEach(e => { if (ids.has(e.id)) e.attrs.visible = v; });
-      onSelectionChange(selectedRef.current.map(toSelectedInfo));
-      onDirty();
-    },
+    updateSelectedVisible: (v: boolean) => attrToSelected({ visible: v }),
+
+    updateSelectedPointSize: (size: number) => attrToSelected({ size }),
+
+    selectParents: selectParentsOfSelection,
+
+    bringSelectedForward: () => shiftSelectedLayer(1),
+
+    sendSelectedToBack: () => shiftSelectedLayer(-1),
 
     updateSelectedFixed: (f: boolean) => {
       saveSnapshot();
@@ -2012,6 +2110,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     cancelCurrentTool: cancelTool,
     clearSelection,
+    closeContextMenu: () => {
+      if (!menuRef.current) return false;
+      setMenu(null);
+      return true;
+    },
 
     confirmSlider: (cfg: SliderConfig) => {
       const board = boardRef.current;
@@ -2720,7 +2823,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       {/* Engine + stylesheet are injected by lib/jsxgraph (self-hosted, no CDN) */}
 
       {/* Canvas container */}
-      <div ref={containerRef} className="relative flex-1 overflow-hidden bg-white">
+      <div
+        ref={containerRef}
+        className="relative flex-1 overflow-hidden bg-white"
+        onContextMenu={handleContextMenu}
+      >
         {/* JSXGraph renders into this div */}
         <div id={BOARD_ID} className="w-full h-full" />
 
@@ -2879,6 +2986,15 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
               strokeDasharray="4 3"
             />
           </svg>
+        )}
+        {/* Sketchpad's Context menu, from the right-click or Ctrl+click */}
+        {menu && (
+          <DesignContextMenu
+            rows={menu.rows}
+            x={menu.x}
+            y={menu.y}
+            onPick={runContextCommand}
+          />
         )}
       </div>
     </>
