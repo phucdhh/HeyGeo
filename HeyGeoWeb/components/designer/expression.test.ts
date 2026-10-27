@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evalExpression, expressionRefs } from './expression';
+import { evalExpression, expressionRefs, expressionVariables } from './expression';
 
 /** The numbers a document's calculations would be handed. */
 const refs = (...values: (number | null)[]) => (i: number) => values[i] ?? null;
@@ -89,5 +89,40 @@ describe('expressionRefs', () => {
     expect(expressionRefs('sqrt(#1+#1)')).toEqual([1]);
     expect(expressionRefs('pi*2')).toEqual([]);
     expect(expressionRefs('2+')).toEqual([]);
+  });
+});
+
+describe('a formula written in one variable', () => {
+  /** What a plot hands the evaluator: its own variable, and no other name. */
+  const at = (value: number) => (name: string) => (name === 'x' || name === 't' ? value : undefined);
+
+  it('counts the variable wherever it is written', () => {
+    expect(evalExpression('x^2-2', refs(), at(3))).toBe(7);
+    expect(evalExpression('2x', refs(), at(4))).toBe(8);
+    expect(evalExpression('sin(t)', refs(), at(Math.PI / 2))).toBeCloseTo(1, 10);
+    expect(evalExpression('t/2+pi', refs(), at(2))).toBeCloseTo(1 + Math.PI, 10);
+  });
+
+  it('has no number where the expression has none, and still parses', () => {
+    // a curve skips these points; it does not reject the typed formula
+    expect(evalExpression('1/x', refs(), at(0))).toBeNull();
+    expect(evalExpression('sqrt(x)', refs(), at(0-4))).toBeNull();
+    expect(evalExpression('sqrt(x)', refs(), at(4))).toBe(2);
+  });
+
+  it('still refuses a name nobody supplied', () => {
+    expect(evalExpression('y+1', refs(), at(2))).toBeNull();
+    expect(evalExpression('window', refs(), at(2))).toBeNull();
+    expect(evalExpression('x', refs())).toBeNull();
+  });
+
+  it('keeps the constants and function names out of the variable list', () => {
+    expect(expressionVariables('x^2-2')).toEqual(['x']);
+    expect(expressionVariables('sin(t)+2pi-x')).toEqual(['t', 'x']);
+    expect(expressionVariables('2sqrt(x)')).toEqual(['x']);
+    expect(expressionVariables('#0+1')).toEqual([]);
+    expect(expressionVariables('cm+deg+in+rad+e+pi')).toEqual([]);
+    expect(expressionVariables('min(x,#0)')).toEqual(['x']);
+    expect(expressionVariables('constructor')).toEqual(['constructor']);
   });
 });

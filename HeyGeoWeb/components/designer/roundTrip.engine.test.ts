@@ -18,6 +18,7 @@ import { resolve } from 'node:path';
 import { applyScene, coordParents, gatherSelectionPoints, syncPositions, takeScene } from './sceneModel';
 import { coordsysOf, verticalElement } from './coordsysModel';
 import { arrowDragMap } from './transforms';
+import { functionPlot, PLOT_SAMPLES } from './plotModel';
 import type { HeyGeoElement } from './designTypes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -96,6 +97,12 @@ const kitchenSink = (): HeyGeoElement[] => [
   // functions, a slider and a locus
   el({ type: 'functiongraph', id: 'f1', parents: ['x*x/3-2', -4, 4], attrs: { strokeColor: '#16a34a' } }),
   el({ type: 'curve', id: 'para1', parents: ['3*cos(x)', '3*sin(x)', 0, 6.28], attrs: { dash: 2 } }),
+  // and the curve the designer typed onto the marked frame: the expression is
+  // data, the frame is its parent, so the page never runs what the file says
+  el({
+    type: 'plot', id: 'plot1', parents: ['O', 'U', 'O_v'],
+    attrs: { plot: functionPlot('x^2-2'), strokeColor: '#800080' },
+  }),
   el({ type: 'slider', id: 'sl1', parents: [[-6, -6], [-2, -6], [0, 10, 4]], attrs: {} }),
   // The locus needs a traced point that really depends on the driver: JSXGraph
   // recurses until the stack dies when it does not.
@@ -296,6 +303,53 @@ describe('a saved document rebuilds the same drawing', () => {
     expect(again.objects.O_v.X()).toBeCloseTo(0, 6);
     expect(again.objects.O_v.Y()).toBeCloseTo(2, 6);
     expect(again.objects.O_y.point2.id).toBe('O_v');
+  });
+
+  it('keeps the curve the designer plotted on the frame', () => {
+    const b = newBoard();
+    const saved = load(b, kitchenSink()).elements;
+    b.update();
+
+    // The document holds the typed arithmetic and the three points it is measured
+    // against — never a function to run.
+    const stored = saved.find((e: HeyGeoElement) => e.id === 'plot1')!;
+    expect(stored.parents).toEqual(['O', 'U', 'O_v']);
+    expect(stored.attrs.plot).toEqual({ x: 'x', y: 'x^2-2', variable: 'x', from: -5, to: 5 });
+    expect(JSON.stringify(saved)).not.toMatch(/function\(/);
+    // JSXGraph is handed the curve, not the descriptor
+    expect(b.objects.plot1.visProp.plot).toBeUndefined();
+
+    const again = newBoard();
+    load(again, JSON.parse(JSON.stringify(saved)));
+    again.update();
+    // this frame is O(0,0) with unit U(2,0) and y-direction O_v(0,2), so its x = 2
+    // is board 4 on both axes: the curve reloads measured in the frame, not the page
+    expect(again.objects.plot1.X(2)).toBeCloseTo(4);
+    expect(again.objects.plot1.Y(2)).toBeCloseTo(4);
+    expect(again.objects.plot1.Y(0)).toBeCloseTo(-4);
+    expect(again.objects.plot1.visProp.numberpoints).toBe(PLOT_SAMPLES);
+    expect(String(again.objects.plot1.visProp.strokecolor)).toBe('#800080');
+    expect(drawing(again)).toEqual(drawing(b));
+  });
+
+  it('keeps a plotted curve a child of its frame across a drag and a save', () => {
+    const b = newBoard();
+    const elements = load(b, kitchenSink()).elements;
+    b.update();
+    // dragging the unit point is a move of the frame, so nothing about the curve
+    // is a position that syncPositions could freeze into the document
+    b.objects.U.moveTo([4, 0]);
+    b.update();
+    expect(syncPositions(elements, b)).toBe(true);
+    expect(elements.find((e: HeyGeoElement) => e.id === 'plot1')!.parents).toEqual(['O', 'U', 'O_v']);
+    // x = 2 now lands on board 8
+    expect(b.objects.plot1.X(2)).toBeCloseTo(8);
+
+    const reloaded = newBoard();
+    load(reloaded, JSON.parse(JSON.stringify(elements)));
+    reloaded.update();
+    expect(reloaded.objects.plot1.X(2)).toBeCloseTo(8);
+    expect(reloaded.objects.plot1.Y(2)).toBeCloseTo(8);
   });
 
   it('is unchanged by a second reload, so a save cannot drift', () => {    const b1 = newBoard();

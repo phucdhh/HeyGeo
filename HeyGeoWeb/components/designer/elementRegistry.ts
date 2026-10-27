@@ -9,8 +9,10 @@
  * accept (or a parent list it cannot resolve) silently disappeared on reload.
  *
  * Nothing here evaluates a string. A measurement or a transformed point arrives
- * as a descriptor and becomes a closure over the board, a curve becomes a
- * JSXGraph expression, and a source that is neither is reported instead of run.
+ * as a descriptor and becomes a closure over the board, a typed curve becomes a
+ * closure over the frame it was plotted on, a stored JSXGraph expression is handed
+ * to the engine's own parser, and a source that is neither is reported instead of
+ * run.
  */
 import {
   anchorClosures,
@@ -22,6 +24,7 @@ import {
 } from './measurement';
 import { migrateLegacyMeasure } from './legacyMeasure';
 import { migrateLegacyTransform } from './legacyTransform';
+import { isPlotSpec, PLOT_SAMPLES, plotParents, plotProblem } from './plotModel';
 import { imageClosures, isImageSpec, type ImageSpec } from './transforms';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -93,6 +96,12 @@ export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
   // so nothing here may be looked up in elMap.
   curve:          { jxg: 'curve',          parents: atLeast(1), refParents: [] },
   functiongraph:  { jxg: 'functiongraph',  parents: atLeast(1), refParents: [] },
+  // A curve the designer typed. Its parents are the three points of the frame it
+  // was plotted on — origin, unit, y-direction — so it is measured in that frame
+  // and not in the page, exactly as Sketchpad's plot is a child of the marked
+  // system. `attrs.plot` carries the expressions and the domain; the sampling is
+  // the desktop's 300 points, not JSXGraph's 100.
+  plot:           { jxg: 'curve',          parents: 3, attrs: { numberPoints: PLOT_SAMPLES } },
   conic:          { jxg: 'conic',          parents: 5 },
   tracecurve:     { jxg: 'tracecurve',     parents: 2 },
   // desktop transforms: [dx,dy] / [angle, centreId] / [lineId]
@@ -212,6 +221,9 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
   }
 
   const byName = ELEMENT_REGISTRY[el.type]?.parentMode === 'byName';
+  if (el.type === 'plot' && isPlotSpec(attrs.plot)) {
+    return plotParents(el.parents.map((id) => elMap[String(id)]), attrs.plot);
+  }
   return el.parents.map((p, i) => {
     if (isReferenceParent(el, i)) return elMap[p as string];
     if (byName && typeof p === 'string' && p in elMap) return elMap[p];
@@ -221,7 +233,7 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
 }
 
 /** Attributes that describe the element to this app, not to JSXGraph. */
-const APP_ATTRS = ['measure', 'anchor', 'image', 'coordsys'];
+const APP_ATTRS = ['measure', 'anchor', 'image', 'coordsys', 'plot'];
 
 /** Build one element from its HeyGeo JSON description. */
 export function createElement(
@@ -247,6 +259,20 @@ export function createElement(
   const copiedPoint = String(el.parents[0]);
   if (imageOf(el) && !elMap[copiedPoint] && !board?.objects?.[copiedPoint]) {
     return { obj: null, error: `${el.type} tham chiếu đối tượng không tồn tại` };
+  }
+
+  // A curve the designer typed reads its frame through closures, so the
+  // undefined-parent check below cannot see its parents going missing; and a
+  // formula that asks for a name the plot does not have is refused here rather
+  // than drawn as an empty board.
+  if (el.type === 'plot' && isPlotSpec(el.attrs?.plot)) {
+    const problem = plotProblem(el.attrs.plot);
+    if (problem) return { obj: null, error: `plot: ${problem}` };
+    const gone = el.parents.find(
+      (id) => !elMap[String(id)] && !board?.objects?.[String(id)]);
+    if (gone !== undefined) {
+      return { obj: null, error: `${el.type} tham chiếu đối tượng không tồn tại` };
+    }
   }
 
   let parents: unknown[];

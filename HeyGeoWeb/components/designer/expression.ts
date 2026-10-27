@@ -20,6 +20,13 @@
 /** The value of `#i`, or null when that operand is missing or undefined. */
 export type Operand = (index: number) => number | null;
 
+/**
+ * The value of a name the caller owns — a plot's `x` or `t`. Returning a number
+ * or null says "this is mine, and here is what it is worth at this point";
+ * returning undefined says the name is not the caller's and the evaluator decides.
+ */
+export type Variable = (name: string) => number | null | undefined;
+
 type Token =
   | { k: 'num'; v: number }
   | { k: 'ref'; i: number }
@@ -123,8 +130,11 @@ function tokenize(src: string): Token[] | null {
  * Evaluate the infix expression `src`, or null when any part of it is
  * unparseable, undefined (a division by zero, the square root of a negative) or
  * asks for an operand the document cannot supply.
+ *
+ * `variable` is what a plot passes its own `x` or `t` in as. A name the caller
+ * does not claim and the evaluator does not know is still a failure.
  */
-export function evalExpression(src: string, operand: Operand): number | null {
+export function evalExpression(src: string, operand: Operand, variable?: Variable): number | null {
   const tokens = tokenize(src) ?? [];
   if (tokens.length === 0) return null;
   let at = 0;
@@ -237,6 +247,10 @@ export function evalExpression(src: string, operand: Operand): number | null {
       if (isOp('(')) return call(t.v);
       // A name on its own is a constant, not a function waiting for brackets.
       if (t.v in CONSTANTS) return CONSTANTS[t.v];
+      // …unless the caller says it is the variable of the thing being drawn.
+      // An undefined value there is one missing point, not a bad expression.
+      const owned = variable?.(t.v);
+      if (owned !== undefined) return finite(owned);
       failed = true;
       return null;
     }
@@ -259,6 +273,31 @@ export function expressionRefs(src: string): number[] {
   const out: number[] = [];
   for (const t of tokens) {
     if (t.k === 'ref' && !out.includes(t.i)) out.push(t.i);
+  }
+  return out;
+}
+
+/**
+ * The bare names an expression reads that the evaluator has no number for —
+ * what a plot's caller has to supply as its variable. A call like `sin(x)`
+ * contributes its argument, not `sin`; `pi` and the unit names contribute
+ * nothing, because the evaluator already knows them.
+ */
+export function expressionVariables(src: string): string[] {
+  const tokens = tokenize(src);
+  if (!tokens) return [];
+  const known = (name: string): boolean =>
+    Object.prototype.hasOwnProperty.call(CONSTANTS, name)
+    || Object.prototype.hasOwnProperty.call(FUNCTIONS, name)
+    || Object.prototype.hasOwnProperty.call(BINARY, name);
+  const out: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.k !== 'name') continue;
+    const next = tokens[i + 1];
+    if (next?.k === 'op' && next.v === '(') continue;
+    if (known(t.v)) continue;
+    if (!out.includes(t.v)) out.push(t.v);
   }
   return out;
 }

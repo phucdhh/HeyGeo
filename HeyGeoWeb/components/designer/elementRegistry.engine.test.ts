@@ -11,6 +11,7 @@ import { anchorClosures, captionAnchor, type MeasureSpec } from './measurement';
 import { calculateSpec, numberSources } from './numberMenuModel';
 import { frameElements } from './coordsysModel';
 import { measureItems } from './measureMenuModel';
+import { functionPlot, PLOT_SAMPLES, type PlotSpec } from './plotModel';
 import type { HeyGeoElement } from './designTypes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -157,6 +158,11 @@ describe('registry against the real engine', () => {
     spec({ type: 'text', id: 't1', parents: [1, 1, 'nhãn'] }),
     spec({ type: 'curve', id: 'cur1', parents: [[1, 2, 3], [1, 4, 9]] }),
     spec({ type: 'functiongraph', id: 'fg1', parents: ['function(x){ return x*x; }', -2, 2] }),
+    // the curve the designer types, which is measured in a frame and not in the page
+    spec({
+      type: 'plot', id: 'plot1', parents: ['A', 'B', 'C'],
+      attrs: { plot: functionPlot('x^2-2') },
+    }),
     spec({ type: 'ticks', id: 'tk1', parents: ['l1', 1] }),
     spec({ type: 'anglebisector', id: 'ab1', parents: ['B', 'A', 'C'] }),
     spec({ type: 'transform', id: 'tr1', parents: [1, 0], attrs: { type: 'translate' } }),
@@ -853,5 +859,83 @@ describe('a coordinate system the designer marks', () => {
     b.objects.O.moveTo([2, 3]);
     b.update();
     expect(text(cap.elMap.c0)).toBe('P = (3.00; 1.00)');
+  });
+});
+
+// Graph | Plot Function writes the formula the designer typed together with the
+// three points of the frame it was plotted on. The curve is measured through that
+// frame — the way Sketchpad's plot is a child of its coordinate system — so it
+// lands on the frame's numbers and follows the frame when it is dragged.
+describe('a curve plotted on the marked frame', () => {
+  const FRAME = frameElements(
+    {
+      origin: { id: 'O', name: 'O', coords: [2, 3] },
+      unit: { id: 'U', name: 'U', coords: [4, 3] },
+    },
+    []
+  ).map((el) => spec({ type: el.type, id: el.id, parents: [...el.parents], attrs: { ...el.attrs } }));
+
+  const plotted = (plot: PlotSpec, id = 'g1') =>
+    spec({ type: 'plot', id, parents: ['O', 'U', 'O_v'], attrs: { plot } });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const curveOf = (obj: any): any => obj;
+
+  it('is measured in the frame, not on the page', () => {
+    const b = newBoard();
+    const r = loader(b, [...FRAME, plotted(functionPlot('x'))]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    const curve = curveOf(r.elMap.g1);
+    expect(curve.elType).toBe('curve');
+    // the frame's unit point reaches two board numbers, so its 2 is four units out
+    expect(curve.X(2)).toBeCloseTo(6, 6);
+    expect(curve.Y(2)).toBeCloseTo(7, 6);
+    // its domain is the frame's numbers, sampled the desktop's 300 times
+    expect(curve.X(-5)).toBeCloseTo(-8, 6);
+    expect(curve.X(5)).toBeCloseTo(12, 6);
+    expect(curve.visProp.numberpoints).toBe(PLOT_SAMPLES);
+    // the descriptor is the designer's, never JSXGraph's
+    expect(curve.visProp.plot).toBeUndefined();
+  });
+
+  it('re-scales when the designer drags the frame', () => {
+    const b = newBoard();
+    const r = loader(b, [...FRAME, plotted(functionPlot('x^2-2'))]);
+    b.update();
+    const curve = curveOf(r.elMap.g1);
+    // the vertex is the frame's (0, -2), two board numbers below the origin
+    expect(curve.Y(0)).toBeCloseTo(-1, 6);
+
+    // dragging the unit point in to one board number rescales the curve with it
+    b.objects.U.moveTo([3, 3]);
+    b.update();
+    expect(curve.Y(0)).toBeCloseTo(1, 6);
+    expect(curve.X(2)).toBeCloseTo(4, 6);
+  });
+
+  it('has no point where the expression has none', () => {
+    const b = newBoard();
+    const r = loader(b, [...FRAME, plotted(functionPlot('sqrt(x)'))]);
+    b.update();
+    const curve = curveOf(r.elMap.g1);
+    // the frame's left half is not part of the curve, and it does not join across
+    expect(Number.isFinite(curve.Y(-1))).toBe(false);
+    expect(curve.Y(4)).toBeCloseTo(7, 6);
+  });
+
+  it('refuses a formula that reads a name the curve does not have', () => {
+    const b = newBoard();
+    loader(b, FRAME);
+    const out = createElement(b, plotted({ x: 'x', y: 'y+1', variable: 'x', from: -5, to: 5 }));
+    expect(out.obj).toBeNull();
+    expect(out.error).toMatch(/y/);
+  });
+
+  it('reports a curve whose frame is not on the board', () => {
+    const b = newBoard();
+    const r = loader(b, [plotted(functionPlot('x'))]);
+    expect(r.loaded).toBe(0);
+    expect(r.errors.join(' ')).toMatch(/không tồn tại|cha/);
   });
 });
