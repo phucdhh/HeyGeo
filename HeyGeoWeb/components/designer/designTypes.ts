@@ -1,6 +1,7 @@
 // ─── Tool modes – mirrors HeyGeoView::ToolMode enum from Desktop ─────────────
 import type { MeasureItem } from './measureMenuModel';
 import type { MeasureSpec } from './measurement';
+import type { NumberSource } from './numberMenuModel';
 
 export type ToolMode =
   | 'selection'
@@ -149,6 +150,12 @@ export interface SliderPos {
   x2: number; y2: number;
 }
 
+// ─── A number the board shows (Number | Calculate… reads these) ───────────────
+export interface NumberValue extends NumberSource {
+  /** What it shows now, or null when its geometry cannot be worked out. */
+  value: number | null;
+}
+
 // ─── Selected element info surfaced to Properties Panel ───────────────────────
 export interface SelectedElementInfo {
   id: string;
@@ -255,6 +262,14 @@ export interface CanvasHandle {
   measureRows: () => MeasureItem[];
   /** Write the captions one Measure item offers, as a single undo step. */
   createMeasure: (measures: MeasureSpec[]) => boolean;
+  // Number menu
+  /**
+   * Reserve the place Number | New Parameter… draws its slider, the way the
+   * Slider tool's two clicks would, and open the same dialog over it.
+   */
+  beginParameter: () => SliderPos;
+  /** The numbers the board shows, for Number | Calculate… to read. */
+  numberValues: () => NumberValue[];
   // Zoom & export
   getZoom: () => number;
   exportSVG: () => string;

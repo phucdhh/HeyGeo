@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import type { ToolMode, CanvasHandle } from './designTypes';
+import type { ToolMode, CanvasHandle, NumberValue } from './designTypes';
 import { COLOR_SWATCHES, POINT_STYLES } from './contextMenuModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
+import { canCalculate } from './numberMenuModel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MenuItemDef {
@@ -29,6 +30,8 @@ interface Props {
   showAxis: boolean;
   showGrid: boolean;
   tool: ToolMode;
+  /** Ids the designer has picked, in the order they were picked. */
+  selectedIds: string[];
   canvasRef: React.RefObject<CanvasHandle | null>;
   onNewFile: () => void;
   onOpen: () => void;
@@ -49,6 +52,10 @@ interface Props {
   onToolChange: (mode: ToolMode) => void;
   onShowAbout: () => void;
   onCreateLocus: () => void;
+  /** Number | New Parameter… — the studio opens the parameter dialog. */
+  onNewParameter: () => void;
+  /** Number | Calculate… — the studio opens the Calculator. */
+  onOpenCalculate: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
   onUnderDevelopment: () => void;
 }
@@ -164,6 +171,7 @@ export default function DesignMenuBar({
   showGrid,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   tool: _tool,
+  selectedIds,
   canvasRef,
   onNewFile,
   onOpen,
@@ -184,6 +192,8 @@ export default function DesignMenuBar({
   onToolChange,
   onShowAbout,
   onCreateLocus,
+  onNewParameter,
+  onOpenCalculate,
   onOpenTransform,
   onUnderDevelopment,
 }: Props) {
@@ -215,6 +225,11 @@ export default function DesignMenuBar({
   // starts with every row greyed rather than with no rows at all.
   function measureRows(): MeasureItem[] {
     return canvasRef.current?.measureRows() ?? measureItems([], []);
+  }
+
+  /** The numbers the board shows, which is what a calculation may be built from. */
+  function numberValues(): NumberValue[] {
+    return canvasRef.current?.numberValues() ?? [];
   }
 
   // ─── Menu definitions – mirrors GSP Desktop menu order ────────────────
@@ -391,8 +406,15 @@ export default function DesignMenuBar({
     {
       label: 'Number',
       items: [
-        { label: 'New Parameter…',                action: onUnderDevelopment },
-        { label: 'Calculate…',                    action: onUnderDevelopment },
+        { label: 'New Parameter…',                action: onNewParameter },
+        {
+          // the desktop's canMeasureCalculate: nothing picked opens the
+          // Calculator, one number picked opens it already started on that
+          // number, and a shape is not something to calculate with
+          label: 'Calculate…',
+          disabled: !canCalculate(numberValues(), selectedIds),
+          action: onOpenCalculate,
+        },
         { separator: true },
         { label: 'Tabulate',                      action: onUnderDevelopment },
         { label: 'Add Table Data',                action: onUnderDevelopment },

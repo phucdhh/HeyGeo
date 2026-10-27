@@ -27,6 +27,7 @@ import type {
   LocusResult,
   SelectedElementInfo,
   ToolMode,
+  NumberValue,
   SliderPos,
 } from './designTypes';
 import { emptyData, TOOL_SHORTCUTS } from './designTypes';
@@ -35,6 +36,7 @@ import {
   cycleVariation,
   type ArrowMode,
 } from './toolboxModel';
+import { calculateSpec, seedCalculate } from './numberMenuModel';
 
 import DesignMenuBar         from './DesignMenuBar';
 import DesignToolbar         from './DesignToolbar';
@@ -44,6 +46,7 @@ import DesignStatusBar       from './DesignStatusBar';
 import SaveModelDialog       from './SaveModelDialog';
 import ElementPropertiesDialog from './ElementPropertiesDialog';
 import SliderConfigDialog from './SliderConfigDialog';
+import CalculateDialog from './CalculateDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
 
@@ -88,6 +91,22 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
 
   // Slider config dialog (opened after two-click slider placement)
   const [sliderPos, setSliderPos] = useState<SliderPos | null>(null);
+
+  // Number | Calculate… dialog, over the numbers the board showed when it opened
+  const [calculate, setCalculate] = useState<{
+    values: NumberValue[];
+    initial: { expr: string; args: string[] };
+  } | null>(null);
+
+  function handleNewParameter() {
+    const place = canvasRef.current?.beginParameter();
+    if (place) setSliderPos(place);
+  }
+
+  function handleOpenCalculate() {
+    const values = canvasRef.current?.numberValues() ?? [];
+    setCalculate({ values, initial: seedCalculate(values, selected.map((s) => s.id)) });
+  }
 
   // Transform dialog (opened from Transform → Translate / Rotate / Dilate…)
   const [transformMode, setTransformMode] = useState<TransformMode | null>(null);
@@ -371,6 +390,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         showAxis={showAxis}
         showGrid={showGrid}
         tool={tool}
+        selectedIds={selected.map((s) => s.id)}
         canvasRef={canvasRef}
         onNewFile={handleNewFile}
         onOpen={handleOpen}
@@ -394,6 +414,8 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onToolChange={setTool}
         onShowAbout={() => setShowAbout(true)}
         onCreateLocus={handleOpenLocusDialog}
+        onNewParameter={handleNewParameter}
+        onOpenCalculate={handleOpenCalculate}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}
       />
@@ -492,6 +514,19 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             canvasRef.current?.cancelCurrentTool();
             setSliderPos(null);
           }}
+        />
+      )}
+
+      {/* ── Number | Calculate… dialog ── */}
+      {calculate && (
+        <CalculateDialog
+          values={calculate.values}
+          initial={calculate.initial}
+          onConfirm={(expr, args) => {
+            canvasRef.current?.createMeasure([calculateSpec(expr, args, calculate.values)]);
+            setCalculate(null);
+          }}
+          onCancel={() => setCalculate(null)}
         />
       )}
 

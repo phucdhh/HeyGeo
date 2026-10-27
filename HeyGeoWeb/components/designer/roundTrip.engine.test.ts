@@ -127,6 +127,14 @@ const kitchenSink = (): HeyGeoElement[] => [
     type: 'text', id: 'mArea', parents: [-8, -5, 'ABO'],
     attrs: { fontSize: 13, measure: { op: 'area', args: ['pg1'], label: 'ABO', precision: 2, unit: ' cm²', scale: 2 } },
   }),
+  // and the number the Number menu calculates out of the numbers above
+  el({
+    type: 'text', id: 'mCalc', parents: [-8, -6, 'AB + a'],
+    attrs: {
+      fontSize: 13,
+      measure: { op: 'calculate', args: ['mDist', 'sl1'], expr: '#0 + #1', label: 'AB + a', precision: 2 },
+    },
+  }),
 ];
 
 /**

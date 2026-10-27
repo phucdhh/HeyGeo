@@ -8,6 +8,8 @@ import {
   type ElementSpec,
 } from './elementRegistry';
 import { anchorClosures, captionAnchor, type MeasureSpec } from './measurement';
+import { calculateSpec, numberSources } from './numberMenuModel';
+import type { HeyGeoElement } from './designTypes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let JXG: any;
@@ -706,5 +708,56 @@ describe('a caption the designer places', () => {
     // line below its own place: half a line for the shape, half for the caption
     const [, y] = anchorClosures(b, captionAnchor(perimeter, written));
     expect(y()).toBeCloseTo(1.75 - 1, 6);
+  });
+});
+
+// Number | Calculate… writes its descriptor with calculateSpec, over the numbers
+// numberSources found in the document. This is the two of them meeting a real
+// board: the calculation has to read the length caption and the slider, and keep
+// reading them as the figure and the slider move.
+describe('a calculation the designer builds', () => {
+  const BOARD = [
+    spec({ type: 'point', id: 'A', parents: [1, 1] }),
+    spec({ type: 'point', id: 'B', parents: [4, 1] }),
+    spec({ type: 'segment', id: 'seg', parents: ['A', 'B'] }),
+    spec({
+      type: 'text', id: 'm1', parents: [0, 6, 'AB'],
+      attrs: { measure: { op: 'length', args: ['seg'], label: 'AB', precision: 2, unit: ' cm' } },
+    }),
+    spec({ type: 'slider', id: 'sl', parents: [[1, 9], [5, 9], [0, 10, 20]], attrs: { name: 'a' } }),
+  ];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const shown = (obj: any): string => String(obj?.plaintext ?? '');
+
+  it('reads the caption and the slider it was built from, and goes on reading them', () => {
+    const b = newBoard();
+    const r = loader(b, BOARD);
+    expect(r.errors).toEqual([]);
+
+    const sources = numberSources(BOARD as unknown as HeyGeoElement[]);
+    expect(sources).toEqual([
+      { id: 'm1', label: 'AB' },
+      { id: 'sl', label: 'a' },
+    ]);
+    const measure = calculateSpec('#0 + 2*#1', ['m1', 'sl'], sources);
+    expect(measure.label).toBe('AB + 2*a');
+
+    const cap = loader(b, [
+      spec({
+        type: 'text', id: 'cap', parents: [5, 5, measure.label],
+        attrs: { measure, anchor: captionAnchor(measure, BOARD as unknown as HeyGeoElement[]) },
+      }),
+    ]);
+    expect(cap.errors).toEqual([]);
+    b.update();
+    expect(shown(cap.elMap.cap)).toBe('AB + 2*a = 23.00');
+
+    r.elMap.B.moveTo([7, 1]);
+    b.update();
+    expect(shown(cap.elMap.cap)).toBe('AB + 2*a = 26.00');
+
+    r.elMap.sl.setValue(15);
+    b.update();
+    expect(shown(cap.elMap.cap)).toBe('AB + 2*a = 36.00');
   });
 });

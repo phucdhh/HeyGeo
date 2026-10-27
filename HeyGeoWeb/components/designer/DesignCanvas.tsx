@@ -15,6 +15,7 @@ import type {
   HeyGeoElement,
   SelectedElementInfo,
   ToolMode,
+  NumberValue,
   SliderConfig,
   SliderPos,
 } from './designTypes';
@@ -28,8 +29,9 @@ import {
   type ContextRow,
 } from './contextMenuModel';
 import { createElement } from './elementRegistry';
-import { anchorClosures, captionAnchor, type MeasureSpec } from './measurement';
+import { anchorClosures, captionAnchor, measureValue, type MeasureSpec } from './measurement';
 import { measureItems, type MeasureItem } from './measureMenuModel';
+import { numberSources, parameterPlace } from './numberMenuModel';
 import { arrowDragMap, imageClosures, type ImageSpec } from './transforms';
 import {
   applyScene,
@@ -732,6 +734,29 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
    */
   function measureRows(): MeasureItem[] {
     return measureItems(elementsRef.current, selectedRef.current.map((o) => o.id));
+  }
+
+  /**
+   * Number | New Parameter… needs a slider's place without the two clicks the
+   * Slider tool asks for. The dialog that follows is the tool's own, so its OK
+   * still arrives at confirmSlider with the position remembered here.
+   */
+  function beginParameter(): SliderPos {
+    const place = parameterPlace(elementsRef.current);
+    sliderPosRef.current = place;
+    return place;
+  }
+
+  /** The numbers the board shows, with what each one is worth right now. */
+  function numberValues(): NumberValue[] {
+    const board = boardRef.current;
+    return numberSources(elementsRef.current).map((s) => {
+      const measure = elementsRef.current
+        .find((e) => e.id === s.id)?.attrs?.measure as MeasureSpec | undefined;
+      const slider = board?.objects[s.id] as { Value?: () => number } | undefined;
+      const raw = measure ? measureValue(board, measure) : slider?.Value?.();
+      return { ...s, value: typeof raw === 'number' && Number.isFinite(raw) ? raw : null };
+    });
   }
 
   // ─── Rebuild board from elements[] ────────────────────────────────────────
@@ -2507,6 +2532,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     measureRows,
     createMeasure,
+    beginParameter,
+    numberValues,
 
     // ── Transform menu & marks ───────────────────────────────────────────────
     markCenter: () => {
