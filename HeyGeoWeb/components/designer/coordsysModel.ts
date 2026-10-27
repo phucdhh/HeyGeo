@@ -13,18 +13,47 @@
  * saved document because both already copy the element it sits on, and a unit
  * point that gets deleted leaves the mark pointing at nothing — which reads as
  * no frame, not as a broken one.
+ *
+ * The frame's grid — its form, whether it is drawn, whether points snap to it —
+ * hangs off the same mark, the way the desktop keeps those settings inside its
+ * G_coordsys rather than as objects of their own.
  */
 import type { HeyGeoElement } from './designTypes';
 
-/** The mark on the origin point: which point says how long a unit is. */
-export interface CoordsysSpec {
-  unit: string;
+/**
+ * The four grid forms Sketchpad draws for a coordinate system, named the way the
+ * desktop's Graph | Grid Form submenu names them.
+ */
+export type GridForm = 'polar' | 'square' | 'rectangular' | 'trig';
+
+export const GRID_FORMS: GridForm[] = ['polar', 'square', 'rectangular', 'trig'];
+
+const GRID_FORM_SET = new Set<string>(GRID_FORMS);
+
+function gridFormOf(value: unknown, fallback: GridForm): GridForm {
+  return typeof value === 'string' && GRID_FORM_SET.has(value) ? (value as GridForm) : fallback;
 }
 
-/** Both points a relative measurement is read against. */
+/**
+ * The mark on the origin point: which point says how long a unit is, and how the
+ * frame is drawn and used on top of that. The three grid settings keep the
+ * desktop's defaults — a square frame, no grid, no snapping — and stay out of a
+ * document that never changed them.
+ */
+export interface CoordsysSpec {
+  unit: string;
+  grid?: GridForm;
+  showGrid?: boolean;
+  snap?: boolean;
+}
+
+/** Both points a relative measurement is read against, and the frame's settings. */
 export interface Coordsys {
   origin: string;
   unit: string;
+  grid: GridForm;
+  showGrid: boolean;
+  snap: boolean;
 }
 
 export function isCoordsysSpec(value: unknown): value is CoordsysSpec {
@@ -41,7 +70,14 @@ export function coordsysOf(elements: HeyGeoElement[]): Coordsys | null {
   for (const el of elements) {
     const spec = el.attrs?.coordsys as CoordsysSpec | undefined;
     if (!isCoordsysSpec(spec) || spec.unit === el.id) continue;
-    if (elements.some((e) => e.id === spec.unit)) return { origin: el.id, unit: spec.unit };
+    if (!elements.some((e) => e.id === spec.unit)) continue;
+    return {
+      origin: el.id,
+      unit: spec.unit,
+      grid: gridFormOf(spec.grid, 'square'),
+      showGrid: spec.showGrid === true,
+      snap: spec.snap === true,
+    };
   }
   return null;
 }
@@ -67,15 +103,27 @@ export function frameSelection(elements: HeyGeoElement[], selection: string[]): 
   return enough && picked.length === selection.length ? picked.map((e) => e.id) : [];
 }
 
-/** What the Graph menu's two frame items can do with this document and selection. */
-export interface CoordsysRows {
+/** What the Graph menu can do with this document and this selection. */
+export interface GraphRows {
   canNew: boolean;
   canDefine: boolean;
+  /** The desktop greys the whole grid group out until a frame is marked. */
+  canGrid: boolean;
+  grid: GridForm;
+  showGrid: boolean;
+  snap: boolean;
 }
 
-export function coordsysRows(elements: HeyGeoElement[], selection: string[]): CoordsysRows {
-  const free = !hasCoordsys(elements);
-  return { canNew: free, canDefine: free && frameSelection(elements, selection).length > 0 };
+export function graphRows(elements: HeyGeoElement[], selection: string[]): GraphRows {
+  const sys = coordsysOf(elements);
+  return {
+    canNew: sys === null,
+    canDefine: sys === null && frameSelection(elements, selection).length > 0,
+    canGrid: sys !== null,
+    grid: sys?.grid ?? 'square',
+    showGrid: sys?.showGrid ?? false,
+    snap: sys?.snap ?? false,
+  };
 }
 
 const POINT_STYLE = { size: 4, strokeColor: '#1e3c96', fillColor: '#1e3c96' };
@@ -99,11 +147,43 @@ function framePoint(p: FramePoints['origin']): HeyGeoElement {
 }
 
 /**
+ * The point that gives the y-axis its direction. In every form but a rectangular
+ * one it is welded to the x unit — the unit point turned a quarter turn about the
+ * origin, hidden and unmovable, which is what puts the arrow on the upper end of
+ * the y-axis. A rectangular frame is the desktop's exception: it shows this point
+ * and lets the designer drag it, because its y spacing is its own and dragging
+ * the point is how that spacing is set.
+ */
+export function verticalElement(
+  originId: string,
+  unitId: string,
+  form: GridForm,
+  coords: [number, number] | null,
+): HeyGeoElement {
+  const id = `${originId}_v`;
+  if (form === 'rectangular' && coords) {
+    return {
+      type: 'point', id, parents: [...coords],
+      attrs: {
+        ...POINT_STYLE, name: 'y', size: 3,
+        visible: true, withLabel: true, fixed: false,
+      },
+    };
+  }
+  return {
+    type: 'point', id, parents: [unitId],
+    attrs: {
+      ...POINT_STYLE, name: '', size: 1,
+      visible: false, withLabel: false, fixed: true,
+      image: { op: 'rotate', of: [originId], angle: 90 },
+    },
+  };
+}
+
+/**
  * The five elements a coordinate system is made of, in construction order: the
- * two points that define it, the hidden point that gives the y-direction (the
- * unit point turned a quarter turn about the origin — the same shape the desktop
- * exporter writes, and what puts the arrow on the upper end of the y-axis), and
- * the two axes through them.
+ * two points that define it, the hidden point that gives the y-direction, and the
+ * two axes through them.
  *
  * A point the designer already had keeps its own attributes and gains only the
  * mark, so defining a system on an existing point does not rename or restyle it.
@@ -120,17 +200,7 @@ export function frameElements(points: FramePoints, elements: HeyGeoElement[]): H
     attrs: { ...originBase.attrs, coordsys: { unit: unit.id } },
   };
   const unitEl = existingUnit ?? framePoint(unit);
-
-  const vertical: HeyGeoElement = {
-    type: 'point',
-    id: `${origin.id}_v`,
-    parents: [unit.id],
-    attrs: {
-      ...POINT_STYLE, name: '', size: 1,
-      visible: false, withLabel: false, fixed: true,
-      image: { op: 'rotate', of: [origin.id], angle: 90 },
-    },
-  };
+  const vertical = verticalElement(origin.id, unit.id, 'square', null);
 
   return [
     originEl,
@@ -203,4 +273,47 @@ export function defaultFrame(
     origin: { id: originId, name: originName, coords: [0, 0] },
     unit: { id: unitId, name: unitName, coords: [1, 0] },
   };
+}
+
+/**
+ * The document with the frame's grid changed, or null when there is nothing to
+ * change: no frame, or settings that already say that.
+ *
+ * Two elements move. The origin carries the settings, written out in full so a
+ * document states its frame the way the desktop stores one. The y-direction point
+ * changes shape with the form, because a rectangular frame has to be draggable
+ * and the others welded; `live` is where the board says it currently stands, so
+ * the point the designer sees stays put as it stops being derived.
+ */
+export function withGrid(
+  elements: HeyGeoElement[],
+  next: Partial<Pick<Coordsys, 'grid' | 'showGrid' | 'snap'>>,
+  live: (id: string) => [number, number] | null,
+): HeyGeoElement[] | null {
+  const sys = coordsysOf(elements);
+  if (!sys) return null;
+  const settings = {
+    grid: next.grid ?? sys.grid,
+    showGrid: next.showGrid ?? sys.showGrid,
+    snap: next.snap ?? sys.snap,
+  };
+  if (settings.grid === sys.grid && settings.showGrid === sys.showGrid && settings.snap === sys.snap) {
+    return null;
+  }
+
+  const verticalId = `${sys.origin}_v`;
+  return elements.map((el) => {
+    if (el.id === sys.origin) {
+      return { ...el, attrs: { ...el.attrs, coordsys: { unit: sys.unit, ...settings } } };
+    }
+    if (el.id === verticalId) {
+      return verticalElement(
+        sys.origin,
+        sys.unit,
+        settings.grid,
+        settings.grid === 'rectangular' ? live(el.id) : null,
+      );
+    }
+    return el;
+  });
 }

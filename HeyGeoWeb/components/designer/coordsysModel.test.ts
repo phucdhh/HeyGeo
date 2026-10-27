@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   coordsysOf,
-  coordsysRows,
   defaultFrame,
   frameElements,
   frameSelection,
+  graphRows,
   hasCoordsys,
   isCoordsysSpec,
   originCarriesUnit,
+  verticalElement,
+  withGrid,
 } from './coordsysModel';
 import type { HeyGeoElement } from './designTypes';
 
@@ -24,7 +26,9 @@ const IDS = FRAME.map((e) => e.id);
 
 describe('a frame marked on its origin', () => {
   it('reads the mark back out of the document', () => {
-    expect(coordsysOf(FRAME)).toEqual({ origin: 'O', unit: 'U' });
+    expect(coordsysOf(FRAME)).toEqual({
+      origin: 'O', unit: 'U', grid: 'square', showGrid: false, snap: false,
+    });
     expect(hasCoordsys(FRAME)).toBe(true);
   });
 
@@ -50,7 +54,23 @@ describe('a frame marked on its origin', () => {
       point('O', 0, 0, { coordsys: { unit: 'U' } }), point('U', 1, 0),
       point('P', 2, 2, { coordsys: { unit: 'Q' } }), point('Q', 3, 2),
     ];
-    expect(coordsysOf(two)).toEqual({ origin: 'O', unit: 'U' });
+    expect(coordsysOf(two)).toEqual({
+      origin: 'O', unit: 'U', grid: 'square', showGrid: false, snap: false,
+    });
+  });
+
+  it('reads the grid settings the document states, and the defaults it leaves out', () => {
+    const drawn = [
+      point('O', 0, 0, { coordsys: { unit: 'U', grid: 'polar', showGrid: true, snap: true } }),
+      point('U', 1, 0),
+    ];
+    expect(coordsysOf(drawn)).toMatchObject({ grid: 'polar', showGrid: true, snap: true });
+    // a form no grid has is a typo, not a frame the designer asked for
+    const mistyped = [
+      point('O', 0, 0, { coordsys: { unit: 'U', grid: 'hexagonal', showGrid: 'yes' } }),
+      point('U', 1, 0),
+    ];
+    expect(coordsysOf(mistyped)).toMatchObject({ grid: 'square', showGrid: false });
   });
 });
 
@@ -123,19 +143,92 @@ describe('the Graph menu over a selection', () => {
   });
 
   it('offers both items while no frame is marked and the points are picked', () => {
-    expect(coordsysRows(PLAIN, ['A', 'B'])).toEqual({ canNew: true, canDefine: true });
-    expect(coordsysRows(PLAIN, ['A'])).toEqual({ canNew: true, canDefine: true });
-    expect(coordsysRows(PLAIN, [])).toEqual({ canNew: true, canDefine: false });
-    expect(coordsysRows(PLAIN, ['k'])).toEqual({ canNew: true, canDefine: false });
+    expect(graphRows(PLAIN, ['A', 'B'])).toEqual({
+      canNew: true, canDefine: true, canGrid: false, grid: 'square', showGrid: false, snap: false,
+    });
+    expect(graphRows(PLAIN, ['A']).canDefine).toBe(true);
+    expect(graphRows(PLAIN, []).canDefine).toBe(false);
+    expect(graphRows(PLAIN, ['k']).canDefine).toBe(false);
+    // the desktop greys the grid group out with the same gate: a grid is a frame's
+    expect(graphRows(PLAIN, []).canGrid).toBe(false);
   });
 
   it('offers neither once a frame is marked: one system at a time, as in Sketchpad', () => {
     // to redefine it the designer drags its points, or deletes the frame first
-    expect(coordsysRows(FRAME, ['A', 'B'])).toEqual({ canNew: false, canDefine: false });
+    const rows = graphRows(FRAME, ['A', 'B']);
+    expect(rows).toMatchObject({ canNew: false, canDefine: false, canGrid: true });
+    expect(rows.grid).toBe('square');
+  });
+
+  it('shows the grid the frame already has, for the checkmarks', () => {
+    const framed = withGrid(FRAME, { grid: 'trig', showGrid: true }, () => [0, 1])!;
+    expect(graphRows(framed, [])).toMatchObject({
+      canGrid: true, grid: 'trig', showGrid: true, snap: false,
+    });
   });
 });
 
-describe('dragging the origin', () => {  it('carries the unit point by the same travel', () => {
+describe('the point that gives the y-axis its direction', () => {
+  it('is welded to the unit point in every form but a rectangular one', () => {
+    for (const form of ['square', 'polar', 'trig'] as const) {
+      const v = verticalElement('O', 'U', form, [0, 1]);
+      expect(v.parents, form).toEqual(['U']);
+      expect(v.attrs.image, form).toEqual({ op: 'rotate', of: ['O'], angle: 90 });
+      expect(v.attrs.visible, form).toBe(false);
+      expect(v.attrs.fixed, form).toBe(true);
+    }
+  });
+
+  it('becomes a point the designer can drag in a rectangular frame', () => {
+    // the desktop shows this point only for Rectangular Grid, and its distance
+    // from the origin is what sets the y spacing
+    const v = verticalElement('O', 'U', 'rectangular', [0, 2]);
+    expect(v.parents).toEqual([0, 2]);
+    expect(v.attrs.image).toBeUndefined();
+    expect(v.attrs.visible).toBe(true);
+    expect(v.attrs.fixed).toBe(false);
+  });
+
+  it('stays welded until the board says where it stands', () => {
+    const v = verticalElement('O', 'U', 'rectangular', null);
+    expect(v.parents).toEqual(['U']);
+  });
+});
+
+describe('changing the grid of a frame', () => {
+  const live = (id: string) => (id === 'O_v' ? ([0, 2] as [number, number]) : null);
+
+  it('rewrites the mark in full and leaves every other element alone', () => {
+    const next = withGrid(FRAME, { showGrid: true }, live)!;
+    expect(next).toHaveLength(FRAME.length);
+    expect(next[0].attrs.coordsys).toEqual({ unit: 'U', grid: 'square', showGrid: true, snap: false });
+    expect(next[1]).toBe(FRAME[1]);
+    expect(next[3]).toBe(FRAME[3]);
+  });
+
+  it('changes only the shape of the y-direction point, and only for rectangular', () => {
+    const rect = withGrid(FRAME, { grid: 'rectangular' }, live)!;
+    expect(rect[2].parents).toEqual([0, 2]);
+    expect(rect[2].attrs.visible).toBe(true);
+
+    // going back welds it to the unit point again, so the axes are square
+    const square = withGrid(rect, { grid: 'square' }, live)!;
+    expect(square[2].parents).toEqual(['U']);
+    expect(square[2].attrs.image).toEqual({ op: 'rotate', of: ['O'], angle: 90 });
+  });
+
+  it('says nothing when the settings already read that way', () => {
+    expect(withGrid(FRAME, { grid: 'square' }, live)).toBeNull();
+    expect(withGrid(FRAME, { showGrid: false, snap: false }, live)).toBeNull();
+  });
+
+  it('has no grid to change on a board with no frame', () => {
+    expect(withGrid([point('A', 0, 0)], { showGrid: true }, live)).toBeNull();
+  });
+});
+
+describe('dragging the origin', () => {
+  it('carries the unit point by the same travel', () => {
     const moved = originCarriesUnit(FRAME, dragged({ O: [2, 1], U: [3, 0] }), 'O');
     expect(moved).toEqual({ id: 'U', coords: [3, 1] });
   });

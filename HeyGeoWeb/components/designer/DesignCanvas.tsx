@@ -34,16 +34,26 @@ import { measureItems, type MeasureItem } from './measureMenuModel';
 import { numberSources, parameterPlace } from './numberMenuModel';
 import {
   coordsysOf,
-  coordsysRows,
   defaultFrame,
   frameElements,
   frameSelection,
+  graphRows,
   hasCoordsys,
   originCarriesUnit,
+  withGrid,
   type Coordsys,
-  type CoordsysRows,
   type FramePoints,
+  type GridForm,
+  type GraphRows,
 } from './coordsysModel';
+import {
+  frameGeometry,
+  gridInk,
+  isMeasurable,
+  planGrid,
+  snapToGrid,
+  type Viewbox,
+} from './gridModel';
 import { arrowDragMap, imageClosures, type ImageSpec } from './transforms';
 import {
   applyScene,
@@ -92,6 +102,32 @@ const SELECTABLE_KINDS = [
 /** Sketchpad also has a menu for a measurement or a caption, which a click
  *  cannot select, so the Context menu looks at these as well. */
 const CONTEXT_MENU_KINDS = [...SELECTABLE_KINDS, 'text', 'angle'];
+
+// ─── The frame's grid, as it is painted on the page ─────────────────────────
+// The desktop draws it inside G_coordsys::draw(): a grey pen for the lines and the
+// axis ink for the ticks and their numbers. Where the picture goes is the grid
+// model's business; this is only the ink it is painted with.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const GRID_INK = '#b4b4b4';
+const TICK_INK = '#1e3c96';
+const GRID_FONT = { size: 12, family: 'Helvetica, Arial, sans-serif' };
+
+/** Which side of its axis a number hangs on, as the two SVG attributes that place it. */
+const LABEL_PLACEMENT = {
+  under: { anchor: 'middle', baseline: 'hanging' },
+  left: { anchor: 'end', baseline: 'middle' },
+  right: { anchor: 'start', baseline: 'middle' },
+} as const;
+
+/** The four nodes the grid is drawn with, kept so a redraw replaces rather than rebuilds. */
+interface GridParts {
+  layer: SVGSVGElement;
+  furniture: SVGPathElement;
+  ticks: SVGPathElement;
+  labels: SVGGElement;
+  /** What the picture was drawn from; the same fingerprint means the same picture. */
+  key: string;
+}
 
 // ─── Serialise board → HeyGeoData ────────────────────────────────────────────
 function boardToData(
@@ -517,6 +553,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   // The marked centre, left on the page as an open circle like Sketchpad does
   const [centerMark, setCenterMark] = useState<CenterMark | null>(null);
   const centerMarkRef = useRef<CenterMark | null>(null);
+  // The frame's grid, painted on a layer of its own under JSXGraph's elements
+  const gridPartsRef = useRef<GridParts | null>(null);
 
   // Keep toolRef in sync with prop
   useEffect(() => {
@@ -845,6 +883,203 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     });
   }
 
+  // ─── The frame's grid ───────────────────────────────────────────────────────
+  /**
+   * The grid is furniture, not an object of the construction: JSXGraph's own grid
+   * and ticks follow the board's axes, while a sketch coordinate system is drawn
+   * about its marked origin. So it is painted as plain SVG, mounted as the board
+   * container's first child — under JSXGraph's elements the way the desktop paints
+   * it under the construction, and unable to take a click.
+   */
+  function gridParts(board: JXGBoard): GridParts | null {
+    const container = board.containerObj as HTMLElement | undefined;
+    if (!container) return null;
+    const held = gridPartsRef.current;
+    if (held && held.layer.parentNode === container) return held;
+
+    let layer = container.querySelector('svg[data-frame-grid]') as SVGSVGElement | null;
+    if (!layer) {
+      layer = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
+      layer.setAttribute('data-frame-grid', '');
+      layer.setAttribute(
+        'style',
+        'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none',
+      );
+      container.insertBefore(layer, container.firstChild);
+    }
+    const path = (stroke: string, dash: string): SVGPathElement => {
+      const p = document.createElementNS(SVG_NS, 'path') as SVGPathElement;
+      p.setAttribute('stroke', stroke);
+      p.setAttribute('stroke-width', '1');
+      p.setAttribute('fill', 'none');
+      p.setAttribute('stroke-dasharray', dash);
+      return p;
+    };
+    const furniture = path(GRID_INK, '1 3');
+    const ticks = path(TICK_INK, 'none');
+    const labels = document.createElementNS(SVG_NS, 'g') as SVGGElement;
+    layer.replaceChildren(furniture, ticks, labels);
+    // A layer this board has not seen yet has nothing drawn on it, so the first
+    // picture always goes out.
+    const parts: GridParts = { layer, furniture, ticks, labels, key: '\u0000' };
+    gridPartsRef.current = parts;
+    return parts;
+  }
+
+  /** The visible span, in the [minX, minY, maxX, maxY] order the grid model reads. */
+  function viewboxOf(board: JXGBoard): Viewbox {
+    const [x1, y1, x2, y2] = board.getBoundingBox() as number[];
+    return [x1, Math.min(y1, y2), x2, Math.max(y1, y2)];
+  }
+
+  /** Where a frame's point stands on the board right now. */
+  function boardCoords(board: JXGBoard, id: string): [number, number] | null {
+    const o = board.objects[id];
+    return typeof o?.X === 'function' ? [o.X(), o.Y()] : null;
+  }
+
+  /** The marked frame, its scale, and the grid it implies — null when there is none. */
+  function frameOnBoard(board: JXGBoard) {
+    const sys = coordsysOf(elementsRef.current);
+    if (!sys) return null;
+    const origin = boardCoords(board, sys.origin);
+    const unit = boardCoords(board, sys.unit);
+    if (!origin || !unit) return null;
+    const geo = frameGeometry(origin, unit, boardCoords(board, `${sys.origin}_v`), sys.grid);
+    if (!isMeasurable(geo)) return null;
+    return {
+      sys, geo,
+      plan: planGrid(viewboxOf(board), geo, sys.grid, board.unitX, sys.showGrid),
+    };
+  }
+
+  /**
+   * Everything the picture is drawn from. Rounded to the pixel and to a hundredth
+   * of a board unit, so the check that keeps a 60 fps loop off the DOM misses
+   * nothing the eye can tell.
+   */
+  function frameSignature(board: JXGBoard): string {
+    const sys = coordsysOf(elementsRef.current);
+    if (!sys) return '';
+    const at = (id: string) => {
+      const c = boardCoords(board, id);
+      return c ? `${c[0].toFixed(2)} ${c[1].toFixed(2)}` : '?';
+    };
+    return [
+      sys.origin, sys.unit, sys.grid, sys.showGrid ? 1 : 0, sys.snap ? 1 : 0,
+      at(sys.origin), at(sys.unit), at(`${sys.origin}_v`),
+      ...(board.getBoundingBox() as number[]).map((v) => v.toFixed(2)),
+      Math.round(board.unitX),
+    ].join(' ');
+  }
+
+  /**
+   * Keep the grid in step with its frame. The decoration loop calls this, so a
+   * drag, a pan, a zoom, an undo or a resize redraws it without each of them
+   * having to remember to.
+   */
+  function refreshFrameGrid(board: JXGBoard): void {
+    const parts = gridParts(board);
+    if (!parts) return;
+    const key = frameSignature(board);
+    if (key === parts.key) return;
+    parts.key = key;
+
+    const f = frameOnBoard(board);
+    const zero = board.origin?.scrCoords as number[] | undefined;
+    if (!f || !zero) {
+      parts.furniture.removeAttribute('d');
+      parts.ticks.removeAttribute('d');
+      parts.labels.replaceChildren();
+      return;
+    }
+
+    const ink = gridInk(
+      viewboxOf(board), f.geo, f.plan,
+      [zero[1], zero[2]], [board.unitX, board.unitY],
+    );
+    parts.furniture.setAttribute('stroke-dasharray', ink.solid ? 'none' : '1 3');
+    parts.furniture.setAttribute('d', ink.furniture);
+    parts.ticks.setAttribute('d', ink.ticks);
+    parts.labels.replaceChildren(...ink.labels.map((l) => {
+      const place = LABEL_PLACEMENT[l.side];
+      const text = document.createElementNS(SVG_NS, 'text') as SVGTextElement;
+      text.setAttribute('x', String(l.x));
+      text.setAttribute('y', String(l.y));
+      text.setAttribute('text-anchor', place.anchor);
+      text.setAttribute('dominant-baseline', place.baseline);
+      text.setAttribute('fill', TICK_INK);
+      text.setAttribute('font-size', String(GRID_FONT.size));
+      text.setAttribute('font-family', GRID_FONT.family);
+      text.textContent = l.text;
+      return text;
+    }));
+  }
+
+  /** Where Graph | Snap Points puts a point of the construction. */
+  function snapToFrame(board: JXGBoard, point: [number, number]): [number, number] | null {
+    if (!coordsysOf(elementsRef.current)?.snap) return null;
+    const f = frameOnBoard(board);
+    return f ? snapToGrid(point, f.geo, f.plan) : null;
+  }
+
+  /**
+   * Graph | Snap Points: a dragged point stops on the grid rather than under the
+   * cursor. The frame's own points are left free — a unit point held to its grid
+   * crossing could not be dragged to a new length at all — and so is a transform
+   * or a group drag, which moves its points from the pointer, not from one point.
+   */
+  function snapDuringDrag(board: JXGBoard, obj: { id: string; elType: string; X: () => number; Y: () => number })
+    : [number, number] | null {
+    const sys = coordsysOf(elementsRef.current);
+    if (!sys?.snap || obj.elType !== 'point') return null;
+    if (obj.id === sys.origin || obj.id === sys.unit || obj.id === `${sys.origin}_v`) return null;
+    if (arrowRef.current !== 'translate' || selectedRef.current.length > 1) return null;
+    return snapToFrame(board, [obj.X(), obj.Y()]);
+  }
+
+  /**
+   * The grid settings live on the frame's mark, and a rectangular frame keeps its
+   * own y-direction point, so changing the form rebuilds those two. The key of a
+   * construction covers the mark, so the scene planner tears down and rebuilds the
+   * frame subtree by itself — which is what a point that stops being welded to the
+   * unit point needs.
+   */
+  function changeGrid(next: Partial<Pick<Coordsys, 'grid' | 'showGrid' | 'snap'>>): boolean {
+    const board = boardRef.current;
+    if (!board) return false;
+    const updated = withGrid(
+      elementsRef.current,
+      next,
+      // The document keeps four decimals off the board, the way a drag writes back.
+      (id) => {
+        const at = boardCoords(board, id);
+        return at ? [Number(at[0].toFixed(4)), Number(at[1].toFixed(4))] : null;
+      },
+    );
+    if (!updated) return false;
+    saveSnapshot();
+    restoreScene({ ...currentScene(), elements: updated });
+    return true;
+  }
+
+  /** Graph | Grid Form, one row per form; the current one is the checked row. */
+  function setGridForm(form: GridForm): boolean {
+    return changeGrid({ grid: form });
+  }
+
+  /** Graph | Hide Show Grid, for the frame's own grid — not the page's. */
+  function toggleFrameGrid(): boolean {
+    const sys = coordsysOf(elementsRef.current);
+    return sys ? changeGrid({ showGrid: !sys.showGrid }) : false;
+  }
+
+  /** Graph | Snap Points. */
+  function toggleSnap(): boolean {
+    const sys = coordsysOf(elementsRef.current);
+    return sys ? changeGrid({ snap: !sys.snap }) : false;
+  }
+
   // ─── Rebuild board from elements[] ────────────────────────────────────────
   // Used when a whole new document arrives; a snapshot restore goes through
   // restoreScene instead.
@@ -1065,6 +1300,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         centerMarkRef.current = next;
         setCenterMark(next);
       }
+      refreshFrameGrid(board);
     }, 16);
     return () => clearInterval(id);
   }, []);
@@ -1133,10 +1369,17 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
             applyArrowDrag();
             return;
           }
-          if (selectedRef.current.length === 1 && selectedRef.current[0] === obj) return;
+          if (selectedRef.current.length === 1 && selectedRef.current[0] === obj) {
+            const held = snapDuringDrag(board, obj);
+            if (held) obj.moveTo(held);
+            return;
+          }
           selectedRef.current = [obj];
           setSelDecorations(computeDecorations([obj], board));
           onSelectionChange(selectedRef.current.map(toSelectedInfo));
+          // Graph | Snap Points holds the point to the grid while it is dragged.
+          const held = snapDuringDrag(board, obj);
+          if (held) obj.moveTo(held);
         });
         // ── drop: a moved object has to land back in the document ───────────
         obj.on('up', () => {
@@ -1144,6 +1387,10 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           arrowDragRef.current = null;
           arrowStartRef.current = null;
           if (toolRef.current !== 'selection') return;
+          // The point lands on the grid it was held to, so what the document keeps
+          // is what the designer sees.
+          const held = snapDuringDrag(board, obj);
+          if (held) obj.moveTo(held);
           // A frame is rigid: dragging its origin carries its unit point along, so
           // the unit keeps its length and the axes their angle.
           const carry = originCarriesUnit(
@@ -1444,9 +1691,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     }
 
     // Priority 3: free point
-    const pt = board.create('point', [x, y], ptAttrs);
+    // Graph | Snap Points puts a new point on the grid, the way it holds a dragged one.
+    const [gx, gy] = snapToFrame(board, [x, y]) ?? [x, y];
+    const pt = board.create('point', [gx, gy], ptAttrs);
     elementsRef.current.push({
-      type: 'point', id, parents: [x, y],
+      type: 'point', id, parents: [gx, gy],
       attrs: { name, size: 4, strokeColor: '#1e3c96', fillColor: '#1e3c96' },
     });
     return pt;
@@ -2626,12 +2875,14 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     beginParameter,
     numberValues,
 
-    coordsysRows: (): CoordsysRows => (
-      coordsysRows(elementsRef.current, selectedRef.current.map((o) => o.id))
+    graphRows: (): GraphRows => (
+      graphRows(elementsRef.current, selectedRef.current.map((o) => o.id))
     ),
-    coordsysIds: (): Coordsys | null => coordsysOf(elementsRef.current),
     newCoordsys,
     defineCoordsys,
+    setGridForm,
+    toggleFrameGrid,
+    toggleSnap,
 
     // ── Transform menu & marks ───────────────────────────────────────────────
     markCenter: () => {

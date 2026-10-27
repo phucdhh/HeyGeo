@@ -1,5 +1,5 @@
 // ─── Tool modes – mirrors HeyGeoView::ToolMode enum from Desktop ─────────────
-import type { Coordsys, CoordsysRows } from './coordsysModel';
+import type { GridForm, GraphRows } from './coordsysModel';
 import type { MeasureItem } from './measureMenuModel';
 import type { MeasureSpec } from './measurement';
 import type { NumberSource } from './numberMenuModel';
@@ -273,16 +273,21 @@ export interface CanvasHandle {
   numberValues: () => NumberValue[];
   // Graph menu
   /**
-   * What Graph | New/Define Coordinate System can do with the document and the
-   * current selection: Sketchpad marks one frame at a time, on its points.
+   * What the Graph menu can do with the document and the current selection: which
+   * frame rows are live, and how the marked frame's grid is set. Sketchpad marks
+   * one frame at a time, and keeps its grid with that frame.
    */
-  coordsysRows: () => CoordsysRows;
-  /** The frame the designer marked, or null while the board's own is the only one. */
-  coordsysIds: () => Coordsys | null;
+  graphRows: () => GraphRows;
   /** Graph | New Coordinate System: an origin and its unit point, drawn as axes. */
   newCoordsys: () => boolean;
   /** Graph | Define Coordinate System…: the frame the picked points describe. */
   defineCoordsys: () => boolean;
+  /** Graph | Grid Form: one of the four ways a frame's grid is drawn. */
+  setGridForm: (form: GridForm) => boolean;
+  /** Graph | Hide Show Grid: the frame's own grid, not the page's. */
+  toggleFrameGrid: () => boolean;
+  /** Graph | Snap Points: whether a dragged point stops on that grid. */
+  toggleSnap: () => boolean;
   // Zoom & export
   getZoom: () => number;
   exportSVG: () => string;

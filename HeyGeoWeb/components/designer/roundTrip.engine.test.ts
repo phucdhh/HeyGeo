@@ -16,6 +16,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { applyScene, coordParents, gatherSelectionPoints, syncPositions, takeScene } from './sceneModel';
+import { coordsysOf, verticalElement } from './coordsysModel';
 import { arrowDragMap } from './transforms';
 import type { HeyGeoElement } from './designTypes';
 
@@ -266,6 +267,35 @@ describe('a saved document rebuilds the same drawing', () => {
     expect(again.objects.O_v.Y()).toBeCloseTo(2, 6);
     // JSXGraph never sees the mark: it is stripped like a measurement descriptor
     expect(again.objects.O.visProp?.coordsys).toBeUndefined();
+  });
+
+  it('keeps the grid the designer chose for that frame', () => {
+    // A rectangular frame is the one form whose y-direction is a point of its own:
+    // its spacing is set by dragging that point, so the document has to carry both
+    // the settings and the point they turned the derived one into.
+    const framed = kitchenSink().map((e: HeyGeoElement) => {
+      if (e.id === 'O') {
+        return { ...e, attrs: { ...e.attrs, coordsys: { unit: 'U', grid: 'rectangular', showGrid: true, snap: true } } };
+      }
+      return e.id === 'O_v' ? verticalElement('O', 'U', 'rectangular', [0, 2]) : e;
+    });
+    const b = newBoard();
+    const saved = load(b, framed).elements;
+    b.update();
+
+    const again = newBoard();
+    load(again, JSON.parse(JSON.stringify(saved)));
+    again.update();
+
+    expect(saved.find((e: HeyGeoElement) => e.id === 'O')!.attrs.coordsys)
+      .toEqual({ unit: 'U', grid: 'rectangular', showGrid: true, snap: true });
+    expect(coordsysOf(saved)).toEqual({
+      origin: 'O', unit: 'U', grid: 'rectangular', showGrid: true, snap: true,
+    });
+    // the y point stayed a free point of the document, not a derived one
+    expect(again.objects.O_v.X()).toBeCloseTo(0, 6);
+    expect(again.objects.O_v.Y()).toBeCloseTo(2, 6);
+    expect(again.objects.O_y.point2.id).toBe('O_v');
   });
 
   it('is unchanged by a second reload, so a save cannot drift', () => {    const b1 = newBoard();

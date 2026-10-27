@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ToolMode, CanvasHandle, NumberValue } from './designTypes';
 import { COLOR_SWATCHES, POINT_STYLES } from './contextMenuModel';
-import type { CoordsysRows } from './coordsysModel';
+import { GRID_FORMS, type GridForm, type GraphRows } from './coordsysModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { canCalculate } from './numberMenuModel';
 
@@ -22,6 +22,20 @@ interface MenuDef {
   label: string;
   items: MenuItemDef[];
 }
+
+/** The Graph menu before the canvas has anything to say about a frame. */
+const NO_FRAME_ROWS: GraphRows = {
+  canNew: false, canDefine: false, canGrid: false,
+  grid: 'square', showGrid: false, snap: false,
+};
+
+/** Graph | Grid Form, named the way the desktop's submenu names its four forms. */
+const GRID_FORM_LABELS: Record<GridForm, string> = {
+  polar: 'Polar Grid',
+  square: 'Square Grid',
+  rectangular: 'Rectangular Grid',
+  trig: 'Trig Axes',
+};
 
 interface Props {
   title: string;
@@ -86,7 +100,9 @@ function MenuItem({
   return (
     <div
       className="relative"
-      onMouseEnter={() => hasSubmenu && setSubOpen(true)}
+      // A greyed item opens nothing: its tray would offer actions the row itself
+      // says are unavailable.
+      onMouseEnter={() => hasSubmenu && !item.disabled && setSubOpen(true)}
       onMouseLeave={() => hasSubmenu && setSubOpen(false)}
     >
       <button
@@ -234,9 +250,12 @@ export default function DesignMenuBar({
     return canvasRef.current?.numberValues() ?? [];
   }
 
-  /** Whether the Graph menu's two frame items have something to mark. */
-  function frameRows(): CoordsysRows {
-    return canvasRef.current?.coordsysRows() ?? { canNew: false, canDefine: false };
+  /**
+   * Whether the Graph menu's frame items have something to mark, and how the
+   * marked frame's grid is set.
+   */
+  function frameRows(): GraphRows {
+    return canvasRef.current?.graphRows() ?? NO_FRAME_ROWS;
   }
 
   // ─── Menu definitions – mirrors GSP Desktop menu order ────────────────
@@ -485,15 +504,28 @@ export default function DesignMenuBar({
         { separator: true },
         {
           label: 'Grid Form',
-          submenu: [
-            { label: 'Polar Grid',       action: onUnderDevelopment },
-            { label: 'Square Grid',      action: onUnderDevelopment },
-            { label: 'Rectangular Grid', action: onUnderDevelopment },
-            { label: 'Trig Axes',        action: onUnderDevelopment },
-          ],
+          // A grid belongs to a frame, so the whole group waits for one to be marked.
+          disabled: !frames.canGrid,
+          submenu: GRID_FORMS.map((form) => ({
+            label: GRID_FORM_LABELS[form],
+            checked: frames.grid === form,
+            action: () => canvasRef.current?.setGridForm(form),
+          })),
         },
-        { label: 'Show/Hide Grid', checked: showGrid, action: onToggleGrid },
-        { label: 'Snap Points',                   action: onUnderDevelopment },
+        // The frame's grid, not the page's: a rectangular frame drags its own y
+        // spacing, a polar one counts rings, and the graph paper behind everything
+        // else stays where Display | Grid puts it.
+        {
+          label: frames.showGrid ? 'Hide Grid' : 'Show Grid',
+          disabled: !frames.canGrid,
+          action: () => canvasRef.current?.toggleFrameGrid(),
+        },
+        {
+          label: 'Snap Points',
+          checked: frames.snap,
+          disabled: !frames.canGrid,
+          action: () => canvasRef.current?.toggleSnap(),
+        },
         { separator: true },
         { label: 'Derivative…',                   action: onUnderDevelopment },
       ],
