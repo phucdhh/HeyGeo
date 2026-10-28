@@ -7,6 +7,7 @@ import { GRID_FORMS, type GridForm, type GraphRows } from './coordsysModel';
 import { type FunctionRows } from './functionMenuModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { canCalculate } from './numberMenuModel';
+import { type PlotPointRows } from './plotPointModel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MenuItemDef {
@@ -32,6 +33,9 @@ const NO_FRAME_ROWS: GraphRows = {
 
 /** A definition can always be typed; nothing is picked to plot yet. */
 const NO_FUNCTION_ROWS: FunctionRows = { canNew: true, canPlot: false, target: null };
+
+/** No frame is marked, so no point has anything to be measured on. */
+const NO_PLOT_POINT_ROWS: PlotPointRows = { canPlotPair: false, canOpen: false };
 
 /** Graph | Grid Form, named the way the desktop's submenu names its four forms. */
 const GRID_FORM_LABELS: Record<GridForm, string> = {
@@ -77,6 +81,8 @@ interface Props {
   onOpenCalculate: () => void;
   /** Graph | New Function… — the studio opens the function dialog. */
   onOpenNewFunction: () => void;
+  /** Graph | Plot as (x, y)… — the studio plots the picked numbers or opens its dialog. */
+  onPlotAsXy: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
   onUnderDevelopment: () => void;
 }
@@ -218,6 +224,7 @@ export default function DesignMenuBar({
   onNewParameter,
   onOpenCalculate,
   onOpenNewFunction,
+  onPlotAsXy,
   onOpenTransform,
   onUnderDevelopment,
 }: Props) {
@@ -273,10 +280,20 @@ export default function DesignMenuBar({
     return canvasRef.current?.functionRows() ?? NO_FUNCTION_ROWS;
   }
 
+  /**
+   * Whether Graph | Plot as (x, y)… has two numbers to place, or only a frame to
+   * type a place into. It needs one or the other, because a plotted point is
+   * measured on the marked frame rather than on the page.
+   */
+  function plotPointRows(): PlotPointRows {
+    return canvasRef.current?.plotPointRows() ?? NO_PLOT_POINT_ROWS;
+  }
+
   // ─── Menu definitions – mirrors GSP Desktop menu order ────────────────
   // File | Edit | Display | Construct | Measure | Number | Transform | Graph | Window | Help
   const frames = frameRows();
   const functions = functionRows();
+  const plotted = plotPointRows();
   const menus: MenuDef[] = [
     // ── File ──────────────────────────────────────────────────────────────
     {
@@ -511,7 +528,13 @@ export default function DesignMenuBar({
           action: () => canvasRef.current?.defineCoordsys(),
         },
         { separator: true },
-        { label: 'Plot As (x, y)…',               action: onUnderDevelopment },
+        // two numbers picked go straight onto the frame; anything else opens the
+        // dialog over it, and both need a frame to be measured on first
+        {
+          label: 'Plot As (x, y)…',
+          disabled: !plotted.canOpen,
+          action: onPlotAsXy,
+        },
         { label: 'Plot Value On Axis…',           action: onUnderDevelopment },
         { label: 'New Function…',                 action: onOpenNewFunction },
         // the desktop's canGraphPlotFunction: one definition picked, and a frame

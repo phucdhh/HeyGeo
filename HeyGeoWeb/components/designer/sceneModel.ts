@@ -18,6 +18,7 @@ import {
   unresolvedParentId,
 } from './elementRegistry';
 import { measureDeps } from './measurement';
+import { plotPointDeps } from './plotPointModel';
 import { imageDeps } from './transforms';
 import type { HeyGeoElement, ToolMode } from './designTypes';
 
@@ -62,14 +63,15 @@ const POINT_ELTS = ['point', 'glider', 'midpoint', 'intersection', 'slider'];
  * Ids this element is constructed from; coordinate parents are not references.
  * A measurement reads its parents from its descriptor instead, and has to be in
  * the graph too — deleting a segment should take the length caption with it.
- * The same goes for an image point: its vector, centre or mirror is a parent.
+ * The same goes for an image point: its vector, centre or mirror is a parent, and
+ * for a plotted point: the numbers its two coordinates read are parents as well.
  */
 export function parentIds(el: HeyGeoElement): string[] {
   const out: string[] = [];
   for (let i = 0; i < el.parents.length; i++) {
     if (isReferenceParent(el, i)) out.push(String(el.parents[i]));
   }
-  for (const id of [...measureDeps(el), ...imageDeps(el)]) {
+  for (const id of [...measureDeps(el), ...imageDeps(el), ...plotPointDeps(el)]) {
     if (!out.includes(id)) out.push(id);
   }
   return out;
@@ -120,6 +122,9 @@ export function constructionKey(el: HeyGeoElement): string {
     // a definition's caption is the formula it stores, so editing it means the
     // text object has to be built again with the new one
     el.attrs?.func ?? null,
+    // and the same for a plotted point: its place is decided by the closures it
+    // was built from, which setAttribute cannot hand it anew
+    el.attrs?.plotAt ?? null,
   ]);
 }
 
@@ -136,7 +141,7 @@ export function coordParents(el: HeyGeoElement): number[] | null {
 }
 
 /** Descriptors this app reads; JSXGraph never sees them, so they are not style. */
-const APP_ATTRS = new Set(['measure', 'anchor', 'image', 'coordsys', 'plot', 'func']);
+const APP_ATTRS = new Set(['measure', 'anchor', 'image', 'coordsys', 'plot', 'func', 'plotAt']);
 
 export function attrsDiffer(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
   const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);

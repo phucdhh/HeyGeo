@@ -12,6 +12,7 @@ import { calculateSpec, numberSources } from './numberMenuModel';
 import { frameElements } from './coordsysModel';
 import { measureItems } from './measureMenuModel';
 import { functionPlot, PLOT_SAMPLES, type PlotSpec } from './plotModel';
+import type { PlotPointSpec } from './plotPointModel';
 import type { HeyGeoElement } from './designTypes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -935,6 +936,100 @@ describe('a curve plotted on the marked frame', () => {
   it('reports a curve whose frame is not on the board', () => {
     const b = newBoard();
     const r = loader(b, [plotted(functionPlot('x'))]);
+    expect(r.loaded).toBe(0);
+    expect(r.errors.join(' ')).toMatch(/không tồn tại|cha/);
+  });
+});
+
+// Graph | Plot as (x, y)… writes a point whose place is two expressions over the
+// numbers of the page, measured through the marked frame. This is that descriptor
+// meeting a real board: the point is placed by what it reads, follows it, and is
+// refused rather than drawn invisible when the document asks for something the
+// page cannot answer.
+describe('a point plotted from the page’s numbers', () => {
+  const FRAME = frameElements(
+    {
+      origin: { id: 'O', name: 'O', coords: [0, 0] },
+      unit: { id: 'U', name: 'U', coords: [1, 0] },
+    },
+    []
+  ).map((el) => spec({ type: el.type, id: el.id, parents: [...el.parents], attrs: { ...el.attrs } }));
+
+  // a parameter and a length caption: the two kinds of number Number | Calculate…
+  // reads, and the two a plot point is written from
+  const NUMBERS = [
+    spec({ type: 'slider', id: 'a', parents: [[-4, 5], [-1, 5], [0, 3, 10]], attrs: { name: 'a' } }),
+    spec({ type: 'point', id: 'A', parents: [-2, -1] }),
+    spec({ type: 'point', id: 'B', parents: [1, 3] }),
+    spec({
+      type: 'text', id: 'd', parents: [-4, 4, 'AB'],
+      attrs: { measure: { op: 'distance', args: ['A', 'B'], label: 'AB', precision: 2 } },
+    }),
+  ];
+
+  const plottedPoint = (plotAt: PlotPointSpec, id = 'P') =>
+    spec({ type: 'point', id, parents: ['O', 'U', 'O_v'], attrs: { plotAt } });
+
+  it('is placed by the numbers it reads, and follows them', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      ...FRAME,
+      ...NUMBERS,
+      plottedPoint({ shape: 'rectangular', x: '#0 + #1', y: '#0/3', args: ['a', 'd'] }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    // a = 3 and AB = 5 on a frame whose unit is 1: (8, 1), and no root of the page
+    expect(r.elMap.P.X()).toBeCloseTo(8, 6);
+    expect(r.elMap.P.Y()).toBeCloseTo(1, 6);
+    expect(r.elMap.P.visProp.plotAt).toBeUndefined();
+
+    // sliding the parameter moves the point: it reads the number, not a snapshot
+    b.objects.a.setValue(6);
+    b.update();
+    expect(r.elMap.P.X()).toBeCloseTo(11, 6);
+    expect(r.elMap.P.Y()).toBeCloseTo(2, 6);
+
+    // and a longer unit on the frame moves it as a change of scale does
+    b.objects.U.moveTo([2, 0]);
+    b.update();
+    expect(r.elMap.P.X()).toBeCloseTo(22, 6);
+    expect(r.elMap.P.Y()).toBeCloseTo(4, 6);
+  });
+
+  it('takes a polar place in degrees, the unit the desktop measures angles in', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      ...FRAME,
+      ...NUMBERS,
+      plottedPoint({ shape: 'polar', x: '2', y: '90', args: [] }, 'Q'),
+    ]);
+    b.update();
+    // a radius of 2 turned a quarter turn is (0, 2) in the frame's numbers
+    expect(r.elMap.Q.X()).toBeCloseTo(0, 6);
+    expect(r.elMap.Q.Y()).toBeCloseTo(2, 6);
+  });
+
+  it('refuses a coordinate that reads a name the point does not have', () => {
+    const b = newBoard();
+    loader(b, [...FRAME, ...NUMBERS]);
+    const out = createElement(b, plottedPoint({ shape: 'rectangular', x: 'a', y: '#0', args: ['a'] }));
+    expect(out.obj).toBeNull();
+    expect(out.error).toMatch(/a/);
+  });
+
+  it('refuses a coordinate that reads a number the point was not given', () => {
+    const b = newBoard();
+    loader(b, [...FRAME, ...NUMBERS]);
+    const out = createElement(b, plottedPoint({ shape: 'rectangular', x: '#2', y: '#0', args: ['a'] }));
+    expect(out.obj).toBeNull();
+    expect(out.error).toMatch(/số thứ 3/);
+  });
+
+  it('reports a point whose frame is not on the board', () => {
+    const r = loader(newBoard(), [
+      plottedPoint({ shape: 'rectangular', x: '1', y: '1', args: [] }),
+    ]);
     expect(r.loaded).toBe(0);
     expect(r.errors.join(' ')).toMatch(/không tồn tại|cha/);
   });

@@ -163,6 +163,15 @@ function operandValue(board: Any, id: string | undefined, seen: Set<string>): nu
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
 }
 
+/**
+ * The number an element of the page shows right now, or null when it shows none.
+ * This is what a `#i` answers to, whether the expression reading it is a
+ * calculation's caption or the coordinates of a plotted point.
+ */
+export function numberValueOf(board: Any, id: string): number | null {
+  return operandValue(board, id, new Set());
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sep(a: Any, b: Any): number {
   const dx = a.X() - b.X();

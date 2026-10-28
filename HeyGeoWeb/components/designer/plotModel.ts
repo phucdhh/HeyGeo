@@ -115,8 +115,11 @@ export function plotAt(spec: PlotSpec, geo: FrameGeometry, t: number): BoardPoin
  * direction. A welded frame's y point is the unit point turned a quarter turn, so
  * its distance is the x unit and this reads the same geometry the grid is spaced
  * by in every form; a rectangular one is read along its own axis.
+ *
+ * A plotted point reads it the same way, which is why the three points are the
+ * parents of both.
  */
-function frameOf(points: unknown[]): FrameGeometry | null {
+export function frameOfPoints(points: unknown[]): FrameGeometry | null {
   const point = (p: unknown): BoardPoint | null => {
     const live = p as { X?: () => number; Y?: () => number };
     return typeof live?.X === 'function' && typeof live?.Y === 'function'
@@ -140,7 +143,7 @@ export function plotParents(
   spec: PlotSpec,
 ): [CurveSample, CurveSample, number, number] {
   const at = (t: number): BoardPoint | null => {
-    const geo = frameOf(points);
+    const geo = frameOfPoints(points);
     return geo === null ? null : plotAt(spec, geo, t);
   };
   return [

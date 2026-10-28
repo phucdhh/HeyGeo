@@ -66,6 +66,14 @@ import {
   snapToGrid,
   type Viewbox,
 } from './gridModel';
+import {
+  plotPair,
+  plotPointProblem,
+  plotPointRows,
+  prunePlotPoint,
+  type PlotPointRows,
+  type PlotPointSpec,
+} from './plotPointModel';
 import { arrowDragMap, imageClosures, type ImageSpec } from './transforms';
 import {
   applyScene,
@@ -895,7 +903,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     });
   }
 
-  // ─── Functions and their plots ──────────────────────────────────────────────
+  // ─── Functions, their plots and plotted points ──────────────────────────────
   /** The desktop writes a function definition as a 14pt italic label. */
   const FUNCTION_STYLE = { strokeColor: '#333333', fontSize: 14, cssStyle: 'font-style: italic' };
   /** and plots it in purple, two units thick. */
@@ -971,7 +979,59 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     });
   }
 
+  /**
+   * Put a point where the frame says its two numbers are, as one undo step.
+   *
+   * The desktop's graphPlotAsXY reads the two picked values and translates a free
+   * point to `mathToScreen(x, y)`. This keeps the same placing but writes the
+   * dependency Sketchpad has: the point names the frame as its parents and its
+   * `attrs.plotAt` keeps the two coordinates as the text that was typed or the
+   * numbers that were picked, so it stays on the frame and follows the numbers
+   * while the figure moves under them.
+   */
+  function addPlotPoint(spec: PlotPointSpec): boolean {
+    const frame = framePoints(elementsRef.current);
+    if (!frame) {
+      onNotifyRef.current?.('Cần một hệ trục tọa độ để vẽ điểm.');
+      return false;
+    }
+    const problem = plotPointProblem(spec);
+    if (problem) {
+      onNotifyRef.current?.(`Không vẽ được điểm: ${problem}.`);
+      return false;
+    }
+    // the desktop plots into a G_FREE_POINT, which is drawn like any other point
+    return addObject({
+      type: 'point',
+      id: nextElId('pt'),
+      parents: [...frame],
+      attrs: {
+        name: nextPointName(), size: 4, face: 'o',
+        strokeColor: '#1e3c96', fillColor: '#1e3c96',
+        label: { fontSize: 14, strokeColor: '#1e3c96' },
+        plotAt: spec,
+      },
+    });
+  }
+
+  /** Graph | Plot as (x, y)… with the two numbers the designer picked. */
+  function plotPickedPair(): boolean {
+    const pair = plotPair(numberSources(elementsRef.current), selectedRef.current.map((o) => o.id));
+    return pair === null ? false : addPlotPoint(pair);
+  }
+
+  /**
+   * Graph | Plot as (x, y)… over the coordinates the designer typed.
+   *
+   * A number whose operand slot was deleted from a field is not a dependency of
+   * the point, so the pair is pruned before it reaches the document.
+   */
+  function plotPoint(spec: PlotPointSpec): boolean {
+    return addPlotPoint(prunePlotPoint(spec));
+  }
+
   // ─── The frame's grid ───────────────────────────────────────────────────────
+
   /**
    * The grid is furniture, not an object of the construction: JSXGraph's own grid
    * and ticks follow the board's axes, while a sketch coordinate system is drawn
@@ -2973,6 +3033,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     ),
     newFunction,
     plotFunction,
+    plotPointRows: (): PlotPointRows => (
+      plotPointRows(elementsRef.current, selectedRef.current.map((o) => o.id))
+    ),
+    plotPickedPair,
+    plotPoint,
     setGridForm,
     toggleFrameGrid,
     toggleSnap,

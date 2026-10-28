@@ -155,6 +155,12 @@ const kitchenSink = (): HeyGeoElement[] => [
       measure: { op: 'calculate', args: ['mDist', 'sl1'], expr: '#0 + #1', label: 'AB + a', precision: 2 },
     },
   }),
+  // and the point Graph | Plot as (x, y)… wrote rather than a point dragged: its
+  // place is two expressions measured on the frame, reading the board's numbers
+  el({
+    type: 'point', id: 'pt1', parents: ['O', 'U', 'O_v'],
+    attrs: { name: 'P', plotAt: { shape: 'rectangular', x: '#0', y: '1', args: ['sl1'] } },
+  }),
 ];
 
 /**
@@ -365,6 +371,57 @@ describe('a saved document rebuilds the same drawing', () => {
     reloaded.update();
     expect(reloaded.objects.plot1.X(2)).toBeCloseTo(8);
     expect(reloaded.objects.plot1.Y(2)).toBeCloseTo(8);
+  });
+
+  it('keeps the point the designer plotted onto that frame', () => {
+    const b = newBoard();
+    const saved = load(b, kitchenSink()).elements;
+    b.update();
+
+    // The document holds two expressions, the numbers they read and the frame they
+    // are measured on — the same three pieces a curve is stored from, and no more.
+    const stored = saved.find((e: HeyGeoElement) => e.id === 'pt1')!;
+    expect(stored.parents).toEqual(['O', 'U', 'O_v']);
+    expect(stored.attrs.plotAt).toEqual({ shape: 'rectangular', x: '#0', y: '1', args: ['sl1'] });
+    expect(JSON.stringify(saved)).not.toMatch(/function\(/);
+    // JSXGraph is handed the coordinates, never the descriptor
+    expect(b.objects.pt1.visProp.plotAt).toBeUndefined();
+
+    // the slider reads 4 and the frame's unit is 2 board units, so (4, 1) lands on
+    // (8, 2): the point reloads measured in the frame, not the page
+    expect(b.objects.pt1.X()).toBeCloseTo(8, 6);
+    expect(b.objects.pt1.Y()).toBeCloseTo(2, 6);
+
+    const again = newBoard();
+    load(again, JSON.parse(JSON.stringify(saved)));
+    again.update();
+    expect(again.objects.pt1.X()).toBeCloseTo(8, 6);
+    expect(again.objects.pt1.Y()).toBeCloseTo(2, 6);
+    expect(drawing(again)).toEqual(drawing(b));
+  });
+
+  it('keeps a plotted point a child of its frame across a drag and a save', () => {
+    const b = newBoard();
+    const elements = load(b, kitchenSink()).elements;
+    b.update();
+
+    // dragging the unit point is a move of the frame, so the point's own place is
+    // still its descriptor and syncPositions has no position to freeze into it
+    b.objects.U.moveTo([4, 0]);
+    b.update();
+    expect(syncPositions(elements, b)).toBe(true);
+    const point = elements.find((e: HeyGeoElement) => e.id === 'pt1')!;
+    expect(point.parents).toEqual(['O', 'U', 'O_v']);
+    expect(point.attrs.plotAt).toEqual({ shape: 'rectangular', x: '#0', y: '1', args: ['sl1'] });
+    // the frame's unit is 4 board units now, and its y-direction turned with it
+    expect(b.objects.pt1.X()).toBeCloseTo(16, 6);
+    expect(b.objects.pt1.Y()).toBeCloseTo(4, 6);
+
+    const reloaded = newBoard();
+    load(reloaded, JSON.parse(JSON.stringify(elements)));
+    reloaded.update();
+    expect(reloaded.objects.pt1.X()).toBeCloseTo(16, 6);
+    expect(reloaded.objects.pt1.Y()).toBeCloseTo(4, 6);
   });
 
   it('is unchanged by a second reload, so a save cannot drift', () => {    const b1 = newBoard();
@@ -610,5 +667,59 @@ describe('an arrow drag on the selection', () => {
     load(reloaded, JSON.parse(JSON.stringify(elements)));
     reloaded.update();
     expect(drawing(reloaded)).toEqual(after);
+  });
+});
+
+// Graph | Plot as (x, y)… makes a point out of the numbers the page already has.
+// Sketchpad keeps that point a child of the numbers it was plotted from; this is
+// what the dependency costs and buys on a real board: the parameters stay the
+// point's place, so moving one moves the point, and a save keeps both.
+describe('a point plotted from the board’s numbers', () => {
+  const DOC: HeyGeoElement[] = [
+    el({ type: 'point', id: 'O', parents: [-4, -6], attrs: { name: 'O', coordsys: { unit: 'U' } } }),
+    el({ type: 'point', id: 'U', parents: [-3, -6], attrs: { name: 'U' } }),
+    el({ type: 'point', id: 'O_v', parents: ['U'], attrs: { name: '', visible: false, image: { op: 'rotate', of: ['O'], angle: 90 } } }),
+    // two of Number | New Parameter…, so the point is plotted from numbers the
+    // designer can slide
+    el({ type: 'slider', id: 'a', parents: [[-7, 7], [-4, 7], [0, 4, 10]], attrs: { name: 'a' } }),
+    el({ type: 'slider', id: 'b', parents: [[-7, 5.5], [-4, 5.5], [0, 6, 10]], attrs: { name: 'b' } }),
+    el({
+      type: 'point', id: 'P', parents: ['O', 'U', 'O_v'],
+      attrs: { name: 'P', plotAt: { shape: 'rectangular', x: '#0', y: '#1', args: ['a', 'b'] } },
+    }),
+  ];
+
+  it('follows the numbers it was plotted from, and goes on following them after a save', () => {
+    const b = newBoard();
+    const elements = load(b, DOC).elements;
+    b.update();
+
+    // the frame is O(-4,-6) with a unit of 1: a = 4 and b = 6 put P on the origin
+    expect(b.objects.P.X()).toBeCloseTo(0, 6);
+    expect(b.objects.P.Y()).toBeCloseTo(0, 6);
+    // the point has no place of its own to be dragged to
+    expect(b.objects.P.isDraggable).toBe(false);
+
+    b.objects.a.setValue(8);
+    b.update();
+    expect(b.objects.P.X()).toBeCloseTo(4, 6);
+    expect(b.objects.P.Y()).toBeCloseTo(0, 6);
+    // a move of the numbers is not a move of the point: its descriptor stays its
+    // only place, so nothing is frozen into the document
+    expect(syncPositions(elements, b)).toBe(false);
+    expect(elements.find((e: HeyGeoElement) => e.id === 'P')!.attrs.plotAt)
+      .toEqual({ shape: 'rectangular', x: '#0', y: '#1', args: ['a', 'b'] });
+
+    const reloaded = newBoard();
+    load(reloaded, JSON.parse(JSON.stringify(elements)));
+    reloaded.update();
+    // the slider comes back at the value its document declared …
+    expect(reloaded.objects.P.X()).toBeCloseTo(0, 6);
+    // … and the point still follows it, which is the dependency a one-time
+    // placement would have thrown away
+    reloaded.objects.a.setValue(8);
+    reloaded.update();
+    expect(reloaded.objects.P.X()).toBeCloseTo(4, 6);
+    expect(reloaded.objects.P.Y()).toBeCloseTo(0, 6);
   });
 });

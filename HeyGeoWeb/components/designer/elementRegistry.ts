@@ -19,12 +19,14 @@ import {
   isAnchorSpec,
   isMeasureSpec,
   measureClosure,
+  numberValueOf,
   registerMeasure,
   type MeasureSpec,
 } from './measurement';
 import { migrateLegacyMeasure } from './legacyMeasure';
 import { migrateLegacyTransform } from './legacyTransform';
 import { isPlotSpec, PLOT_SAMPLES, plotParents, plotProblem } from './plotModel';
+import { plotPointOf, plotPointParents, plotPointProblem } from './plotPointModel';
 import { imageClosures, isImageSpec, type ImageSpec } from './transforms';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,6 +70,9 @@ interface RegistryEntry {
 const atLeast = (min: number) => (n: number) => n >= min;
 
 export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
+  // Two coordinates, or — for a point Graph | Plot as (x, y)… placed — the three
+  // points of the frame it was plotted onto plus the `attrs.plotAt` that says
+  // where on it. The second shape is checked beside the first in checkArity.
   point:          { jxg: 'point',          parents: 2 },
   glider:         { jxg: 'glider',         parents: 3 },
   midpoint:       { jxg: 'midpoint',       parents: 2 },
@@ -179,6 +184,11 @@ function checkArity(entry: RegistryEntry, el: ElementSpec): string | undefined {
   if (imageOf(el)) {
     return el.parents.length === 1 ? undefined : `điểm biến hình cần 1 đối tượng cha, nhận ${el.parents.length}`;
   }
+  // A plotted point is placed by its two coordinates, so its parents are the
+  // frame those are measured on.
+  if (plotPointOf(el)) {
+    return el.parents.length === 3 ? undefined : `điểm vẽ trên hệ trục cần 3 đối tượng cha, nhận ${el.parents.length}`;
+  }
   const n = el.parents.length;
   if (typeof entry.parents === 'number') {
     return n === entry.parents ? undefined : `${el.type} cần ${entry.parents} đối tượng cha, nhận ${n}`;
@@ -224,6 +234,14 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
   if (el.type === 'plot' && isPlotSpec(attrs.plot)) {
     return plotParents(el.parents.map((id) => elMap[String(id)]), attrs.plot);
   }
+  const plotted = plotPointOf(el);
+  if (plotted) {
+    return plotPointParents(
+      el.parents.map((id) => elMap[String(id)]),
+      plotted,
+      (id) => numberValueOf(board, id),
+    );
+  }
   return el.parents.map((p, i) => {
     if (isReferenceParent(el, i)) return elMap[p as string];
     if (byName && typeof p === 'string' && p in elMap) return elMap[p];
@@ -233,7 +251,7 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
 }
 
 /** Attributes that describe the element to this app, not to JSXGraph. */
-const APP_ATTRS = ['measure', 'anchor', 'image', 'coordsys', 'plot', 'func'];
+const APP_ATTRS = ['measure', 'anchor', 'image', 'coordsys', 'plot', 'func', 'plotAt'];
 
 /** Build one element from its HeyGeo JSON description. */
 export function createElement(
@@ -261,13 +279,16 @@ export function createElement(
     return { obj: null, error: `${el.type} tham chiếu đối tượng không tồn tại` };
   }
 
-  // A curve the designer typed reads its frame through closures, so the
-  // undefined-parent check below cannot see its parents going missing; and a
-  // formula that asks for a name the plot does not have is refused here rather
-  // than drawn as an empty board.
-  if (el.type === 'plot' && isPlotSpec(el.attrs?.plot)) {
-    const problem = plotProblem(el.attrs.plot);
-    if (problem) return { obj: null, error: `plot: ${problem}` };
+  // A typed curve and a plotted point are both measured through the frame's three
+  // points, which their closures read live, so the undefined-parent check below
+  // cannot see those parents going missing; and an expression that asks for a
+  // name or a number the element does not have is refused here rather than drawn
+  // as an empty board.
+  const plot = el.type === 'plot' && isPlotSpec(el.attrs?.plot) ? el.attrs.plot : null;
+  const plotted = plotPointOf(el);
+  if (plot !== null || plotted !== null) {
+    const problem = plot !== null ? plotProblem(plot) : plotPointProblem(plotted!);
+    if (problem) return { obj: null, error: `${el.type}: ${problem}` };
     const gone = el.parents.find(
       (id) => !elMap[String(id)] && !board?.objects?.[String(id)]);
     if (gone !== undefined) {

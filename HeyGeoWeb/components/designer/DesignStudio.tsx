@@ -37,6 +37,7 @@ import {
   type ArrowMode,
 } from './toolboxModel';
 import { calculateSpec, seedCalculate } from './numberMenuModel';
+import { plotPointSeed, type PlotPointSpec } from './plotPointModel';
 
 import DesignMenuBar         from './DesignMenuBar';
 import DesignToolbar         from './DesignToolbar';
@@ -48,6 +49,7 @@ import ElementPropertiesDialog from './ElementPropertiesDialog';
 import SliderConfigDialog from './SliderConfigDialog';
 import CalculateDialog from './CalculateDialog';
 import NewFunctionDialog from './NewFunctionDialog';
+import PlotPointDialog from './PlotPointDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
 
@@ -114,6 +116,29 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
 
   /** Graph | New Function… — open whenever the menu row is used; it needs nothing picked. */
   const [newFunctionOpen, setNewFunctionOpen] = useState(false);
+
+  /**
+   * Graph | Plot as (x, y)… — the two numbers picked go onto the frame as they
+   * are; anything else is typed in Sketchpad's dialog over the numbers the board
+   * showed when the row was used.
+   */
+  const [plotPoint, setPlotPoint] = useState<{
+    values: NumberValue[];
+    initial: PlotPointSpec;
+  } | null>(null);
+
+  function handlePlotAsXy() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // the two numbers picked are the point Sketchpad plots without asking; anything
+    // else is typed, over the numbers the board shows right now
+    if (canvas.plotPointRows().canPlotPair) {
+      canvas.plotPickedPair();
+      return;
+    }
+    const values = canvas.numberValues();
+    setPlotPoint({ values, initial: plotPointSeed(values, selected.map((s) => s.id)) });
+  }
 
   // Locus dialog (opened from Construct → Locus…)
   const [locusDialogOpen, setLocusDialogOpen] = useState(false);
@@ -421,6 +446,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onNewParameter={handleNewParameter}
         onOpenCalculate={handleOpenCalculate}
         onOpenNewFunction={() => setNewFunctionOpen(true)}
+        onPlotAsXy={handlePlotAsXy}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}
       />
@@ -543,6 +569,19 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setNewFunctionOpen(false);
           }}
           onCancel={() => setNewFunctionOpen(false)}
+        />
+      )}
+
+      {/* ── Graph | Plot as (x, y)… dialog ── */}
+      {plotPoint && (
+        <PlotPointDialog
+          values={plotPoint.values}
+          initial={plotPoint.initial}
+          onConfirm={(spec) => {
+            canvasRef.current?.plotPoint(spec);
+            setPlotPoint(null);
+          }}
+          onCancel={() => setPlotPoint(null)}
         />
       )}
 
