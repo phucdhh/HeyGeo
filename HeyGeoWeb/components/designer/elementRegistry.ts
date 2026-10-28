@@ -31,6 +31,7 @@ import { isPlotSpec, PLOT_SAMPLES, plotParents, plotProblem } from './plotModel'
 import { plotPointOf, plotPointParents, plotPointProblem } from './plotPointModel';
 import { buttonOf, buttonProblem } from './actionButtonModel';
 import { imageClosures, isImageSpec, type ImageSpec } from './transforms';
+import { withFontFamily } from './fontModel';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -351,6 +352,25 @@ export function createElement(
 
   const attrs: Record<string, Any> = { ...(el.attrs ?? {}) };
   for (const key of APP_ATTRS) delete attrs[key];
+  // The desktop exporter keeps a label's face in label.fontFamily as a CSS
+  // stack, but JSXGraph's label has no such attribute — it draws from cssStyle.
+  // The stack moves there so a desktop sketch opens in its own face instead of
+  // the engine's Arial.
+  const rawLabel = attrs.label;
+  if (rawLabel && typeof rawLabel === 'object') {
+    const label = rawLabel as Record<string, unknown>;
+    if (typeof label.fontFamily === 'string' && label.fontFamily !== '') {
+      attrs.label = {
+        ...label,
+        cssStyle: withFontFamily(
+          typeof label.cssStyle === 'string' ? label.cssStyle : undefined,
+          label.fontFamily,
+        ),
+        display: label.display ?? 'html',
+      };
+      delete (attrs.label as Record<string, unknown>).fontFamily;
+    }
+  }
   // a parametric curve brings the sample count its dialog was answered with, the
   // same number the desktop stores on the definition beside the domain
   if (plot?.samples) attrs.numberPoints = plot.samples;

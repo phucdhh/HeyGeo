@@ -54,6 +54,8 @@ import PlotCurveDialog from './PlotCurveDialog';
 import AnimateDialog from './AnimateDialog';
 import LabelObjectDialog from './LabelObjectDialog';
 import ColorDialog from './ColorDialog';
+import FontDialog from './FontDialog';
+import { DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE } from './fontModel';
 import SamplesDialog from './SamplesDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
@@ -154,6 +156,18 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
   function handleSamples() {
     const count = canvasRef.current?.samplesInfo();
     if (count != null) setSamples(count);
+  }
+
+  /** Display | Font | Font… — the face the picks draw their text in. */
+  const [fontDialog, setFontDialog] = useState<{ family: string; size: number } | null>(null);
+
+  function handleFont() {
+    const info = canvasRef.current?.fontInfo();
+    if (!info) return;
+    setFontDialog({
+      family: info.family ?? DEFAULT_FONT_FAMILY,
+      size: info.size ?? DEFAULT_FONT_SIZE,
+    });
   }
 
   /**
@@ -504,6 +518,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onLabelObject={handleLabelObject}
         onOtherColor={handleOtherColor}
         onSamples={handleSamples}
+        onFont={handleFont}
         onActionButtonAnimation={() => setAnimateMode('button')}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}
@@ -700,6 +715,18 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setSamples(null);
           }}
           onCancel={() => setSamples(null)}
+        />
+      )}
+
+      {/* ── Display | Font | Font… dialog ── */}
+      {fontDialog !== null && (
+        <FontDialog
+          initial={fontDialog}
+          onConfirm={(font) => {
+            canvasRef.current?.updateSelectedFont(font);
+            setFontDialog(null);
+          }}
+          onCancel={() => setFontDialog(null)}
         />
       )}
 

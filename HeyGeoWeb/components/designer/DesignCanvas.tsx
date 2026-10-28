@@ -128,6 +128,17 @@ import {
   type SceneSnapshot,
 } from './sceneModel';
 import { isPolygonTool, type ArrowMode } from './toolboxModel';
+import {
+  canChangeFont,
+  fontAttrsOf,
+  fontDocumentAttrs,
+  objectFontFamily,
+  objectFontSize,
+  sharedFontFamily,
+  sharedFontSize,
+  type FontChoice,
+  type FontPick,
+} from './fontModel';
 
 // ─── JSXGraph accessor (engine global, loaded from /vendor by lib/jsxgraph;
 //     extends the global declared in JSXGraphViewer) ────────────────────────
@@ -2194,6 +2205,39 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     onDirty();
   }
 
+  /**
+   * The picks as Display | Font reads them. The document type decides whether a
+   * pick has a face at all — an action button is drawn as text but is a button —
+   * and the live object answers the size and family it draws with now.
+   */
+  function fontPicks(): FontPick[] {
+    return selectedRef.current.map((o) => {
+      const el = elementsRef.current.find((e) => e.id === o.id);
+      return {
+        kind: el?.type ?? o.elType ?? '',
+        size: objectFontSize(o),
+        family: objectFontFamily(o),
+      };
+    });
+  }
+
+  /** Display | Font — the size and family the picks take, as one undo step. */
+  function applyFont(font: FontChoice): boolean {
+    const picks = fontPicks();
+    if (!canChangeFont(picks)) return false;
+    if (font.size === undefined && font.family === undefined) return false;
+    saveSnapshot();
+    selectedRef.current.forEach((o) => o.setAttribute?.(fontAttrsOf(o, font)));
+    boardRef.current?.update();
+    const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
+    elementsRef.current.forEach((el) => {
+      if (ids.has(el.id)) Object.assign(el.attrs, fontDocumentAttrs(el, font));
+    });
+    onSelectionChange(selectedRef.current.map(toSelectedInfo));
+    onDirty();
+    return true;
+  }
+
   function selectAllObjects() {
     clearSelection();
     const board = boardRef.current;
@@ -3064,6 +3108,14 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     updateSelectedVisible: (v: boolean) => attrToSelected({ visible: v }),
 
     updateSelectedPointSize: (size: number) => attrToSelected({ size }),
+
+    fontInfo: () => {
+      const picks = fontPicks();
+      if (!canChangeFont(picks)) return null;
+      return { size: sharedFontSize(picks), family: sharedFontFamily(picks) };
+    },
+
+    updateSelectedFont: applyFont,
 
     selectParents: selectParentsOfSelection,
 

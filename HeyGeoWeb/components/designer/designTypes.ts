@@ -278,6 +278,13 @@ export interface CanvasHandle {
    */
   labelObjectInfo: () => string | null;
   toggleSelectedLabel: () => void;
+  /**
+   * Display | Font — the size and family the picks share, or null when the
+   * desktop's canEditChangeFont would not restyle them.
+   */
+  fontInfo: () => { size: number | null; family: string | null } | null;
+  /** Display | Font — set the size, the family or both as one undo step. */
+  updateSelectedFont: (font: { family?: string; size?: number }) => boolean;
   /** Display | Number of Samples… — the picked locus' count, or null. */
   samplesInfo: () => number | null;
   setSamples: (samples: number) => boolean;

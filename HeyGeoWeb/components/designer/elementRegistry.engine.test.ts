@@ -694,6 +694,53 @@ describe('the Display attributes the Context menu writes', () => {
     expect((r.elMap.A as any).name).toBe('P');
     expect((r.elMap.s1 as any).name).toBe('d');
   });
+
+  // The exporter writes Display | Font as label.fontSize plus the family as a
+  // CSS stack in label.fontFamily. JSXGraph has no fontFamily attribute, so the
+  // registry has to turn it into the cssStyle its label actually draws from —
+  // otherwise every desktop sketch reopens in the engine's Arial at 12pt.
+  it('draws a desktop label in the face and size the exporter wrote', () => {
+    const b = newBoard();
+    const out = createElement(b, spec({
+      type: 'point', id: 'A', parents: [2, 3],
+      attrs: {
+        name: 'A',
+        label: { fontSize: 20, fontFamily: "'Times New Roman', Georgia, serif" },
+      },
+    }));
+    expect(out.obj).toBeTruthy();
+    b.update();
+    expect(out.obj.label.visProp.fontsize).toBe(20);
+    expect(out.obj.label.rendNode.style.fontFamily).toContain('Times New Roman');
+  });
+
+  it('keeps the declarations a label already had beside its new family', () => {
+    const b = newBoard();
+    const out = createElement(b, spec({
+      type: 'point', id: 'A', parents: [2, 3],
+      attrs: {
+        name: 'A',
+        label: {
+          cssStyle: 'font-style: italic',
+          fontFamily: 'Arial, Helvetica, sans-serif',
+        },
+      },
+    }));
+    b.update();
+    expect(out.obj.label.rendNode.style.fontStyle).toBe('italic');
+    expect(out.obj.label.rendNode.style.fontFamily).toContain('Arial');
+  });
+
+  it('draws a caption at the size Display | Font stores on it', () => {
+    const b = newBoard();
+    const out = createElement(b, spec({
+      type: 'text', id: 't1', parents: [1, 2, 'AB'],
+      attrs: { fontSize: 30 },
+    }));
+    b.update();
+    expect(out.obj.visProp.fontsize).toBe(30);
+    expect(out.obj.rendNode.style.fontSize).toBe('30px');
+  });
 });
 
 // A desktop calculation used to arrive as the number the exporter had already

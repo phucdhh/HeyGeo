@@ -10,6 +10,7 @@ import { canCalculate } from './numberMenuModel';
 import { type PlotPointRows } from './plotPointModel';
 import { type ActionButtonRows } from './actionButtonModel';
 import { type AnimationRows } from './animationModel';
+import { FONT_FAMILIES, FONT_SIZES } from './fontModel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MenuItemDef {
@@ -106,6 +107,8 @@ interface Props {
   onOtherColor: () => void;
   /** Display | Number of Samples… — the studio opens the sample-count dialog. */
   onSamples: () => void;
+  /** Display | Font | Font… — the studio opens the font chooser. */
+  onFont: () => void;
   /** Edit | Action Buttons | Animation… — the studio asks how the button runs. */
   onActionButtonAnimation: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
@@ -259,6 +262,7 @@ export default function DesignMenuBar({
   onLabelObject,
   onOtherColor,
   onSamples,
+  onFont,
   onActionButtonAnimation,
   onOpenTransform,
   onUnderDevelopment,
@@ -350,6 +354,9 @@ export default function DesignMenuBar({
   const pickedColor = canvasRef.current?.selectedColor() ?? null;
   // Display | Number of Samples… needs exactly one locus picked.
   const samples = canvasRef.current?.samplesInfo() ?? null;
+  // Display | Font follows canEditChangeFont: picks that all carry a face, and
+  // the size and family they draw with now (null when they disagree).
+  const font = canvasRef.current?.fontInfo() ?? null;
   const menus: MenuDef[] = [
     // ── File ──────────────────────────────────────────────────────────────
     {
@@ -457,14 +464,21 @@ export default function DesignMenuBar({
         {
           label: 'Font',
           submenu: [
-            { label: 'Latin Modern Roman', action: onUnderDevelopment },
-            { label: 'Times New Roman',    action: onUnderDevelopment },
-            { label: 'Arial',              action: onUnderDevelopment },
+            ...FONT_FAMILIES.map((family) => ({
+              label: family,
+              disabled: font === null,
+              checked: font?.family === family,
+              action: () => canvasRef.current?.updateSelectedFont({ family }),
+            })),
             { separator: true },
-            { label: 'Size 10', action: onUnderDevelopment },
-            { label: 'Size 12', action: onUnderDevelopment },
-            { label: 'Size 14', action: onUnderDevelopment },
-            { label: 'Size 20', action: onUnderDevelopment },
+            ...FONT_SIZES.map((size) => ({
+              label: `Size ${size}`,
+              disabled: font === null,
+              checked: font?.size === size,
+              action: () => canvasRef.current?.updateSelectedFont({ size }),
+            })),
+            { separator: true },
+            { label: 'Font…', disabled: font === null, action: onFont },
           ],
         },
         { label: 'Text Style',                                     action: onUnderDevelopment },
