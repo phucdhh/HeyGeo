@@ -10,6 +10,7 @@ import {
   type AnimationDirection,
   type AnimationSpec,
 } from './animationModel';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   /** 'run' starts the picked objects now; 'button' writes what a press will run. */
@@ -30,6 +31,7 @@ interface Props {
  * the card promises.
  */
 export default function AnimateDialog({ purpose = 'run', onConfirm, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [direction, setDirection] = useState<AnimationDirection>('forward');
   const [speed, setSpeed] = useState(ANIMATION_SPEED.fallback);
 
@@ -41,7 +43,7 @@ export default function AnimateDialog({ purpose = 'run', onConfirm, onCancel }: 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
+      onClick={onCancel}
     >
       <div
         className="bg-white rounded-xl shadow-2xl p-6 w-[26rem] max-h-[92vh] overflow-y-auto"

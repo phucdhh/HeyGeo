@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { Preferences, SelectionStyle } from './preferences';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   initial: Preferences;
@@ -39,6 +40,7 @@ function ColorRow({
 }
 
 export default function PreferencesDialog({ initial, onSave, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [backgroundColor, setBackgroundColor] = useState(initial.backgroundColor);
   const [foregroundColor, setForegroundColor] = useState(initial.foregroundColor);
   const [selection, setSelection] = useState<SelectionStyle>(initial.selection);
@@ -46,7 +48,7 @@ export default function PreferencesDialog({ initial, onSave, onCancel }: Props) 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
+      onClick={onCancel}
     >
       <div
         className="bg-white rounded-xl shadow-2xl p-6 w-[24rem] text-gray-800"

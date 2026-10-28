@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { MarkInfo } from './designTypes';
+import { useDialogDismiss } from './useDialogDismiss';
 
 export type TransformMode = 'translate' | 'rotate' | 'dilate';
 
@@ -22,6 +23,7 @@ export default function TransformDialog({
   onDilate,
   onClose,
 }: Props) {
+  useDialogDismiss(onClose);
   // Translate state
   const [transType, setTransType] = useState<'vector' | 'rect' | 'polar'>(
     marks.vector ? 'vector' : 'rect'
@@ -71,9 +73,7 @@ export default function TransformDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={e => {
-        if (e.key === 'Escape') onClose();
-      }}
+      onClick={onClose}
     >
       <div
         className="bg-white rounded-xl shadow-2xl p-6 w-96 text-gray-800"

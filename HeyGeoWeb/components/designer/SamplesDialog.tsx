@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { SAMPLES, samplesProblem } from './samplesModel';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   /** How many times the picked locus is sampled now. */
@@ -19,13 +20,13 @@ interface Props {
  * only committed when the dialog is accepted.
  */
 export default function SamplesDialog({ initial, onConfirm, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [samples, setSamples] = useState(initial);
   const problem = samplesProblem(samples);
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
       onMouseDown={onCancel}
     >
       <div

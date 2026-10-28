@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { evalExpression } from './expression';
 import type { NumberValue } from './designTypes';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   /** The numbers on the board the designer may calculate with. */
@@ -32,6 +33,7 @@ const KEYS = [
  * piece of JavaScript to run.
  */
 export default function CalculateDialog({ values, initial, onConfirm, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [expr, setExpr] = useState(initial.expr);
   const [args, setArgs] = useState<string[]>(initial.args);
   const [caret, setCaret] = useState(initial.expr.length);
@@ -79,7 +81,7 @@ export default function CalculateDialog({ values, initial, onConfirm, onCancel }
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
+      onClick={onCancel}
     >
       <div
         className="bg-white rounded-xl shadow-2xl p-6 w-[26rem]"

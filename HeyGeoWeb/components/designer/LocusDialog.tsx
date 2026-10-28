@@ -6,6 +6,7 @@
  */
 
 import type { LocusResult } from './designTypes';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   /** Kết quả từ lần thử tạo locus (undefined = chưa thử) */
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function LocusDialog({ result, onRetry, onClose }: Props) {
+  useDialogDismiss(onClose);
   const errorMsg =
     !result ? null :
     !result.ok && result.reason === 'no_glider'
@@ -30,7 +32,7 @@ export default function LocusDialog({ result, onRetry, onClose }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
+      onClick={onClose}
     >
       <div
         className="bg-white rounded-xl shadow-2xl p-6 w-96"

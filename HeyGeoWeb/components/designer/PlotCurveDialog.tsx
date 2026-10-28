@@ -10,6 +10,7 @@ import {
   plotProblem,
   type PlotSpec,
 } from './plotModel';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   onConfirm: (spec: PlotSpec) => void;
@@ -33,6 +34,7 @@ const clampSamples = (n: number): number =>
  * and never compiles it.
  */
 export default function PlotCurveDialog({ onConfirm, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [xExpr, setXExpr] = useState('');
   const [yExpr, setYExpr] = useState('');
   const [from, setFrom] = useState(PARAM_DOMAIN[0]);
@@ -90,7 +92,7 @@ export default function PlotCurveDialog({ onConfirm, onCancel }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
+      onClick={onCancel}
     >
       <div
         className="bg-white rounded-xl shadow-2xl p-6 w-[28rem] max-h-[92vh] overflow-y-auto"

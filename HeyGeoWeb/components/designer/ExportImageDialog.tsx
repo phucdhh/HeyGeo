@@ -6,6 +6,7 @@ import {
   IMAGE_FORMATS,
   type ImageFormat,
 } from './imageExport';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   /** What the first file type offered is, as the desktop preselects PNG. */
@@ -19,13 +20,13 @@ interface Props {
  * Image tick. Nothing is written until the dialog is accepted.
  */
 export default function ExportImageDialog({ initial = 'png', onConfirm, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [format, setFormat] = useState<ImageFormat>(initial);
   const [highQuality, setHighQuality] = useState(true);
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
       onMouseDown={onCancel}
     >
       <div

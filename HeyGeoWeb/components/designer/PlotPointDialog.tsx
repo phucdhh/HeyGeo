@@ -8,6 +8,7 @@ import {
   type PlotShape,
 } from './plotPointModel';
 import type { NumberValue } from './designTypes';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   /** The numbers on the board the point may read. */
@@ -58,6 +59,7 @@ const FUNCTIONS = [
  * never compiles what it read from storage.
  */
 export default function PlotPointDialog({ values, initial, onConfirm, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [shape, setShape] = useState<PlotShape>(initial.shape);
   const [x, setX] = useState(initial.x);
   const [y, setY] = useState(initial.y);
@@ -135,7 +137,7 @@ export default function PlotPointDialog({ values, initial, onConfirm, onCancel }
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
+      onClick={onCancel}
     >
       <div
         className="bg-white rounded-xl shadow-2xl p-6 w-[28rem] max-h-[92vh] overflow-y-auto"

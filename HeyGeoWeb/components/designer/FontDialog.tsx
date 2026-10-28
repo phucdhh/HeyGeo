@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { FONT_FAMILIES, FONT_SIZES, fontStack } from './fontModel';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   /** The face the picks draw with now. */
@@ -19,6 +20,7 @@ interface Props {
  * board uses, so what is accepted is what the labels become.
  */
 export default function FontDialog({ initial, onConfirm, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [family, setFamily] = useState(initial.family);
   const [size, setSize] = useState(initial.size);
 
@@ -32,7 +34,6 @@ export default function FontDialog({ initial, onConfirm, onCancel }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
       onMouseDown={onCancel}
     >
       <div

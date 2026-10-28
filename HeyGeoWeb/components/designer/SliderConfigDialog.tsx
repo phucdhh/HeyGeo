@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { SliderConfig } from './designTypes';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   onConfirm: (cfg: SliderConfig) => void;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function SliderConfigDialog({ onConfirm, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [name, setName] = useState('a');
   const [min,  setMin]  = useState(0);
   const [max,  setMax]  = useState(10);
@@ -24,7 +26,7 @@ export default function SliderConfigDialog({ onConfirm, onCancel }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={e => { if (e.key === 'Escape') onCancel(); }}
+      onClick={onCancel}
     >
       <div
         className="bg-white rounded-xl shadow-2xl p-6 w-80"

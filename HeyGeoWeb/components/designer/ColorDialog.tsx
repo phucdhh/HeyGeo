@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { normalizeHex } from './colorModel';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   /** The colour the first picked object draws with now. */
@@ -19,6 +20,7 @@ interface Props {
  * so it reaches the document and survives a reload.
  */
 export default function ColorDialog({ initial, onConfirm, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [color, setColor] = useState(normalizeHex(initial) ?? '#000000');
   const [text, setText] = useState(normalizeHex(initial) ?? '#000000');
 
@@ -40,7 +42,6 @@ export default function ColorDialog({ initial, onConfirm, onCancel }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
       onMouseDown={onCancel}
     >
       <div

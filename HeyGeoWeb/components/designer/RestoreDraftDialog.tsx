@@ -1,5 +1,7 @@
 'use client';
 
+import { useDialogDismiss } from './useDialogDismiss';
+
 interface Props {
   /** When the draft was last written, as a clock time for the designer. */
   savedAt: number;
@@ -9,11 +11,12 @@ interface Props {
 
 /** "Khôi phục bản nháp?" — the unsaved sketch found when the page opens. */
 export default function RestoreDraftDialog({ savedAt, onRestore, onDiscard }: Props) {
+  useDialogDismiss(onDiscard);
   const when = new Date(savedAt).toLocaleString('vi-VN');
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onDiscard(); }}
+      onClick={onDiscard}
     >
       <div
         className="bg-white rounded-xl shadow-2xl p-6 w-[26rem] text-gray-800"

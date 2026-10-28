@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { evalExpression } from './expression';
 import { DEFAULT_DOMAIN, functionPlot, plotProblem } from './plotModel';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   onConfirm: (expr: string, domain: [number, number]) => void;
@@ -55,6 +56,7 @@ function at(expr: string, x: number): number | null {
  * through the marked frame. Nothing here is ever compiled.
  */
 export default function NewFunctionDialog({ onConfirm, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [expr, setExpr] = useState('');
   const [from, setFrom] = useState(DEFAULT_DOMAIN[0]);
   const [to, setTo] = useState(DEFAULT_DOMAIN[1]);
@@ -85,7 +87,7 @@ export default function NewFunctionDialog({ onConfirm, onCancel }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
+      onClick={onCancel}
     >
       <div
         className="bg-white rounded-xl shadow-2xl p-6 w-[30rem] max-h-[92vh] overflow-y-auto"

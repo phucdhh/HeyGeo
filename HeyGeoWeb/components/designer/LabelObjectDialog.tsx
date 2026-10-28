@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect } from 'react';
+import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
   /** The label the chosen object carries now. */
@@ -18,6 +19,7 @@ interface Props {
  * board draws beside the object when Display | Show Label is on.
  */
 export default function LabelObjectDialog({ initial, onConfirm, onCancel }: Props) {
+  useDialogDismiss(onCancel);
   const [label, setLabel] = useState(initial);
   const field = useRef<HTMLInputElement>(null);
 
@@ -28,7 +30,6 @@ export default function LabelObjectDialog({ initial, onConfirm, onCancel }: Prop
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
       onMouseDown={onCancel}
     >
       <div
