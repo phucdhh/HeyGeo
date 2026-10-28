@@ -220,6 +220,8 @@ export interface CanvasHandle {
   zoomFit: () => void;
   setTitle: (t: string) => void;
   updateSelectedColor: (color: string) => void;
+  /** The stroke colour the first picked object draws with, or null when nothing is picked. */
+  selectedColor: () => string | null;
   updateSelectedStrokeWidth: (w: number) => void;
   updateSelectedDash: (d: number) => void;
   updateSelectedVisible: (v: boolean) => void;

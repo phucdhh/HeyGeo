@@ -102,6 +102,8 @@ interface Props {
   onAnimateObjects: () => void;
   /** Display | Label Object… — the studio opens the label dialog. */
   onLabelObject: () => void;
+  /** Display | Color | Other Color… — the studio opens the colour dialog. */
+  onOtherColor: () => void;
   /** Edit | Action Buttons | Animation… — the studio asks how the button runs. */
   onActionButtonAnimation: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
@@ -253,6 +255,7 @@ export default function DesignMenuBar({
   onPlotCurve,
   onAnimateObjects,
   onLabelObject,
+  onOtherColor,
   onActionButtonAnimation,
   onOpenTransform,
   onUnderDevelopment,
@@ -340,6 +343,8 @@ export default function DesignMenuBar({
   const animation = animationRow();
   // Display | Label Object… asks for the current text only when it may relabel.
   const labelText = canvasRef.current?.labelObjectInfo() ?? null;
+  // Display | Color | Other Color… writes to the same picks the swatches do.
+  const pickedColor = canvasRef.current?.selectedColor() ?? null;
   const menus: MenuDef[] = [
     // ── File ──────────────────────────────────────────────────────────────
     {
@@ -421,7 +426,7 @@ export default function DesignMenuBar({
           submenu: [
             ...COLORS.map(colorItem),
             { separator: true },
-            { label: 'Other Color…', action: onUnderDevelopment },
+            { label: 'Other Color…', disabled: pickedColor === null, action: onOtherColor },
           ],
         },
         {

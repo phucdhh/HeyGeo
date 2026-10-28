@@ -53,6 +53,7 @@ import PlotPointDialog from './PlotPointDialog';
 import PlotCurveDialog from './PlotCurveDialog';
 import AnimateDialog from './AnimateDialog';
 import LabelObjectDialog from './LabelObjectDialog';
+import ColorDialog from './ColorDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
 
@@ -136,6 +137,14 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
   function handleLabelObject() {
     const label = canvasRef.current?.labelObjectInfo();
     if (label != null) setLabelObject(label);
+  }
+
+  /** Display | Color | Other Color… — the colour the picks draw with now. */
+  const [otherColor, setOtherColor] = useState<string | null>(null);
+
+  function handleOtherColor() {
+    const color = canvasRef.current?.selectedColor();
+    if (color != null) setOtherColor(color);
   }
 
   /**
@@ -484,6 +493,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onPlotCurve={() => setPlotCurveOpen(true)}
         onAnimateObjects={() => setAnimateMode('run')}
         onLabelObject={handleLabelObject}
+        onOtherColor={handleOtherColor}
         onActionButtonAnimation={() => setAnimateMode('button')}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}
@@ -656,6 +666,18 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setLabelObject(null);
           }}
           onCancel={() => setLabelObject(null)}
+        />
+      )}
+
+      {/* ── Display | Color | Other Color… dialog ── */}
+      {otherColor !== null && (
+        <ColorDialog
+          initial={otherColor}
+          onConfirm={(color) => {
+            canvasRef.current?.updateSelectedColor(color);
+            setOtherColor(null);
+          }}
+          onCancel={() => setOtherColor(null)}
         />
       )}
 

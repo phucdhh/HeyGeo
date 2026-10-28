@@ -3015,6 +3015,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     updateSelectedColor: (color: string) => attrToSelected({ strokeColor: color, fillColor: color }),
 
+    selectedColor: () => {
+      const first = selectedRef.current[0] as { visProp?: { strokecolor?: string } } | undefined;
+      return first ? (first.visProp?.strokecolor ?? '#000000') : null;
+    },
+
     updateSelectedStrokeColor: (color: string) => attrToSelected({ strokeColor: color }),
 
     updateSelectedFillColor: (color: string) => attrToSelected({ fillColor: color }),
