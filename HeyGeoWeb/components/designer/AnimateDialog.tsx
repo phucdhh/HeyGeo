@@ -12,6 +12,8 @@ import {
 } from './animationModel';
 
 interface Props {
+  /** 'run' starts the picked objects now; 'button' writes what a press will run. */
+  purpose?: 'run' | 'button';
   onConfirm: (spec: AnimationSpec) => void;
   onCancel: () => void;
 }
@@ -22,14 +24,19 @@ interface Props {
  * Which way the picked objects travel and how fast. A lap is a pass along the
  * path (or the range) per second; the canvas owns the clock and stops the run
  * when Display | Stop Animation is chosen, leaving the objects where they stand.
+ *
+ * Edit | Action Buttons | Animation… asks the same two questions and stores the
+ * answers on a button, so the two uses share this dialog and differ only in what
+ * the card promises.
  */
-export default function AnimateDialog({ onConfirm, onCancel }: Props) {
+export default function AnimateDialog({ purpose = 'run', onConfirm, onCancel }: Props) {
   const [direction, setDirection] = useState<AnimationDirection>('forward');
   const [speed, setSpeed] = useState(ANIMATION_SPEED.fallback);
 
   const spec: AnimationSpec = { direction, speed: animationSpeed(speed) };
   const problem = animationProblem(spec);
   const ready = problem === null;
+  const asButton = purpose === 'button';
 
   return (
     <div
@@ -40,9 +47,13 @@ export default function AnimateDialog({ onConfirm, onCancel }: Props) {
         className="bg-white rounded-xl shadow-2xl p-6 w-[26rem] max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-base font-semibold text-gray-800 mb-1">Làm chuyển động đối tượng</h2>
+        <h2 className="text-base font-semibold text-gray-800 mb-1">
+          {asButton ? 'Nút chuyển động' : 'Làm chuyển động đối tượng'}
+        </h2>
         <p className="text-xs text-gray-500 mb-3">
-          Điểm trượt đi dọc đường của nó, tham số quét hết miền giá trị.
+          {asButton
+            ? 'Nhấn nút sẽ đưa các đối tượng đã chọn đi theo hướng này.'
+            : 'Điểm trượt đi dọc đường của nó, tham số quét hết miền giá trị.'}
         </p>
 
         <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -92,7 +103,7 @@ export default function AnimateDialog({ onConfirm, onCancel }: Props) {
                 : 'text-white bg-brand-600 hover:bg-brand-700',
             ].join(' ')}
           >
-            Bắt đầu
+            {asButton ? 'Tạo nút' : 'Bắt đầu'}
           </button>
         </div>
       </div>

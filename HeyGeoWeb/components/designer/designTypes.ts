@@ -307,6 +307,8 @@ export interface CanvasHandle {
   plotValueOnAxis: () => boolean;
   /** Edit | Action Buttons | Hide/Show: a button over what is selected. */
   createActionButton: () => boolean;
+  /** Edit | Action Buttons | Animation…: a button that runs what it was made from. */
+  createAnimationButton: (spec: AnimationSpec) => boolean;
   /** Whether the Action Buttons row has a selection to make a button from. */
   actionButtonRows: () => ActionButtonRows;
   /** Display | Animate Objects…: set the selected gliders and parameters moving. */

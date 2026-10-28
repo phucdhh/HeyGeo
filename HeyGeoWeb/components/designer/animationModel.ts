@@ -111,6 +111,16 @@ export function animationProblem(spec: AnimationSpec): string | null {
   return null;
 }
 
+/** True when a stored attribute really describes a run this app can make. */
+export function isAnimationSpec(value: unknown): value is AnimationSpec {
+  if (!value || typeof value !== 'object') return false;
+  const s = value as Record<string, unknown>;
+  return animationProblem({
+    direction: s.direction as AnimationDirection,
+    speed: Number(s.speed),
+  }) === null;
+}
+
 /** Where one object is and which way it is going. */
 export interface AnimationTargetState {
   /** 0..1 along the path or the range. */

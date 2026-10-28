@@ -122,8 +122,12 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
   /** Graph | Plot Curve… — the parametric pair is always typed; it needs nothing picked. */
   const [plotCurveOpen, setPlotCurveOpen] = useState(false);
 
-  /** Display | Animate Objects… — which way the picked objects travel, and how fast. */
-  const [animateOpen, setAnimateOpen] = useState(false);
+  /**
+   * Display | Animate Objects… and Edit | Action Buttons | Animation… — the same
+   * two questions, answered either to start a run now or to write a button that
+   * makes it.
+   */
+  const [animateMode, setAnimateMode] = useState<'run' | 'button' | null>(null);
 
   /**
    * Graph | Plot as (x, y)… — the two numbers picked go onto the frame as they
@@ -457,7 +461,8 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onPlotAsXy={handlePlotAsXy}
         onPlotValueOnAxis={() => canvasRef.current?.plotValueOnAxis()}
         onPlotCurve={() => setPlotCurveOpen(true)}
-        onAnimateObjects={() => setAnimateOpen(true)}
+        onAnimateObjects={() => setAnimateMode('run')}
+        onActionButtonAnimation={() => setAnimateMode('button')}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}
       />
@@ -607,14 +612,16 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         />
       )}
 
-      {/* ── Display | Animate Objects… dialog ── */}
-      {animateOpen && (
+      {/* ── Display | Animate Objects… and Action Buttons | Animation… ── */}
+      {animateMode && (
         <AnimateDialog
+          purpose={animateMode}
           onConfirm={(spec) => {
-            canvasRef.current?.startAnimation(spec);
-            setAnimateOpen(false);
+            if (animateMode === 'button') canvasRef.current?.createAnimationButton(spec);
+            else canvasRef.current?.startAnimation(spec);
+            setAnimateMode(null);
           }}
-          onCancel={() => setAnimateOpen(false)}
+          onCancel={() => setAnimateMode(null)}
         />
       )}
 

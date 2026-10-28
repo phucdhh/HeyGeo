@@ -40,7 +40,7 @@ const NO_FUNCTION_ROWS: FunctionRows = { canNew: true, canPlot: false, target: n
 const NO_PLOT_POINT_ROWS: PlotPointRows = { canPlotPair: false, canPlotValue: false, canOpen: false };
 
 /** Nothing is picked, so there is nothing to make a button out of. */
-const NO_ACTION_BUTTON_ROWS: ActionButtonRows = { canCreate: false };
+const NO_ACTION_BUTTON_ROWS: ActionButtonRows = { canCreate: false, canAnimate: false };
 
 /** Nothing that can move is picked, and nothing is moving. */
 const NO_ANIMATION_ROWS: AnimationRows = { canAnimate: false, running: false };
@@ -97,6 +97,8 @@ interface Props {
   onPlotCurve: () => void;
   /** Display | Animate Objects… — the studio opens the animation dialog. */
   onAnimateObjects: () => void;
+  /** Edit | Action Buttons | Animation… — the studio asks how the button runs. */
+  onActionButtonAnimation: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
   onUnderDevelopment: () => void;
 }
@@ -242,6 +244,7 @@ export default function DesignMenuBar({
   onPlotValueOnAxis,
   onPlotCurve,
   onAnimateObjects,
+  onActionButtonAnimation,
   onOpenTransform,
   onUnderDevelopment,
 }: Props) {
@@ -377,9 +380,13 @@ export default function DesignMenuBar({
         {
           label: 'Action Buttons',
           // Sketchpad builds a button out of a selection, then offers the five
-          // behaviours; only Hide/Show is written so far.
+          // behaviours; Hide/Show and Animation are written so far.
           submenu: [
-            { label: 'Animation…', action: onUnderDevelopment },
+            {
+              label: 'Animation…',
+              disabled: !actionButtons.canAnimate,
+              action: onActionButtonAnimation,
+            },
             { label: 'Movement…', action: onUnderDevelopment },
             {
               label: 'Hide/Show',

@@ -21,6 +21,16 @@ const el = (over: Partial<HeyGeoElement> & { id: string }): HeyGeoElement => ({
 
 const point = (id: string): HeyGeoElement => el({ id, parents: [0, 0], attrs: { name: id } });
 
+const glider = (id: string): HeyGeoElement => el({
+  id, type: 'glider', parents: [0, 0, 's1'], attrs: { name: id },
+});
+
+const slider = (id: string): HeyGeoElement => el({
+  id, type: 'slider', parents: [[0, 0], [1, 0], [0, 1, 2]], attrs: { name: id },
+});
+
+const RUN = { direction: 'both' as const, speed: 0.5 };
+
 const button = (over: Partial<HeyGeoElement> = {}): HeyGeoElement => el({
   type: 'actionbutton',
   id: 'btn1',
@@ -41,6 +51,10 @@ describe('an action button as data', () => {
     expect(buttonOf({ type: 'actionbutton', attrs: {} })).toBeNull();
     expect(isActionButtonSpec(spec())).toBe(true);
     expect(isActionButtonSpec({ ...spec(), action: 'animate' })).toBe(false);
+    // an animation button without a direction and speed is a caption that does nothing
+    expect(isActionButtonSpec({ ...spec(), action: 'animate', animation: RUN })).toBe(true);
+    expect(isActionButtonSpec({ ...spec(), action: 'animate', animation: { direction: 'both', speed: 0 } }))
+      .toBe(false);
     expect(isActionButtonSpec({ ...spec(), targets: 'A' })).toBe(false);
     expect(isActionButtonSpec({ ...spec(), name: 7 })).toBe(false);
     expect(isActionButtonSpec(null)).toBe(false);
@@ -67,6 +81,11 @@ describe('what a button says', () => {
   it('names what the next press will do', () => {
     expect(buttonCaption(spec(), false)).toBe('Ẩn A, B');
     expect(buttonCaption(spec(), true)).toBe('Hiện A, B');
+    // an animation button says the same thing before and after a press: it starts
+    // a run, and where that run stops is the sketch's business, not the caption's
+    const run = spec({ action: 'animate', animation: RUN });
+    expect(buttonCaption(run, false)).toBe('Chạy A, B');
+    expect(buttonCaption(run, true)).toBe('Chạy A, B');
   });
 
   it('shows only when everything it acts on is hidden', () => {
@@ -86,12 +105,32 @@ describe('a button the app will not draw', () => {
     expect(buttonProblem(spec(), [point('A')])).toContain('không tồn tại');
     expect(buttonProblem(spec(), [point('A'), point('B')])).toBeNull();
   });
+
+  it('needs something to move, and a way to move it, when it animates', () => {
+    const run = spec({ action: 'animate', animation: RUN });
+    expect(buttonProblem(run, [glider('A'), slider('B')])).toBeNull();
+    expect(buttonProblem(spec({ action: 'animate' }))).toContain('cách chuyển động');
+    // a press can only start what has a path or a range
+    expect(buttonProblem(run, [point('A'), point('B')])).toContain('điểm trượt');
+    expect(buttonProblem(run, [glider('A'), point('B')])).toBeNull();
+  });
 });
 
 describe('the button Edit | Action Buttons makes', () => {
   it('is the selection, named and listed as its objects are', () => {
     expect(newActionButton('hide', [point('A'), point('B')])).toEqual({
       action: 'hide', name: 'A, B', targets: ['A', 'B'],
+    });
+  });
+
+  it('names only the parts a run can move, and stores how it runs', () => {
+    expect(newActionButton('animate', [glider('G'), point('A'), slider('a')], RUN)).toEqual({
+      action: 'animate', name: 'G, a', targets: ['G', 'a'], animation: RUN,
+    });
+    // the dialog may not have been answered yet; the default lap is what it opens on
+    expect(newActionButton('animate', [glider('G')])).toEqual({
+      action: 'animate', name: 'G', targets: ['G'],
+      animation: { direction: 'forward', speed: 0.25 },
     });
   });
 
@@ -108,5 +147,13 @@ describe('the button Edit | Action Buttons makes', () => {
   it('waits for a selection', () => {
     expect(actionButtonRows(['A']).canCreate).toBe(true);
     expect(actionButtonRows([]).canCreate).toBe(false);
+  });
+
+  it('offers Animation only when the selection can move', () => {
+    const elements = [point('A'), glider('G'), slider('a')];
+    expect(actionButtonRows(['A'], elements).canAnimate).toBe(false);
+    expect(actionButtonRows(['G'], elements).canAnimate).toBe(true);
+    expect(actionButtonRows(['A', 'a'], elements).canAnimate).toBe(true);
+    expect(actionButtonRows([], elements).canAnimate).toBe(false);
   });
 });

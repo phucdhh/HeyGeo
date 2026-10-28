@@ -90,6 +90,7 @@ import {
   animationProblem,
   animationRows,
   animationSpeed,
+  animatableKind,
   animatables,
   sliderRange,
   startState,
@@ -1147,6 +1148,30 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     });
   }
 
+  /**
+   * Edit | Action Buttons | Animation… — a button that sets its objects moving.
+   *
+   * The direction and speed the dialog was answered with are stored beside the
+   * names, so pressing the button after a reload makes the same run. Only the
+   * parts with a path or a range are named, because those are all a run can move.
+   */
+  function createAnimationButton(spec: AnimationSpec): boolean {
+    const picked = new Set(selectedRef.current.map((o: { id: string }) => o.id));
+    const targets = elementsRef.current.filter((e) => picked.has(e.id));
+    if (!targets.some((t) => animatableKind(t) !== null)) {
+      onNotifyRef.current?.('Cần chọn điểm trượt hoặc tham số cho nút chuyển động.');
+      return false;
+    }
+    const button = newActionButton('animate', targets, spec);
+    const [x, y] = buttonPlace(elementsRef.current);
+    return addObject({
+      type: 'actionbutton',
+      id: nextElId('btn'),
+      parents: [x, y, buttonCaption(button, true)],
+      attrs: { button },
+    });
+  }
+
   /** The button under these page pixels, if the click landed on one. */
   function actionButtonAt(sx: number, sy: number): { el: HeyGeoElement; obj: unknown } | null {
     const board = boardRef.current;
@@ -1169,6 +1194,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const board = boardRef.current;
     const spec = buttonOf(el);
     if (!board || !spec) return false;
+    // an animation button starts the run it was made for; nothing about it is
+    // stored on the button, so its caption stays what the press will do
+    if (spec.action === 'animate') {
+      return spec.animation ? startAnimation(spec.animation, spec.targets) : false;
+    }
     const targets = spec.targets
       .map((id) => elementsRef.current.find((e) => e.id === id))
       .filter((e): e is HeyGeoElement => e !== undefined);
@@ -1241,7 +1271,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
    * the whole run; Stop (or the end of a once-only run) writes down where things
    * came to rest.
    */
-  function startAnimation(spec: AnimationSpec): boolean {
+  function startAnimation(spec: AnimationSpec, ids?: string[]): boolean {
     const board = boardRef.current;
     if (!board) return false;
     const problem = animationProblem(spec);
@@ -1249,7 +1279,10 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       onNotifyRef.current?.(problem);
       return false;
     }
-    const els = animatables(elementsRef.current, selectedRef.current.map((o: { id: string }) => o.id));
+    const els = animatables(
+      elementsRef.current,
+      ids ?? selectedRef.current.map((o: { id: string }) => o.id),
+    );
     if (els.length === 0) {
       onNotifyRef.current?.('Cần chọn điểm trượt hoặc tham số để làm chuyển động.');
       return false;
@@ -3314,8 +3347,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     plotPickedPair,
     plotValueOnAxis,
     createActionButton,
+    createAnimationButton,
     actionButtonRows: (): ActionButtonRows => (
-      actionButtonRows(selectedRef.current.map((o) => o.id))
+      actionButtonRows(selectedRef.current.map((o) => o.id), elementsRef.current)
     ),
     startAnimation,
     stopAnimation: () => stopAnimation(true),

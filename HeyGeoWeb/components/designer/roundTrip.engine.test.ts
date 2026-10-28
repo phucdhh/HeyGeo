@@ -820,6 +820,35 @@ describe('an action button the designer makes', () => {
     expect(elements.find((e: HeyGeoElement) => e.id === 'btn')!.attrs.button)
       .toEqual({ action: 'hide', name: 'A, B', targets: ['A', 'B'] });
   });
+
+  it('keeps an animation button and the run it was made for', () => {
+    const doc = [
+      ...DOC(),
+      el({ type: 'segment', id: 's', parents: ['A', 'B'], attrs: {} }),
+      el({ type: 'glider', id: 'G', parents: [0, 3, 's'], attrs: { name: 'G' } }),
+      el({
+        type: 'actionbutton', id: 'run', parents: [6, 5.3, 'Chạy G'],
+        attrs: { button: { action: 'animate', name: 'G', targets: ['G'], animation: { direction: 'both', speed: 0.5 } } },
+      }),
+    ];
+    const b = newBoard();
+    const saved = load(b, doc).elements;
+    b.update();
+
+    // the direction and the speed are part of the button, so a press after a
+    // reload makes the same run
+    expect(saved.find((e) => e.id === 'run')!.attrs.button).toEqual({
+      action: 'animate', name: 'G', targets: ['G'], animation: { direction: 'both', speed: 0.5 },
+    });
+    expect(String(b.objects.run.plaintext)).toBe('Chạy G');
+    expect(b.objects.run.visProp.button).toBeUndefined();
+
+    const again = newBoard();
+    expect(load(again, JSON.parse(JSON.stringify(saved))).errors).toEqual([]);
+    again.update();
+    expect(String(again.objects.run.plaintext)).toBe('Chạy G');
+    expect(drawing(again)).toEqual(drawing(b));
+  });
 });
 
 // Display | Animate Objects… sets objects in motion whose place the document
