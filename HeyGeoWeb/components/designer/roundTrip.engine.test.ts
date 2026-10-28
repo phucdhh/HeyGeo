@@ -19,6 +19,7 @@ import { applyScene, coordParents, gatherSelectionPoints, syncPositions, takeSce
 import { coordsysOf, verticalElement } from './coordsysModel';
 import { arrowDragMap } from './transforms';
 import { functionPlot, parametricPlot, PLOT_SAMPLES } from './plotModel';
+import { withSliderValue } from './animationModel';
 import type { HeyGeoElement } from './designTypes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -818,5 +819,50 @@ describe('an action button the designer makes', () => {
     expect(reloaded.objects.btn.visProp.button).toBeUndefined();
     expect(elements.find((e: HeyGeoElement) => e.id === 'btn')!.attrs.button)
       .toEqual({ action: 'hide', name: 'A, B', targets: ['A', 'B'] });
+  });
+});
+
+// Display | Animate Objects… sets objects in motion whose place the document
+// already records: a glider is a path parameter, a parameter is a value between
+// its ends. Nothing about the run is saved — Stop Animation leaves the objects
+// where they stand, and where they stand is what the document holds.
+describe('an animation the designer stops', () => {
+  const DOC = (): HeyGeoElement[] => [
+    el({ type: 'point', id: 'A', parents: [0, 0], attrs: { name: 'A' } }),
+    el({ type: 'point', id: 'B', parents: [4, 0], attrs: { name: 'B' } }),
+    el({ type: 'segment', id: 's', parents: ['A', 'B'], attrs: {} }),
+    el({ type: 'glider', id: 'G', parents: [1, 2, 's'], attrs: { name: 'G' } }),
+    el({ type: 'slider', id: 'a', parents: [[-7, 7], [-4, 7], [0, 4, 10]], attrs: { name: 'a' } }),
+  ];
+
+  it('leaves the glider halfway and the parameter at its new value', () => {
+    const b = newBoard();
+    const elements = load(b, DOC()).elements;
+    b.update();
+
+    // the glider starts a quarter of the way along the segment, the parameter at 4
+    expect(b.objects.G.position).toBeCloseTo(0.25, 6);
+    expect(b.objects.a.Value()).toBeCloseTo(4, 6);
+
+    // what the runner does each frame, and what Stop Animation then writes down
+    b.objects.G.setGliderPosition(0.5);
+    b.objects.a.setValue(6);
+    b.update();
+    // a glider is a point of the document, so its place is frozen like a drag's
+    expect(syncPositions(elements, b)).toBe(true);
+    expect(elements.find((e: HeyGeoElement) => e.id === 'G')!.parents).toEqual([2, 0, 's']);
+    // a parameter's value is not a coordinate, so the stop writes it itself
+    const slider = elements.find((e: HeyGeoElement) => e.id === 'a')!;
+    slider.parents = withSliderValue(slider, b.objects.a.Value()) as HeyGeoElement['parents'];
+
+    const reloaded = newBoard();
+    expect(load(reloaded, JSON.parse(JSON.stringify(elements))).errors).toEqual([]);
+    reloaded.update();
+    expect(reloaded.objects.G.position).toBeCloseTo(0.5, 6);
+    expect(reloaded.objects.G.X()).toBeCloseTo(2, 6);
+    expect(reloaded.objects.G.Y()).toBeCloseTo(0, 6);
+    expect(reloaded.objects.a.Value()).toBeCloseTo(6, 6);
+    // no part of the run itself reached the file
+    expect(JSON.stringify(elements)).not.toMatch(/animation|direction|running/);
   });
 });

@@ -51,6 +51,7 @@ import CalculateDialog from './CalculateDialog';
 import NewFunctionDialog from './NewFunctionDialog';
 import PlotPointDialog from './PlotPointDialog';
 import PlotCurveDialog from './PlotCurveDialog';
+import AnimateDialog from './AnimateDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
 
@@ -120,6 +121,9 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
 
   /** Graph | Plot Curve… — the parametric pair is always typed; it needs nothing picked. */
   const [plotCurveOpen, setPlotCurveOpen] = useState(false);
+
+  /** Display | Animate Objects… — which way the picked objects travel, and how fast. */
+  const [animateOpen, setAnimateOpen] = useState(false);
 
   /**
    * Graph | Plot as (x, y)… — the two numbers picked go onto the frame as they
@@ -453,6 +457,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onPlotAsXy={handlePlotAsXy}
         onPlotValueOnAxis={() => canvasRef.current?.plotValueOnAxis()}
         onPlotCurve={() => setPlotCurveOpen(true)}
+        onAnimateObjects={() => setAnimateOpen(true)}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}
       />
@@ -599,6 +604,17 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setPlotCurveOpen(false);
           }}
           onCancel={() => setPlotCurveOpen(false)}
+        />
+      )}
+
+      {/* ── Display | Animate Objects… dialog ── */}
+      {animateOpen && (
+        <AnimateDialog
+          onConfirm={(spec) => {
+            canvasRef.current?.startAnimation(spec);
+            setAnimateOpen(false);
+          }}
+          onCancel={() => setAnimateOpen(false)}
         />
       )}
 

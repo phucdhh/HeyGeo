@@ -85,6 +85,20 @@ import {
   newActionButton,
   type ActionButtonRows,
 } from './actionButtonModel';
+import {
+  advanceAnimation,
+  animationProblem,
+  animationRows,
+  animationSpeed,
+  animatables,
+  sliderRange,
+  startState,
+  withSliderValue,
+  type AnimationRows,
+  type AnimationSpec,
+  type AnimationTargetState,
+  type AnimatableKind,
+} from './animationModel';
 import { arrowDragMap, imageClosures, type ImageSpec } from './transforms';
 import {
   applyScene,
@@ -555,11 +569,25 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   /** Latest pointer event anywhere in the window, used to read the pointer. */
   const pointerRef = useRef<PointerEvent | null>(null);
 
+  // ─── Display | Animate Objects… ───────────────────────────────────────────
+  // The run lives outside React state: every frame is a change to the board,
+  // not a re-render, and stopping is what hands the final places to the document.
+  interface RunningAnimation {
+    raf: number;
+    last: number;
+    spec: AnimationSpec;
+    targets: { el: HeyGeoElement; kind: AnimatableKind; state: AnimationTargetState }[];
+  }
+  const animationRef = useRef<RunningAnimation | null>(null);
+
   useEffect(() => {
     const onMove = (e: PointerEvent) => { pointerRef.current = e; };
     window.addEventListener('pointermove', onMove, true);
     return () => window.removeEventListener('pointermove', onMove, true);
   }, []);
+
+  // A run left behind on an unmounted canvas would keep ticking on a dead board.
+  useEffect(() => () => stopAnimation(false), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendingRef  = useRef<{
     phase: 'idle' | 'pt2' | 'pt3' | 'polygon' | 'slider_pt2';
@@ -750,6 +778,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function restoreScene(target: SceneSnapshot) {
     const board = boardRef.current;
     if (!board) return;
+    // the objects a run was moving may be gone from the restored scene
+    stopAnimation(false);
     cancelTool();
     const { elements, errors } = applyScene(board, target, planScene(currentScene(), target));
     elementsRef.current = elements;
@@ -1161,6 +1191,130 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     return true;
   }
 
+  // ─── Display | Animate Objects… ─────────────────────────────────────────────
+
+  /** Put one object at the phase a tick just computed. */
+  function applyAnimationPhase(board: JXGBoard, target: RunningAnimation['targets'][number]) {
+    const obj = board.objects?.[target.el.id];
+    if (!obj) {
+      // the object went away mid-run (deleted or rebuilt): there is nothing left to move
+      target.state = { ...target.state, done: true };
+      return;
+    }
+    if (target.kind === 'glider') {
+      obj.setGliderPosition?.(target.state.phase);
+      return;
+    }
+    const range = sliderRange(target.el);
+    if (!range) return;
+    obj.setValue?.(range[0] + target.state.phase * (range[1] - range[0]));
+  }
+
+  /**
+   * Stop the clock. A stopped run hands its final places to the document: a glider
+   * through the coordinates syncPositions already writes, a parameter through its
+   * stored `[min, value, max]`. Undo goes back to the whole run at once because
+   * the snapshot was taken when it started, not once a frame.
+   */
+  function stopAnimation(persist = true) {
+    const run = animationRef.current;
+    if (!run) return;
+    cancelAnimationFrame(run.raf);
+    animationRef.current = null;
+    if (!persist) return;
+    const board = boardRef.current;
+    if (board) {
+      syncPositions(elementsRef.current, board);
+      for (const target of run.targets) {
+        if (target.kind !== 'slider') continue;
+        const value = (board.objects?.[target.el.id] as { Value?: () => number } | undefined)?.Value?.();
+        const parents = value === undefined ? null : withSliderValue(target.el, value);
+        if (parents) target.el.parents = parents as HeyGeoElement['parents'];
+      }
+    }
+    onDirty();
+  }
+
+  /**
+   * Display | Animate Objects… — set the selected gliders travelling along their
+   * paths and the selected parameters sweeping their ranges. One undo step covers
+   * the whole run; Stop (or the end of a once-only run) writes down where things
+   * came to rest.
+   */
+  function startAnimation(spec: AnimationSpec): boolean {
+    const board = boardRef.current;
+    if (!board) return false;
+    const problem = animationProblem(spec);
+    if (problem) {
+      onNotifyRef.current?.(problem);
+      return false;
+    }
+    const els = animatables(elementsRef.current, selectedRef.current.map((o: { id: string }) => o.id));
+    if (els.length === 0) {
+      onNotifyRef.current?.('Cần chọn điểm trượt hoặc tham số để làm chuyển động.');
+      return false;
+    }
+
+    const targets: RunningAnimation['targets'] = [];
+    for (const el of els) {
+      const obj = board.objects?.[el.id];
+      if (!obj) continue;
+      if (el.type === 'glider') {
+        targets.push({
+          el, kind: 'glider',
+          state: startState(Number(obj.position), spec.direction),
+        });
+        continue;
+      }
+      const range = sliderRange(el);
+      if (!range) continue;
+      const value = (obj as { Value?: () => number }).Value?.() ?? range[0];
+      targets.push({
+        el, kind: 'slider',
+        state: startState((value - range[0]) / (range[1] - range[0]), spec.direction),
+      });
+    }
+    if (targets.length === 0) return false;
+
+    // the run being replaced is read before it is dropped, so its last places
+    // still seed this one; only then does it give the clock up
+    stopAnimation(false);
+    saveSnapshot();
+
+    const run: RunningAnimation = {
+      raf: 0, last: performance.now(),
+      spec: { ...spec, speed: animationSpeed(spec.speed) },
+      targets,
+    };
+    animationRef.current = run;
+
+    const frame = (now: number) => {
+      if (animationRef.current !== run) return;
+      // a tab that was asleep hands back a huge gap; one frame is a tenth of a second at most
+      const dt = Math.min(0.1, Math.max(0, (now - run.last) / 1000));
+      run.last = now;
+      let alive = false;
+      for (const target of run.targets) {
+        target.state = advanceAnimation(target.state, run.spec, dt);
+        applyAnimationPhase(board, target);
+        if (!target.state.done) alive = true;
+      }
+      board.update();
+      if (!alive) { stopAnimation(true); return; }
+      run.raf = requestAnimationFrame(frame);
+    };
+    run.raf = requestAnimationFrame(frame);
+    onDirty();
+    return true;
+  }
+
+  /** Display | Increase Speed and Decrease Speed, while something is running. */
+  function scaleAnimationSpeed(factor: number) {
+    const run = animationRef.current;
+    if (!run) return;
+    run.spec = { ...run.spec, speed: animationSpeed(run.spec.speed * factor) };
+  }
+
   // ─── The frame's grid ───────────────────────────────────────────────────────
 
   /**
@@ -1365,6 +1519,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function rebuildBoard(els: HeyGeoElement[]) {
     const board = boardRef.current;
     if (!board) return;
+    // the board about to be freed is what a run was moving objects on
+    stopAnimation(false);
     // Free & re-init
     jxg().JSXGraph.freeBoard(board);
     const meta = metaRef.current;
@@ -2827,30 +2983,6 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       onDirty();
     },
 
-    startAnimation: (id: string) => {
-      const board = boardRef.current;
-      if (!board) return;
-      const obj = board.objects[id];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (obj && typeof (obj as any).startAnimation === 'function') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (obj as any).startAnimation(1, 3, 40);
-        board.update();
-      }
-    },
-
-    stopAnimation: (id: string) => {
-      const board = boardRef.current;
-      if (!board) return;
-      const obj = board.objects[id];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (obj && typeof (obj as any).stopAnimation === 'function') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (obj as any).stopAnimation();
-        board.update();
-      }
-    },
-
     createLocus: (): import('./designTypes').LocusResult => {
       const board = boardRef.current;
       if (!board) return { ok: false, reason: 'need_2_items' };
@@ -3185,6 +3317,13 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     actionButtonRows: (): ActionButtonRows => (
       actionButtonRows(selectedRef.current.map((o) => o.id))
     ),
+    startAnimation,
+    stopAnimation: () => stopAnimation(true),
+    animationRows: (): AnimationRows => (
+      animationRows(selectedRef.current.map((o) => o.id), elementsRef.current, animationRef.current !== null)
+    ),
+    increaseAnimationSpeed: () => scaleAnimationSpeed(1.5),
+    decreaseAnimationSpeed: () => scaleAnimationSpeed(1 / 1.5),
     plotPoint,
     setGridForm,
     toggleFrameGrid,

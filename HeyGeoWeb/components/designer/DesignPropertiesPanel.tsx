@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { elementKindLabel } from './designTypes';
 import type { CanvasHandle, SelectedElementInfo } from './designTypes';
+import { ANIMATION_SPEED } from './animationModel';
 
 const STROKE_COLORS = [
   '#000000', '#808080', '#d32f2f', '#388e3c',
@@ -269,14 +270,14 @@ export default function DesignPropertiesPanel({ selected, canvasRef }: Props) {
         <Section title="Hoạt hình">
           <div className="flex gap-2">
             <button
-              onClick={() => canvasRef.current?.startAnimation?.(el.id)}
+              onClick={() => canvasRef.current?.startAnimation({ direction: 'forward', speed: ANIMATION_SPEED.fallback })}
               className="flex-1 flex items-center justify-center gap-1 text-xs h-7 rounded border border-gray-200 bg-white hover:bg-brand-50 hover:border-brand-400 text-gray-700 transition-colors"
               title="Bắt đầu chuyển động dọc theo đường"
             >
               ▶ Chạy
             </button>
             <button
-              onClick={() => canvasRef.current?.stopAnimation?.(el.id)}
+              onClick={() => canvasRef.current?.stopAnimation()}
               className="flex-1 flex items-center justify-center gap-1 text-xs h-7 rounded border border-gray-200 bg-white hover:bg-red-50 hover:border-red-300 text-gray-700 transition-colors"
               title="Dừng chuyển động"
             >

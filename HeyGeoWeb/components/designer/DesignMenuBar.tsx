@@ -9,6 +9,7 @@ import { measureItems, type MeasureItem } from './measureMenuModel';
 import { canCalculate } from './numberMenuModel';
 import { type PlotPointRows } from './plotPointModel';
 import { type ActionButtonRows } from './actionButtonModel';
+import { type AnimationRows } from './animationModel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MenuItemDef {
@@ -40,6 +41,9 @@ const NO_PLOT_POINT_ROWS: PlotPointRows = { canPlotPair: false, canPlotValue: fa
 
 /** Nothing is picked, so there is nothing to make a button out of. */
 const NO_ACTION_BUTTON_ROWS: ActionButtonRows = { canCreate: false };
+
+/** Nothing that can move is picked, and nothing is moving. */
+const NO_ANIMATION_ROWS: AnimationRows = { canAnimate: false, running: false };
 
 /** Graph | Grid Form, named the way the desktop's submenu names its four forms. */
 const GRID_FORM_LABELS: Record<GridForm, string> = {
@@ -91,6 +95,8 @@ interface Props {
   onPlotValueOnAxis: () => void;
   /** Graph | Plot Curve… — the studio opens the parametric curve dialog. */
   onPlotCurve: () => void;
+  /** Display | Animate Objects… — the studio opens the animation dialog. */
+  onAnimateObjects: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
   onUnderDevelopment: () => void;
 }
@@ -235,6 +241,7 @@ export default function DesignMenuBar({
   onPlotAsXy,
   onPlotValueOnAxis,
   onPlotCurve,
+  onAnimateObjects,
   onOpenTransform,
   onUnderDevelopment,
 }: Props) {
@@ -304,12 +311,21 @@ export default function DesignMenuBar({
     return canvasRef.current?.actionButtonRows() ?? NO_ACTION_BUTTON_ROWS;
   }
 
+  /**
+   * Whether Display | Animate Objects… has something to set moving, and whether
+   * the speed and stop rows have a running animation to act on.
+   */
+  function animationRow(): AnimationRows {
+    return canvasRef.current?.animationRows() ?? NO_ANIMATION_ROWS;
+  }
+
   // ─── Menu definitions – mirrors GSP Desktop menu order ────────────────
   // File | Edit | Display | Construct | Measure | Number | Transform | Graph | Window | Help
   const frames = frameRows();
   const functions = functionRows();
   const plotted = plotPointRows();
   const actionButtons = actionButtonRow();
+  const animation = animationRow();
   const menus: MenuDef[] = [
     // ── File ──────────────────────────────────────────────────────────────
     {
@@ -434,10 +450,10 @@ export default function DesignMenuBar({
         { label: 'Axes',                   checked: showAxis,     action: onToggleAxis },
         { label: 'Grid',                   checked: showGrid,     action: onToggleGrid },
         { separator: true },
-        { label: 'Animate Objects…',                               action: onUnderDevelopment },
-        { label: 'Increase Speed',                                 action: onUnderDevelopment },
-        { label: 'Decrease Speed',                                 action: onUnderDevelopment },
-        { label: 'Stop Animation',                                 action: onUnderDevelopment },
+        { label: 'Animate Objects…',  disabled: !animation.canAnimate, action: onAnimateObjects },
+        { label: 'Increase Speed',    disabled: !animation.running,    action: () => canvasRef.current?.increaseAnimationSpeed() },
+        { label: 'Decrease Speed',    disabled: !animation.running,    action: () => canvasRef.current?.decreaseAnimationSpeed() },
+        { label: 'Stop Animation',    disabled: !animation.running,    action: () => canvasRef.current?.stopAnimation() },
         { separator: true },
         { label: 'Trace Object',                                   action: () => canvasRef.current?.toggleSelectedTrace() },
         { label: 'Clear Traces',                                   action: () => canvasRef.current?.clearAllTraces() },

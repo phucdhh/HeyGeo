@@ -543,6 +543,36 @@ describe('registry against the real engine', () => {
     expect(out.obj).toBeNull();
     expect(out.error).toMatch(/mô tả/);
   });
+
+  // Display | Animate Objects… steps two engine properties: a glider's position
+  // along its path and a parameter's value in its range. This is those two
+  // properties doing what the animation model assumes they do.
+  it('moves a glider along its path and a parameter through its range', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [0, 0] }),
+      spec({ type: 'point', id: 'B', parents: [4, 0] }),
+      spec({ type: 'segment', id: 's1', parents: ['A', 'B'] }),
+      spec({ type: 'glider', id: 'G', parents: [1, 2, 's1'] }),
+      spec({ type: 'slider', id: 'a', parents: [[0, 5], [3, 5], [0, 4, 10]] }),
+    ]);
+    expect(r.errors).toEqual([]);
+    b.update();
+
+    const g = r.elMap.G as any;
+    // the glider remembers how far along it was left, which is what a run seeds
+    expect(Number(g.position)).toBeCloseTo(0.25);
+    g.setGliderPosition(0.5);
+    b.update();
+    expect(g.X()).toBeCloseTo(2);
+    expect(g.Y()).toBeCloseTo(0);
+    expect(Number(g.position)).toBeCloseTo(0.5);
+
+    const a = r.elMap.a as any;
+    a.setValue(6);
+    b.update();
+    expect(a.Value()).toBeCloseTo(6);
+  });
 });
 
 // The Context menu writes these into the document, so a style chosen with the

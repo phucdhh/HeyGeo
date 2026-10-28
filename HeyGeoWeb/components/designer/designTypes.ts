@@ -1,5 +1,6 @@
 // ─── Tool modes – mirrors HeyGeoView::ToolMode enum from Desktop ─────────────
 import type { ActionButtonRows } from './actionButtonModel';
+import type { AnimationRows, AnimationSpec } from './animationModel';
 import type { GridForm, GraphRows } from './coordsysModel';
 import type { FunctionRows } from './functionMenuModel';
 import type { MeasureItem } from './measureMenuModel';
@@ -222,8 +223,6 @@ export interface CanvasHandle {
   updateSelectedFillColor?: (color: string) => void;
   updateSelectedFillOpacity?: (opacity: number) => void;
   confirmSlider?: (cfg: SliderConfig) => void;
-  startAnimation?: (id: string) => void;
-  stopAnimation?: (id: string) => void;
   cancelCurrentTool: () => boolean;
   clearSelection: () => void;
   /** True when Escape dismissed an open Context menu rather than something below it. */
@@ -310,6 +309,15 @@ export interface CanvasHandle {
   createActionButton: () => boolean;
   /** Whether the Action Buttons row has a selection to make a button from. */
   actionButtonRows: () => ActionButtonRows;
+  /** Display | Animate Objects…: set the selected gliders and parameters moving. */
+  startAnimation: (spec: AnimationSpec) => boolean;
+  /** Display | Stop Animation: stop, writing where everything came to rest. */
+  stopAnimation: () => void;
+  /** Whether the Display animation rows have something to animate or to stop. */
+  animationRows: () => AnimationRows;
+  /** Display | Increase Speed and Decrease Speed, while a run is in progress. */
+  increaseAnimationSpeed: () => void;
+  decreaseAnimationSpeed: () => void;
   /** Graph | Plot as (x, y)… over the two coordinates typed in its dialog. */
   plotPoint: (spec: PlotPointSpec) => boolean;
   /** Graph | Grid Form: one of the four ways a frame's grid is drawn. */
