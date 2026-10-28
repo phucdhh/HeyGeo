@@ -71,6 +71,7 @@ interface Props {
   onSaveAs: () => void;
   onExportJSON: () => void;
   onImportFile: () => void;
+  onExportImage: () => void;
   onExportSVG: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -236,6 +237,7 @@ export default function DesignMenuBar({
   onSaveAs,
   onExportJSON,
   onImportFile,
+  onExportImage,
   onExportSVG,
   onUndo,
   onRedo,
@@ -374,6 +376,7 @@ export default function DesignMenuBar({
         { separator: true },
         { label: 'Import JSON…',                                         action: onImportFile },
         { label: 'Export JSON…',                                         action: onExportJSON },
+        { label: 'Export To Image…',                                     action: onExportImage },
         { label: 'Export SVG…',                                          action: onExportSVG },
         { label: 'Publish to Web…',                                      action: onUnderDevelopment },
         { separator: true },

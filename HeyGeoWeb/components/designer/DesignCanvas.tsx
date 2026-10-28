@@ -3868,12 +3868,59 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     getZoom: () => (boardRef.current as unknown as { zoomX?: number })?.zoomX ?? 1,
 
     exportSVG: () => {
+      const board = boardRef.current;
       const container = document.getElementById(BOARD_ID);
-      const svg = container?.querySelector('svg');
-      if (!svg) return '';
-      if (!svg.getAttribute('width') && containerRef.current) {
-        svg.setAttribute('width', String(containerRef.current.clientWidth));
-        svg.setAttribute('height', String(containerRef.current.clientHeight));
+      if (!board || !container) return '';
+      // The frame's grid is mounted as the container's first SVG, under the
+      // board's own, so the drawing to export is the renderer's root — with the
+      // grid layer painted into it, because it is part of the picture.
+      const source = (board.renderer as unknown as { svgRoot?: SVGSVGElement }).svgRoot
+        ?? container.querySelector<SVGSVGElement>('svg:not([data-frame-grid])');
+      if (!source) return '';
+      const svg = source.cloneNode(true) as SVGSVGElement;
+      // JSXGraph keeps an empty, hidden <foreignObject> in its root. It draws
+      // nothing, but Chrome taints any canvas that was painted from SVG holding
+      // one, so the picture can be downloaded but never rasterised.
+      svg.querySelectorAll('foreignObject[display="none"]').forEach((node) => node.remove());
+      if (!svg.getAttribute('width')) svg.setAttribute('width', String(container.clientWidth));
+      if (!svg.getAttribute('height')) svg.setAttribute('height', String(container.clientHeight));
+      const grid = container.querySelector<SVGSVGElement>('svg[data-frame-grid]');
+      if (grid) {
+        const under = document.createDocumentFragment();
+        for (const node of Array.from(grid.childNodes)) under.appendChild(node.cloneNode(true));
+        svg.insertBefore(under, svg.firstChild);
+      }
+      // Labels — point names, captions, the infobox — are HTML laid over the
+      // board, so the renderer's root holds none of them. Put each visible one
+      // into the picture as SVG text where the page shows it. The baseline is
+      // measured rather than left to dominant-baseline, which most SVG readers
+      // outside a browser ignore.
+      const frame = container.getBoundingClientRect();
+      const gauge = document.createElement('canvas').getContext('2d');
+      const labels = container.querySelectorAll<HTMLElement>('.JXGtext');
+      for (const label of Array.from(labels)) {
+        const content = label.textContent?.trim();
+        if (!content) continue;
+        const style = window.getComputedStyle(label);
+        if (style.display === 'none' || style.visibility === 'hidden') continue;
+        const rect = label.getBoundingClientRect();
+        if (!rect.width || !rect.height) continue;
+        let ascent = (Number.parseFloat(style.fontSize) || 14) * 0.8;
+        if (gauge) {
+          gauge.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          const metrics = gauge.measureText(content);
+          ascent = metrics.fontBoundingBoxAscent || metrics.actualBoundingBoxAscent || ascent;
+        }
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', String(rect.left - frame.left));
+        text.setAttribute('y', String(rect.top - frame.top + ascent));
+        text.setAttribute('font-family', style.fontFamily);
+        text.setAttribute('font-size', style.fontSize);
+        text.setAttribute('font-weight', style.fontWeight);
+        text.setAttribute('font-style', style.fontStyle);
+        text.setAttribute('fill', style.color);
+        text.textContent = content;
+        svg.appendChild(text);
       }
       return new XMLSerializer().serializeToString(svg);
     },

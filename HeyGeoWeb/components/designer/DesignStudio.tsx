@@ -59,12 +59,29 @@ import { DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE } from './fontModel';
 import SamplesDialog from './SamplesDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
+import ExportImageDialog from './ExportImageDialog';
+import {
+  HIGH_QUALITY_SCALE,
+  imageFileName,
+  rasterizeSvg,
+  type ImageFormat,
+} from './imageExport';
 
 interface Props {
   initialData?: HeyGeoData | null;
   modelId?: string;
   initialDescription?: string;
   initialIsPublic?: boolean;
+}
+
+/** Hand a generated file to the browser's downloader. */
+function downloadBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function DesignStudio({ initialData, modelId, initialDescription, initialIsPublic }: Props) {
@@ -149,6 +166,9 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
     const color = canvasRef.current?.selectedColor();
     if (color != null) setOtherColor(color);
   }
+
+  /** File | Export To Image… — the desktop asks for a format and a quality. */
+  const [imageExportOpen, setImageExportOpen] = useState(false);
 
   /** Display | Number of Samples… — how many times the picked locus is stepped. */
   const [samples, setSamples] = useState<number | null>(null);
@@ -427,24 +447,26 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
     const data = canvasRef.current?.getHeyGeoData();
     if (!data) return;
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `${title || 'heygeo'}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `${title || 'heygeo'}.json`);
   }
 
   function handleExportSVG() {
     const svgStr = canvasRef.current?.exportSVG?.();
     if (!svgStr) return;
-    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `${title || 'heygeo'}.svg`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(new Blob([svgStr], { type: 'image/svg+xml' }), `${title || 'heygeo'}.svg`);
+  }
+
+  /** File | Export To Image… — the desktop asks for a format and a quality. */
+  async function handleExportImage(format: ImageFormat, highQuality: boolean) {
+    const svg = canvasRef.current?.exportSVG?.();
+    if (!svg) return;
+    setImageExportOpen(false);
+    try {
+      const blob = await rasterizeSvg(svg, format, highQuality ? HIGH_QUALITY_SCALE : 1);
+      downloadBlob(blob, imageFileName(title, format));
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Không xuất được ảnh.');
+    }
   }
 
   function handleImportFile() {
@@ -483,6 +505,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onSaveAs={handleSaveAs}
         onExportJSON={handleExportJSON}
         onImportFile={handleImportFile}
+        onExportImage={() => setImageExportOpen(true)}
         onExportSVG={handleExportSVG}
         onUndo={handleUndo}
         onRedo={handleRedo}
@@ -703,6 +726,14 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setOtherColor(null);
           }}
           onCancel={() => setOtherColor(null)}
+        />
+      )}
+
+      {/* ── File | Export To Image… dialog ── */}
+      {imageExportOpen && (
+        <ExportImageDialog
+          onConfirm={handleExportImage}
+          onCancel={() => setImageExportOpen(false)}
         />
       )}
 
