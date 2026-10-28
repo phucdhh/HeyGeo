@@ -239,6 +239,9 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'z') { handleUndo(); return; }
         if (e.key === 'y') { handleRedo(); return; }
+        if (e.key === 'c') { e.preventDefault(); canvasRef.current?.copySelection(); return; }
+        if (e.key === 'x') { e.preventDefault(); canvasRef.current?.cutSelection(); refreshUndoState(); return; }
+        if (e.key === 'v') { e.preventDefault(); canvasRef.current?.pasteClipboard(); refreshUndoState(); return; }
         if (e.key === 's') { e.preventDefault(); handleSave(); return; }
         if (e.key === 'a') { e.preventDefault(); canvasRef.current?.selectAll(); return; }
         if (e.key === '=') { e.preventDefault(); canvasRef.current?.zoomIn(); return; }
@@ -442,6 +445,15 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onExportSVG={handleExportSVG}
         onUndo={handleUndo}
         onRedo={handleRedo}
+        onCut={() => {
+          canvasRef.current?.cutSelection();
+          refreshUndoState();
+        }}
+        onCopy={() => canvasRef.current?.copySelection()}
+        onPaste={() => {
+          canvasRef.current?.pasteClipboard();
+          refreshUndoState();
+        }}
         onDeleteSelected={() => {
           canvasRef.current?.deleteSelected();
           refreshUndoState();

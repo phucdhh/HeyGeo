@@ -73,6 +73,9 @@ interface Props {
   onExportSVG: () => void;
   onUndo: () => void;
   onRedo: () => void;
+  onCut: () => void;
+  onCopy: () => void;
+  onPaste: () => void;
   onDeleteSelected: () => void;
   onSelectAll: () => void;
   onToggleAxis: () => void;
@@ -227,6 +230,9 @@ export default function DesignMenuBar({
   onExportSVG,
   onUndo,
   onRedo,
+  onCut,
+  onCopy,
+  onPaste,
   onDeleteSelected,
   onSelectAll,
   onToggleAxis,
@@ -362,9 +368,9 @@ export default function DesignMenuBar({
         { label: 'Undo',             shortcut: 'Ctrl+Z',   disabled: !canUndo, action: onUndo },
         { label: 'Redo',             shortcut: 'Ctrl+Y',   disabled: !canRedo, action: onRedo },
         { separator: true },
-        { label: 'Cut',              shortcut: 'Ctrl+X',                       action: onUnderDevelopment },
-        { label: 'Copy',             shortcut: 'Ctrl+C',                       action: onUnderDevelopment },
-        { label: 'Paste',            shortcut: 'Ctrl+V',                       action: onUnderDevelopment },
+        { label: 'Cut',              shortcut: 'Ctrl+X',   disabled: selectedIds.length === 0, action: onCut },
+        { label: 'Copy',             shortcut: 'Ctrl+C',   disabled: selectedIds.length === 0, action: onCopy },
+        { label: 'Paste',            shortcut: 'Ctrl+V',   disabled: !canvasRef.current?.hasClipboard(), action: onPaste },
         { label: 'Delete',           shortcut: 'Del',                          action: onDeleteSelected },
         { separator: true },
         { label: 'Select All',       shortcut: 'Ctrl+A',                       action: onSelectAll },

@@ -205,6 +205,13 @@ export interface CanvasHandle {
   canUndo: () => boolean;
   canRedo: () => boolean;
   deleteSelected: () => void;
+  /** Edit | Copy and Cut: the picks, with what they are built from, go aside. */
+  copySelection: () => boolean;
+  cutSelection: () => boolean;
+  /** Edit | Paste: the clipboard rebuilt under fresh ids and picked. */
+  pasteClipboard: () => boolean;
+  /** Whether Paste has anything to build. */
+  hasClipboard: () => boolean;
   selectAll: () => void;
   setAxis: (v: boolean) => void;
   setGrid: (v: boolean) => void;

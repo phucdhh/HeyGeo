@@ -86,6 +86,12 @@ import {
   type ActionButtonRows,
 } from './actionButtonModel';
 import {
+  copyClosure,
+  pasteElements,
+  pasteOffset,
+  type Clipboard,
+} from './clipboardModel';
+import {
   advanceAnimation,
   animationProblem,
   animationRows,
@@ -1217,6 +1223,89 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     el.parents = [el.parents[0], el.parents[1], caption];
     (obj as { setText?: (text: string) => void }).setText?.(caption);
     board.update();
+    onDirty();
+    return true;
+  }
+
+  // ─── Edit | Copy, Cut and Paste ─────────────────────────────────────────────
+  // The clipboard is this page's own, not the system's: a copied sketch piece
+  // is document data, and handing it to the OS would offer nothing useful back.
+  const clipboardRef = useRef<Clipboard | null>(null);
+
+  /** Remove the picked objects and everything built on them, as one undo step. */
+  function deletePicked(): boolean {
+    const board = boardRef.current;
+    if (!board || selectedRef.current.length === 0) return false;
+    saveSnapshot();
+    // JSXGraph removes an element with everything built from it, so the
+    // document has to drop the same set or it drifts from the board.
+    const doomed = withDependents(
+      elementsRef.current,
+      selectedRef.current.map((o: { id: string }) => o.id),
+    );
+    [...elementsRef.current].reverse()
+      .filter(e => doomed.has(e.id))
+      .forEach(e => { try { board.removeObject(board.objects[e.id]); } catch { /**/ } });
+    elementsRef.current = elementsRef.current.filter(e => !doomed.has(e.id));
+    selectedRef.current = [];
+    onSelectionChange([]);
+    setSelDecorations([]);
+    onDirty();
+    return true;
+  }
+
+  /** Edit | Copy — the picks and everything they are built from go aside. */
+  function copyPicked(): boolean {
+    const ids = selectedRef.current.map((o: { id: string }) => o.id);
+    if (ids.length === 0) {
+      onNotifyRef.current?.('Cần chọn đối tượng để sao chép.');
+      return false;
+    }
+    const elements = copyClosure(elementsRef.current, ids);
+    clipboardRef.current = { elements, pastes: 0 };
+    onNotifyRef.current?.(`Đã sao chép ${elements.length} đối tượng.`);
+    return true;
+  }
+
+  /** Edit | Cut — the copy a paste would make, with the picks taken away. */
+  function cutPicked(): boolean {
+    return copyPicked() && deletePicked();
+  }
+
+  /**
+   * Edit | Paste — build the clipboard's construction again under fresh ids, one
+   * undo step for the whole paste, with the copies picked so a drag moves them.
+   */
+  function pasteClip(): boolean {
+    const board = boardRef.current;
+    const clip = clipboardRef.current;
+    if (!board || !clip || clip.elements.length === 0) {
+      onNotifyRef.current?.('Bộ nhớ tạm đang trống.');
+      return false;
+    }
+    const pasted = pasteElements(clip.elements, (el) => nextElId(el.type || 'el'), pasteOffset(clip.pastes + 1));
+    saveSnapshot();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const made: any[] = [];
+    for (const el of pasted) {
+      const { obj, error } = createElement(board, el, { ...board.objects });
+      if (!obj) {
+        onNotifyRef.current?.(error ?? `Không dán được ${el.type}`);
+        break;
+      }
+      elementsRef.current.push(el);
+      made.push(obj);
+    }
+    if (made.length === 0) {
+      // nothing was made, so the step taken for the paste would undo nothing
+      undoStack.current.pop();
+      return false;
+    }
+    clip.pastes += 1;
+    board.update();
+    selectedRef.current = made;
+    setSelDecorations(computeDecorations(selectedRef.current, board));
+    onSelectionChange(selectedRef.current.map(toSelectedInfo));
     onDirty();
     return true;
   }
@@ -2880,25 +2969,12 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     canUndo: () => undoStack.current.length > 0,
     canRedo: () => redoStack.current.length > 0,
 
-    deleteSelected: () => {
-      const board = boardRef.current;
-      if (!board || selectedRef.current.length === 0) return;
-      saveSnapshot();
-      // JSXGraph removes an element with everything built from it, so the
-      // document has to drop the same set or it drifts from the board.
-      const doomed = withDependents(
-        elementsRef.current,
-        selectedRef.current.map((o: { id: string }) => o.id),
-      );
-      [...elementsRef.current].reverse()
-        .filter(e => doomed.has(e.id))
-        .forEach(e => { try { board.removeObject(board.objects[e.id]); } catch { /**/ } });
-      elementsRef.current = elementsRef.current.filter(e => !doomed.has(e.id));
-      selectedRef.current = [];
-      onSelectionChange([]);
-      setSelDecorations([]);
-      onDirty();
-    },
+    deleteSelected: deletePicked,
+
+    copySelection: copyPicked,
+    cutSelection: cutPicked,
+    pasteClipboard: pasteClip,
+    hasClipboard: () => (clipboardRef.current?.elements.length ?? 0) > 0,
 
     selectAll: selectAllObjects,
 

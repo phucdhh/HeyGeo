@@ -20,6 +20,7 @@ import { coordsysOf, verticalElement } from './coordsysModel';
 import { arrowDragMap } from './transforms';
 import { functionPlot, parametricPlot, PLOT_SAMPLES } from './plotModel';
 import { withSliderValue } from './animationModel';
+import { copyClosure, pasteElements, pasteOffset } from './clipboardModel';
 import type { HeyGeoElement } from './designTypes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -848,6 +849,58 @@ describe('an action button the designer makes', () => {
     again.update();
     expect(String(again.objects.run.plaintext)).toBe('Chạy G');
     expect(drawing(again)).toEqual(drawing(b));
+  });
+});
+
+// Edit | Copy and Paste — the copy is a construction of its own: new ids, new
+// references, and a place stepped aside. What the clipboard carries is data, so
+// what the paste makes has to rebuild on a board exactly as the original did.
+describe('a pasted copy of a construction', () => {
+  const DOC = (): HeyGeoElement[] => [
+    el({ type: 'point', id: 'A', parents: [-3, 1], attrs: { name: 'A' } }),
+    el({ type: 'point', id: 'B', parents: [2, 4], attrs: { name: 'B' } }),
+    el({ type: 'midpoint', id: 'M', parents: ['A', 'B'], attrs: { name: 'M' } }),
+    el({ type: 'segment', id: 's', parents: ['A', 'B'], attrs: {} }),
+    el({
+      type: 'text', id: 'd', parents: [-0.5, 2.9, 'AB'],
+      attrs: { measure: { op: 'distance', args: ['A', 'B'], label: 'AB', precision: 2 } },
+    }),
+  ];
+
+  it('rebuilds its own parents and stands where the copy was put', () => {
+    const ids = () => {
+      const n = new Map<string, number>();
+      return (e: HeyGeoElement) => {
+        const next = (n.get(e.type) ?? 0) + 1;
+        n.set(e.type, next);
+        return `${e.type}_${next}`;
+      };
+    };
+
+    const b = newBoard();
+    const elements = load(b, DOC()).elements;
+    b.update();
+    expect(b.objects.M.X()).toBeCloseTo(-0.5, 6);
+    expect(b.objects.M.Y()).toBeCloseTo(2.5, 6);
+
+    const clip = copyClosure(elements, ['M']);
+    const pasted = pasteElements(clip, ids(), pasteOffset(1));
+
+    // the original document is untouched by what was copied or pasted
+    expect(elements.map((e) => e.id)).toEqual(['A', 'B', 'M', 's', 'd']);
+
+    const again = newBoard();
+    const all = load(again, [...elements, ...pasted]).elements;
+    again.update();
+    expect(all.map((e) => e.id)).toEqual(['A', 'B', 'M', 's', 'd', 'point_1', 'point_2', 'midpoint_1']);
+    // the copy halves the copied points, which stepped aside with it
+    expect(again.objects.midpoint_1.X()).toBeCloseTo(0, 6);
+    expect(again.objects.midpoint_1.Y()).toBeCloseTo(2, 6);
+    expect(again.objects.point_1.X()).toBeCloseTo(-2.5, 6);
+    // and a caption built on the copies reads the copies, not the originals
+    const caption = pasteElements(copyClosure(elements, ['d']), ids(), pasteOffset(1))
+      .find((e) => e.type === 'text')!;
+    expect((caption.attrs.measure as { args: string[] }).args).toEqual(['point_1', 'point_2']);
   });
 });
 
