@@ -36,7 +36,7 @@ describe('the Measure menu', () => {
     expect(measureItems(WORLD, []).map((i) => i.id)).toEqual([
       'length', 'distance', 'perimeter', 'circumference', 'angle', 'area',
       'arcAngle', 'arcLength', 'radius', 'ratio', 'value',
-      'coordinates', 'abscissa', 'ordinate', 'slope', 'equation',
+      'coordinates', 'abscissa', 'ordinate', 'coordinateDistance', 'slope', 'equation',
     ]);
   });
 
@@ -184,6 +184,22 @@ describe('the Measure menu over a frame the designer defined', () => {
   it('names the point it measures, not the frame it reads through', () => {
     expect(framed(['A', 'B', 'C'], 'coordinates').map((s) => s.label)).toEqual(['A', 'B', 'C']);
     expect(framed(['M'], 'abscissa')[0].label).toBe('x<sub>M</sub>');
+  });
+
+  it('measures two points between themselves in that frame', () => {
+    expect(framed(['A', 'B'], 'coordinateDistance')).toEqual([
+      { op: 'relativeDistance', args: ['O', 'U', 'A', 'B'], label: 'AB', precision: 2, unit: ' cm' },
+    ]);
+    // the pick order is the pair, as it is for a plain distance
+    expect(framed(['B', 'A'], 'coordinateDistance')[0]).toMatchObject({ args: ['O', 'U', 'B', 'A'], label: 'BA' });
+  });
+
+  it('greys the coordinate distance without a frame or without two points', () => {
+    // the desktop needs a coordinate system in the document to read it through
+    expect(offered(['A', 'B'], 'coordinateDistance')).toBeNull();
+    expect(framed(['A'], 'coordinateDistance')).toEqual([]);
+    expect(framed(['A', 'M', 'B'], 'coordinateDistance')).toEqual([]);
+    expect(framed(['A', 's1'], 'coordinateDistance')).toEqual([]);
   });
 
   it('leaves every other row alone', () => {

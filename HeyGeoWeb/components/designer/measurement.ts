@@ -318,6 +318,12 @@ function geometricValue(board: Any, spec: MeasureSpec, seen: Set<string>): numbe
     case 'relativeAbscissa':
     case 'relativeOrdinate':
       return relativeAxis(board, spec);
+    case 'relativeDistance': {
+      // the desktop's G_COORD_DISTANCE_MEASURE: both points through the frame's
+      // screenToMath, then the hypot between them
+      const rel = relativeCoords(board, spec);
+      return rel === null ? null : num(Math.hypot(rel[0] - rel[2], rel[1] - rel[3]));
+    }
     case 'value':
       return a?.Value ? num(a.Value()) : num(a?.X?.());
     default:

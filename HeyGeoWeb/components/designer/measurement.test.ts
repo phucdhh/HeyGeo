@@ -116,6 +116,15 @@ describe('measureValue', () => {
     expect(measureValue(b(), spec({ op: 'angle', args: ['U', 'A', 'N'] }))).toBeCloseTo(90, 6);
   });
 
+  it('measures a coordinate distance through the frame', () => {
+    // the frame's unit is OU = 2 board units, so A–B is 5 board units = 2.5 units
+    expect(measureValue(b(), spec({ op: 'relativeDistance', args: ['O', 'U', 'A', 'B'] }))).toBeCloseTo(2.5, 6);
+    expect(measureValue(b(), spec({ op: 'relativeDistance', args: ['O', 'U', 'A', 'B'], scale: 2 }))).toBe(5);
+    // two points at the same place are no distance, but a frame of no size is no reading
+    expect(measureValue(b(), spec({ op: 'relativeDistance', args: ['O', 'U', 'A', 'A'] }))).toBe(0);
+    expect(measureValue(b(), spec({ op: 'relativeDistance', args: ['A', 'A', 'A', 'B'] }))).toBeNull();
+  });
+
   it('ratios two segments and survives a zero denominator', () => {
     expect(measureValue(b(), spec({ op: 'ratio', args: ['s', 'half'] }))).toBe(2);
     expect(measureValue(b(), spec({ op: 'ratio', args: ['s', 'dot'] }))).toBe(0);

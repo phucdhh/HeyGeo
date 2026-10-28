@@ -219,6 +219,10 @@ export function measureItems(
     row('coordinates', 'Coordinates', points.map((p) => [pairOp, [...frame, p]]), '', all(points)),
     row('abscissa', 'Abscissa (x)', points.map((p) => [xOp, [...frame, p]]), '', all(points)),
     row('ordinate', 'Ordinate (y)', points.map((p) => [yOp, [...frame, p]]), '', all(points)),
+    // desktop's canMeasureCoordinateDistance: exactly two points, read in a frame
+    row('coordinateDistance', 'Coordinate Distance',
+      [['relativeDistance', [...frame, id(a), id(b)]]], CM,
+      !!sys && picked.length === 2 && isPoint(a) && isPoint(b)),
     row('slope', 'Slope', straight.map((s) => ['slope', [s]]), '', all(straight)),
     // desktop's canMeasureEquation: the equation of a line or of a circle
     row('equation', 'Equation',
