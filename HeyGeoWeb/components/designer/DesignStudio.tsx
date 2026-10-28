@@ -60,6 +60,14 @@ import SamplesDialog from './SamplesDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
 import ExportImageDialog from './ExportImageDialog';
+import PreferencesDialog from './PreferencesDialog';
+import {
+  DEFAULT_PREFERENCES,
+  PREFERENCES_KEY,
+  readPreferences,
+  writePreferences,
+  type Preferences,
+} from './preferences';
 import RestoreDraftDialog from './RestoreDraftDialog';
 import {
   clearDraft,
@@ -188,6 +196,24 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
 
   /** File | Export To Image… — the desktop asks for a format and a quality. */
   const [imageExportOpen, setImageExportOpen] = useState(false);
+
+  /**
+   * Edit | Preferences — background, the ink new objects take, and how a pick is
+   * marked. They belong to the browser, not the document, so they live here and
+   * are read once the page is in a browser.
+   */
+  const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+
+  useEffect(() => {
+    setPreferences(readPreferences(window.localStorage, PREFERENCES_KEY));
+  }, []);
+
+  function handleSavePreferences(next: Preferences) {
+    writePreferences(window.localStorage, next, PREFERENCES_KEY);
+    setPreferences(next);
+    setPreferencesOpen(false);
+  }
 
   /** Display | Number of Samples… — how many times the picked locus is stepped. */
   const [samples, setSamples] = useState<number | null>(null);
@@ -584,6 +610,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onImportFile={handleImportFile}
         onExportImage={() => setImageExportOpen(true)}
         onExportSVG={handleExportSVG}
+        onOpenPreferences={() => setPreferencesOpen(true)}
         onUndo={handleUndo}
         onRedo={handleRedo}
         onCut={() => {
@@ -635,6 +662,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
           tool={tool}
           arrow={arrow}
           initialData={initialData}
+          preferences={preferences}
           onCursorMove={setCursor}
           onSelectionChange={handleSelectionChange}
           onDirty={handleDirty}
@@ -811,6 +839,15 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         <ExportImageDialog
           onConfirm={handleExportImage}
           onCancel={() => setImageExportOpen(false)}
+        />
+      )}
+
+      {/* ── Edit | Preferences… ── */}
+      {preferencesOpen && (
+        <PreferencesDialog
+          initial={preferences}
+          onSave={handleSavePreferences}
+          onCancel={() => setPreferencesOpen(false)}
         />
       )}
 

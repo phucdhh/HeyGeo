@@ -32,3 +32,14 @@
     @apply rounded-xl border border-gray-200 bg-white shadow-sm;
   }
 }
+
+/* Edit | Preferences → Blinking Selection: the pink pick outline alternates
+   instead of holding steady, the way the desktop's view blinks a selection. */
+@keyframes heygeo-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.heygeo-blink {
+  animation: heygeo-blink 1s steps(1, end) infinite;
+}

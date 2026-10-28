@@ -20,6 +20,7 @@ import type {
   SliderPos,
 } from './designTypes';
 import { emptyData, elementKindLabel } from './designTypes';
+import { DEFAULT_PREFERENCES, type Preferences } from './preferences';
 import DesignContextMenu from './DesignContextMenu';
 import {
   objectMenu,
@@ -530,6 +531,8 @@ interface Props {
   /** While `tool === 'selection'`, this decides what a drag does. */
   arrow: ArrowMode;
   initialData?: HeyGeoData | null;
+  /** Edit | Preferences — background, default ink and how a selection is marked. */
+  preferences?: Preferences;
   onCursorMove: (c: CursorCoords) => void;
   onSelectionChange: (els: SelectedElementInfo[]) => void;
   onDirty: () => void;
@@ -539,7 +542,10 @@ interface Props {
 }
 
 const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
-  { tool, arrow, initialData, onCursorMove, onSelectionChange, onDirty, onOpenProperties, onOpenSliderConfig, onNotify },
+  {
+    tool, arrow, initialData, preferences = DEFAULT_PREFERENCES,
+    onCursorMove, onSelectionChange, onDirty, onOpenProperties, onOpenSliderConfig, onNotify,
+  },
   ref,
 ) {
   const BOARD_ID = 'heygeo-design-board';
@@ -547,6 +553,17 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   const overlayRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [jxgLoaded, setJxgLoaded] = useState(() => getJXG() !== null);
+
+  // Preferences reach the imperative handle, which is built once, through refs.
+  const foregroundRef = useRef(preferences.foregroundColor);
+  const backgroundRef = useRef(preferences.backgroundColor);
+  useEffect(() => {
+    foregroundRef.current = preferences.foregroundColor;
+    backgroundRef.current = preferences.backgroundColor;
+  }, [preferences]);
+
+  /** The ink a newly drawn object takes. Saved objects keep the colour they have. */
+  const ink = () => foregroundRef.current;
 
   // Marks stored for transformations (Center, Mirror, Vector, Angle)
   const marksRef = useRef<import('./designTypes').MarkInfo>({});
@@ -844,7 +861,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
   // ─── Measurements ─────────────────────────────────────────────────────────
   // A measurement is ink, not the red a new object is drawn in.
-  const MEASURE_STYLE = { strokeColor: '#1e3c96', fontSize: 13, withLabel: false };
+  const measureStyle = () => ({ strokeColor: ink(), fontSize: 13, withLabel: false });
 
   /**
    * Write the captions a Measure menu item offers, beside the geometry each
@@ -875,7 +892,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         type: 'text',
         id: nextElId('meas'),
         parents: [Number(x().toFixed(4)), Number(y().toFixed(4)), measure.label ?? ''],
-        attrs: { ...MEASURE_STYLE, anchor, measure },
+        attrs: { ...measureStyle(), anchor, measure },
       };
       const { obj, error } = createElement(board, el, {});
       if (!obj) return errorMessage(error ?? `Không tạo được ${el.type}`);
@@ -1223,8 +1240,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       parents: [...frame],
       attrs: {
         name: nextPointName(), size: 4, face: 'o',
-        strokeColor: '#1e3c96', fillColor: '#1e3c96',
-        label: { fontSize: 14, strokeColor: '#1e3c96' },
+        strokeColor: ink(), fillColor: ink(),
+        label: { fontSize: 14, strokeColor: ink() },
         plotAt: spec,
       },
     });
@@ -1670,7 +1687,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function refreshFrameGrid(board: JXGBoard): void {
     const parts = gridParts(board);
     if (!parts) return;
-    const key = frameSignature(board);
+    const key = `${frameSignature(board)} ${foregroundRef.current}`;
     if (key === parts.key) return;
     parts.key = key;
 
@@ -1683,21 +1700,23 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return;
     }
 
-    const ink = gridInk(
+    const marks = gridInk(
       viewboxOf(board), f.geo, f.plan,
       [zero[1], zero[2]], [board.unitX, board.unitY],
     );
-    parts.furniture.setAttribute('stroke-dasharray', ink.solid ? 'none' : '1 3');
-    parts.furniture.setAttribute('d', ink.furniture);
-    parts.ticks.setAttribute('d', ink.ticks);
-    parts.labels.replaceChildren(...ink.labels.map((l) => {
+    const tickInk = foregroundRef.current;
+    parts.furniture.setAttribute('stroke-dasharray', marks.solid ? 'none' : '1 3');
+    parts.furniture.setAttribute('d', marks.furniture);
+    parts.ticks.setAttribute('stroke', tickInk);
+    parts.ticks.setAttribute('d', marks.ticks);
+    parts.labels.replaceChildren(...marks.labels.map((l) => {
       const place = LABEL_PLACEMENT[l.side];
       const text = document.createElementNS(SVG_NS, 'text') as SVGTextElement;
       text.setAttribute('x', String(l.x));
       text.setAttribute('y', String(l.y));
       text.setAttribute('text-anchor', place.anchor);
       text.setAttribute('dominant-baseline', place.baseline);
-      text.setAttribute('fill', TICK_INK);
+      text.setAttribute('fill', tickInk);
       text.setAttribute('font-size', String(GRID_FONT.size));
       text.setAttribute('font-family', GRID_FONT.family);
       text.textContent = l.text;
@@ -2426,9 +2445,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const id   = `pt_${_elIdx++}`;
     const ptAttrs = {
       id, name, size: 4, face: 'o' as const,
-      strokeColor: '#1e3c96', fillColor: '#1e3c96',
+      strokeColor: ink(), fillColor: ink(),
       highlightStrokeColor: '#c83c3c', highlightFillColor: '#c83c3c',
-      label: { fontSize: 14, strokeColor: '#1e3c96' },
+      label: { fontSize: 14, strokeColor: ink() },
     };
 
     // Priority 2: snap to a nearby curve → create a glider (point constrained to curve)
@@ -2438,7 +2457,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       elementsRef.current.push({
         type: 'glider', id,
         parents: [x, y, snapC.obj.id],
-        attrs: { name, size: 4, strokeColor: '#1e3c96', fillColor: '#1e3c96' },
+        attrs: { name, size: 4, strokeColor: ink(), fillColor: ink() },
       });
       return pt;
     }
@@ -2449,7 +2468,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const pt = board.create('point', [gx, gy], ptAttrs);
     elementsRef.current.push({
       type: 'point', id, parents: [gx, gy],
-      attrs: { name, size: 4, strokeColor: '#1e3c96', fillColor: '#1e3c96' },
+      attrs: { name, size: 4, strokeColor: ink(), fillColor: ink() },
     });
     return pt;
   }
@@ -2508,7 +2527,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         // Create ghost preview
         const ghost = board.create('line', [pt1, [x, y]], {
           id: 'ghost_line',
-          strokeColor: '#1e3c96',
+          strokeColor: ink(),
           strokeWidth: 1,
           dash: 2,
           straightFirst: curTool === 'line',
@@ -2526,7 +2545,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         const jxgType  = straight || isRay ? 'line' : 'segment';
         const id = nextElId(straight ? 'ln' : isRay ? 'ray' : 'seg');
         const attrs: Record<string, unknown> = {
-          strokeColor: '#1e3c96', strokeWidth: 2,
+          strokeColor: ink(), strokeWidth: 2,
           straightFirst: straight,
           straightLast:  straight || isRay,
           withLabel: false,
@@ -2551,7 +2570,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         const centre = createOrSnapPoint(x, y, sx, sy);
         const ghost = board.create('circle', [centre, 0.01], {
           id: 'ghost_circle',
-          strokeColor: '#1e3c96', strokeWidth: 1, dash: 2,
+          strokeColor: ink(), strokeWidth: 1, dash: 2,
           fillColor: 'none', withLabel: false, fixed: true,
         });
         pendingRef.current = { phase: 'pt2', pt1: centre, ghostEl: ghost };
@@ -2561,7 +2580,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         removeGhost();
         const id = nextElId('circ');
         const attrs: Record<string, unknown> = {
-          strokeColor: '#1e3c96', strokeWidth: 2,
+          strokeColor: ink(), strokeWidth: 2,
           fillColor: 'none', withLabel: false,
         };
         board.create('circle', [p.pt1, radiusPt], { id, ...attrs });
@@ -2583,7 +2602,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         const centre = createOrSnapPoint(x, y, sx, sy);
         const ghost = board.create('circle', [centre, 0.01], {
           id: 'ghost_arc',
-          strokeColor: '#1e3c96', strokeWidth: 1, dash: 2,
+          strokeColor: ink(), strokeWidth: 1, dash: 2,
           fillColor: 'none', withLabel: false, fixed: true,
         });
         pendingRef.current = { phase: 'pt2', pt1: centre, ghostEl: ghost };
@@ -2596,7 +2615,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         const endPt = createOrSnapPoint(x, y, sx, sy);
         const id = nextElId('arc');
         const attrs: Record<string, unknown> = {
-          strokeColor: '#1e3c96', strokeWidth: 2, withLabel: false,
+          strokeColor: ink(), strokeWidth: 2, withLabel: false,
         };
         board.create('arc', [p.pt1, p.pt2, endPt], { id, ...attrs });
         elementsRef.current.push({
@@ -2620,14 +2639,14 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         const id   = `pt_${_elIdx++}`;
         board.create('glider', [x, y, snapC.obj], {
           id, name, size: 4, face: 'o' as const,
-          strokeColor: '#1e3c96', fillColor: '#1e3c96',
+          strokeColor: ink(), fillColor: ink(),
           highlightStrokeColor: '#c83c3c', highlightFillColor: '#c83c3c',
-          label: { fontSize: 14, strokeColor: '#1e3c96' },
+          label: { fontSize: 14, strokeColor: ink() },
         });
         elementsRef.current.push({
           type: 'glider', id,
           parents: [x, y, snapC.obj.id],
-          attrs: { name, size: 4, strokeColor: '#1e3c96', fillColor: '#1e3c96' },
+          attrs: { name, size: 4, strokeColor: ink(), fillColor: ink() },
         });
         board.update();
         onDirty();
@@ -2798,7 +2817,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         // Preview edge from last vertex to new
         const ghostLine = board.create('segment', [verts[verts.length - 1], pt], {
           id: `ghost_pe_${verts.length}`,
-          strokeColor: '#1e3c96', strokeWidth: 1, dash: 2, withLabel: false,
+          strokeColor: ink(), strokeWidth: 1, dash: 2, withLabel: false,
         });
         lines.push(ghostLine);
       }
@@ -3021,12 +3040,12 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         id: newId,
         name: baseName,
         size: origPt.visProp?.size ?? 4,
-        strokeColor: origPt.visProp?.strokecolor ?? '#1e3c96',
-        fillColor: origPt.visProp?.fillcolor ?? '#1e3c96',
+        strokeColor: origPt.visProp?.strokecolor ?? ink(),
+        fillColor: origPt.visProp?.fillcolor ?? ink(),
         highlightStrokeColor: '#c83c3c',
         highlightFillColor: '#c83c3c',
         withLabel: !!baseName,
-        label: { fontSize: 14, strokeColor: origPt.visProp?.strokecolor ?? '#1e3c96' },
+        label: { fontSize: 14, strokeColor: origPt.visProp?.strokecolor ?? ink() },
       };
 
       const newPt = board.create('point', [fnX, fnY], ptAttrs);
@@ -3280,9 +3299,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         snapWidth: cfg.step,
         withTicks: true,
         withLabel: true,
-        strokeColor: '#1e3c96',
-        fillColor: '#1e3c96',
-        label: { fontSize: 14, strokeColor: '#1e3c96' },
+        strokeColor: ink(),
+        fillColor: ink(),
+        label: { fontSize: 14, strokeColor: ink() },
       };
       board.create('slider',
         [[pos.x1, pos.y1], [pos.x2, pos.y2], [cfg.min, cfg.init, cfg.max]],
@@ -3394,16 +3413,16 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       } catch { /**/ }
       const ptAttrs = {
         id, name, size: 4, face: 'o' as const,
-        strokeColor: '#1e3c96', fillColor: '#1e3c96',
+        strokeColor: ink(), fillColor: ink(),
         highlightStrokeColor: '#c83c3c', highlightFillColor: '#c83c3c',
-        label: { fontSize: 14, strokeColor: '#1e3c96' },
+        label: { fontSize: 14, strokeColor: ink() },
       };
       try {
         board.create('glider', [defaultX, defaultY, curve], ptAttrs);
         elementsRef.current.push({
           type: 'glider', id,
           parents: [defaultX, defaultY, curve.id],
-          attrs: { name, size: 4, strokeColor: '#1e3c96', fillColor: '#1e3c96' },
+          attrs: { name, size: 4, strokeColor: ink(), fillColor: ink() },
         });
         board.update();
         onDirty();
@@ -3496,7 +3515,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const id = nextElId('perp');
       try {
         board.create('perpendicular', selectedRef.current.slice(0, 2), {
-          id, strokeColor: '#1e3c96', strokeWidth: 2,
+          id, strokeColor: ink(), strokeWidth: 2,
         });
         elementsRef.current.push({
           type: 'perpendicular', id,
@@ -3514,7 +3533,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const id = nextElId('par');
       try {
         board.create('parallel', selectedRef.current.slice(0, 2), {
-          id, strokeColor: '#1e3c96', strokeWidth: 2,
+          id, strokeColor: ink(), strokeWidth: 2,
         });
         elementsRef.current.push({
           type: 'parallel', id,
@@ -3539,7 +3558,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return addObject({
         type: 'circle', id: nextElId('int'),
         parents: [...source.parents],
-        attrs: { ...INTERIOR_STYLE },
+        attrs: { ...INTERIOR_STYLE, strokeColor: ink(), fillColor: ink() },
       });
     },
 
@@ -3551,7 +3570,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return addObject({
         type: 'circle', id: nextElId('circ'),
         parents: [picked.center, picked.radius],
-        attrs: { strokeColor: '#1e3c96', strokeWidth: 2, fillColor: 'none', withLabel: false },
+        attrs: { strokeColor: ink(), strokeWidth: 2, fillColor: 'none', withLabel: false },
       });
     },
 
@@ -3563,7 +3582,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return addObject({
         type: 'arc', id: nextElId('arc'),
         parents: [picked.centre, picked.arc.start, picked.arc.end],
-        attrs: { strokeColor: '#1e3c96', strokeWidth: 2, withLabel: false },
+        attrs: { strokeColor: ink(), strokeWidth: 2, withLabel: false },
       });
     },
 
@@ -3575,7 +3594,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return addObject({
         type: picked.type, id: nextElId('sec'),
         parents: [...picked.parents],
-        attrs: { ...INTERIOR_STYLE },
+        attrs: { ...INTERIOR_STYLE, strokeColor: ink(), fillColor: ink() },
       });
     },
 
@@ -3948,6 +3967,15 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       svg.querySelectorAll('foreignObject[display="none"]').forEach((node) => node.remove());
       if (!svg.getAttribute('width')) svg.setAttribute('width', String(container.clientWidth));
       if (!svg.getAttribute('height')) svg.setAttribute('height', String(container.clientHeight));
+      // The page colour is part of the picture: an SVG has no background of its
+      // own, and a picture handed out should look like the one on screen.
+      const backdrop = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      backdrop.setAttribute('x', '0');
+      backdrop.setAttribute('y', '0');
+      backdrop.setAttribute('width', String(container.clientWidth));
+      backdrop.setAttribute('height', String(container.clientHeight));
+      backdrop.setAttribute('fill', backgroundRef.current);
+      svg.insertBefore(backdrop, svg.firstChild);
       const grid = container.querySelector<SVGSVGElement>('svg[data-frame-grid]');
       if (grid) {
         const under = document.createDocumentFragment();
@@ -3998,7 +4026,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       {/* Canvas container */}
       <div
         ref={containerRef}
-        className="relative flex-1 overflow-hidden bg-white"
+        className="relative flex-1 overflow-hidden"
+        style={{ backgroundColor: preferences.backgroundColor }}
         onContextMenu={handleContextMenu}
       >
         {/* JSXGraph renders into this div */}
@@ -4028,11 +4057,14 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
         {/* GSP-style selection decorations (pink outlines around selected objects) */}
         {selDecorations.length > 0 && (
-          <svg style={{
-            position: 'absolute', inset: 0,
-            width: '100%', height: '100%',
-            pointerEvents: 'none', overflow: 'visible', zIndex: 7,
-          }}>
+          <svg
+            className={preferences.selection === 'blinking' ? 'heygeo-blink' : undefined}
+            style={{
+              position: 'absolute', inset: 0,
+              width: '100%', height: '100%',
+              pointerEvents: 'none', overflow: 'visible', zIndex: 7,
+            }}
+          >
             {selDecorations.map((dec, i) => {
               if (dec.kind === 'point') {
                 return (

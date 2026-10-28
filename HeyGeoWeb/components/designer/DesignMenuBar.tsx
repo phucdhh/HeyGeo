@@ -73,6 +73,7 @@ interface Props {
   onImportFile: () => void;
   onExportImage: () => void;
   onExportSVG: () => void;
+  onOpenPreferences: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onCut: () => void;
@@ -239,6 +240,7 @@ export default function DesignMenuBar({
   onImportFile,
   onExportImage,
   onExportSVG,
+  onOpenPreferences,
   onUndo,
   onRedo,
   onCut,
@@ -406,7 +408,7 @@ export default function DesignMenuBar({
         { label: 'Edit Definition…',                                           action: onUnderDevelopment },
         { separator: true },
         { label: 'Properties…',                                                action: onUnderDevelopment },
-        { label: 'Preferences…',                                               action: onUnderDevelopment },
+        { label: 'Preferences…',                                               action: onOpenPreferences },
         { separator: true },
         {
           label: 'Action Buttons',
