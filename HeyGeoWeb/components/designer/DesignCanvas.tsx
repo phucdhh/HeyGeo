@@ -115,6 +115,16 @@ const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 let _ptIdx = 0;
 let _elIdx = 0;
 function resetCounters() { _ptIdx = 0; _elIdx = 0; }
+/**
+ * Continue the id counter past every `_n` the loaded document already uses, so
+ * the first element made after a reload cannot take an id the file holds.
+ */
+function seedCounters(elements: HeyGeoElement[]) {
+  for (const el of elements) {
+    const m = /_(\d+)$/.exec(el.id);
+    if (m) _elIdx = Math.max(_elIdx, Number(m[1]));
+  }
+}
 function nextPointName() {
   const n = _ptIdx++;
   return ALPHA[n % 26] + (n >= 26 ? String(Math.floor(n / 26)) : '');
@@ -1373,6 +1383,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     attachBoardEvents(newBoard); // must be before loadDataToBoard so events attach to all elements
     const { loaded, errors } = loadDataToBoard(newBoard, { ...emptyData(), elements: els });
     elementsRef.current = loaded;
+    seedCounters(loaded);
     reportLoadErrors(errors);
     setSceneChrome(newBoard, meta);
     selectedRef.current = [];
@@ -2464,6 +2475,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       };
       const { loaded, errors } = loadDataToBoard(board, initialData);
       elementsRef.current = loaded;
+      seedCounters(loaded);
       reportLoadErrors(errors);
       setSceneChrome(board, metaRef.current);
     }
