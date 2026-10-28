@@ -60,6 +60,15 @@ import SamplesDialog from './SamplesDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
 import ExportImageDialog from './ExportImageDialog';
+import RestoreDraftDialog from './RestoreDraftDialog';
+import {
+  clearDraft,
+  draftKey,
+  readDraft,
+  worthRestoring,
+  writeDraft,
+  type Draft,
+} from './draftAutosave';
 import {
   HIGH_QUALITY_SCALE,
   imageFileName,
@@ -112,6 +121,16 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
 
   // About dialog
   const [showAbout, setShowAbout] = useState(false);
+
+  /**
+   * The unsaved sketch found when the page opens. It is offered once, and the
+   * draft is rewritten as the designer keeps working until the document is
+   * saved or the draft is discarded.
+   */
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const draftKeyRef = useRef(draftKey(modelId ?? null));
+  /** Bumped by every edit so the debounced draft write sees each change. */
+  const [revision, setRevision] = useState(0);
 
   // Element Properties dialog (opened by double-click on canvas element)
   const [propertiesInfo, setPropertiesInfo] = useState<SelectedElementInfo | null>(null);
@@ -280,11 +299,64 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
   // ─── Dirty flag ───────────────────────────────────────────────────────────
   const handleDirty = useCallback(() => {
     setIsDirty(true);
+    setRevision((n) => n + 1);
     refreshUndoState();
     // Update element count from canvas data
     const data = canvasRef.current?.getHeyGeoData();
     if (data) setElementCount(data.elements.length);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Unsaved sketch ───────────────────────────────────────────────────────
+  // A design that was never saved is offered back the next time this document
+  // is opened. The write is debounced, so a drag does not serialise the whole
+  // sketch at every step.
+  useEffect(() => {
+    const key = draftKeyRef.current;
+    let tries = 0;
+    const look = () => {
+      // The dialog waits for the board: restoring before the engine is ready
+      // would ask loadData for a board that does not exist yet.
+      if (!canvasRef.current?.isReady()) return false;
+      const found = readDraft(window.localStorage, key);
+      if (found && worthRestoring(found, initialData ?? null)) setDraft(found);
+      return true;
+    };
+    if (look()) return;
+    const timer = setInterval(() => {
+      if (look() || ++tries > 100) clearInterval(timer);
+    }, 200);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isDirty || revision === 0) return;
+    const key = draftKeyRef.current;
+    const timer = setTimeout(() => {
+      const data = canvasRef.current?.getHeyGeoData();
+      // An empty sketch has no work to rescue, and an early read of a board
+      // that has not laid anything out must not replace a good draft.
+      if (data && data.elements.length > 0) writeDraft(window.localStorage, key, data);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [revision, isDirty, title]);
+
+  function handleRestoreDraft() {
+    if (!draft) return;
+    canvasRef.current?.loadData(draft.data);
+    setTitle(draft.data.title || draft.title || 'Chưa đặt tên');
+    setShowAxis(draft.data.axis ?? true);
+    setShowGrid(draft.data.grid ?? false);
+    setIsDirty(true);
+    setElementCount(draft.data.elements.length);
+    refreshUndoState();
+    setDraft(null);
+  }
+
+  function handleDiscardDraft() {
+    clearDraft(window.localStorage, draftKeyRef.current);
+    setDraft(null);
+  }
 
   const handleSelectionChange = useCallback((els: SelectedElementInfo[]) => {
     setSelected(els);
@@ -430,7 +502,12 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
       const json = await res.json();
-      setEditingId(json.model?.id ?? updateId ?? editingId);
+      const savedId = json.model?.id ?? updateId ?? editingId;
+      // The document is on the server now, so the browser copy has nothing
+      // left to rescue; later edits are autosaved under the model's own key.
+      clearDraft(window.localStorage, draftKeyRef.current);
+      draftKeyRef.current = draftKey(savedId ?? modelId ?? null);
+      setEditingId(savedId);
       if (json.model?.description != null) setDescription(json.model.description);
       if (json.model?.isPublic != null) setIsPublic(json.model.isPublic);
       setIsDirty(false);
@@ -734,6 +811,15 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         <ExportImageDialog
           onConfirm={handleExportImage}
           onCancel={() => setImageExportOpen(false)}
+        />
+      )}
+
+      {/* ── An unsaved sketch found when the page opened ── */}
+      {draft && (
+        <RestoreDraftDialog
+          savedAt={draft.savedAt}
+          onRestore={handleRestoreDraft}
+          onDiscard={handleDiscardDraft}
         />
       )}
 

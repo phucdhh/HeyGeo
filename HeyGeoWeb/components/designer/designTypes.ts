@@ -210,6 +210,8 @@ export interface CursorCoords {
 // ─── Imperative handle exposed by DesignCanvas via ref ───────────────────────
 export interface CanvasHandle {
   getHeyGeoData: () => HeyGeoData;
+  /** Whether the engine has a board yet, so loadData and getHeyGeoData work. */
+  isReady: () => boolean;
   loadData: (data: HeyGeoData) => void;
   undo: () => void;
   redo: () => void;

@@ -3132,6 +3132,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return boardToData(board, metaRef.current, elementsRef.current);
     },
 
+    isReady: () => boardRef.current !== null,
+
     loadData: (data: HeyGeoData) => {
       resetCounters();
       clearHistory(undoStack.current, redoStack.current);
