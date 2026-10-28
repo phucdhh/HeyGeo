@@ -19,6 +19,8 @@ import {
   isAnchorSpec,
   isMeasureSpec,
   measureClosure,
+  isLengthSource,
+  lengthValueOf,
   numberValueOf,
   registerMeasure,
   type MeasureSpec,
@@ -255,6 +257,16 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
       plotted,
       (id) => numberValueOf(board, id),
     );
+  }
+  // A circle about a picked centre whose second parent is a length — a segment
+  // or a distance/length/radius reading — draws with that length as its radius,
+  // so it follows the segment or the measurement when either changes.
+  if (el.type === 'circle' && el.parents.length === 2
+      && typeof el.parents[0] === 'string' && typeof el.parents[1] === 'string'
+      && isLengthSource(board, el.parents[1])) {
+    const centreId = el.parents[0];
+    const radiusId = el.parents[1];
+    return [elMap[centreId], () => lengthValueOf(board, radiusId) ?? NaN];
   }
   return el.parents.map((p, i) => {
     if (isReferenceParent(el, i)) return elMap[p as string];

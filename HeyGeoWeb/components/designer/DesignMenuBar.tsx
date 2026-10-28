@@ -504,7 +504,11 @@ export default function DesignMenuBar({
         { separator: true },
         // Circles & Arcs
         { label: 'Circle By Center+Point', shortcut: 'Alt+C',     action: () => onToolChange('compass') },
-        { label: 'Circle By Center+Radius',                        action: onUnderDevelopment },
+        {
+          label: 'Circle By Center+Radius',
+          disabled: !canvasRef.current?.canCircleByRadius(),
+          action: () => canvasRef.current?.createCircleByRadius(),
+        },
         { label: 'Arc On Circle',                                  action: onUnderDevelopment },
         { label: 'Arc Through 3 Points',                           action: () => onToolChange('arc') },
         { separator: true },

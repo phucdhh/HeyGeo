@@ -249,6 +249,9 @@ export interface CanvasHandle {
   createMidpoint: () => void;
   createPerpendicular: () => void;
   createParallel: () => void;
+  /** Construct | Circle By Center+Radius: a point and a segment or length reading. */
+  canCircleByRadius: () => boolean;
+  createCircleByRadius: () => boolean;
   createBisector: () => void;
   createCenter: () => void;
   createEndpoint: () => void;

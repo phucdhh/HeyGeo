@@ -172,6 +172,28 @@ export function numberValueOf(board: Any, id: string): number | null {
   return operandValue(board, id, new Set());
 }
 
+/** The measurements the desktop's isLengthMeasure accepts as a circle's radius. */
+const LENGTH_OPS: MeasureOp[] = ['distance', 'pointSegmentDistance', 'length', 'radius'];
+
+/** True when this element is a length a circle may be built about a centre from. */
+export function isLengthSource(board: Any, id: string): boolean {
+  const spec = descriptorOf(board, id);
+  if (spec) return LENGTH_OPS.includes(spec.op);
+  return live(board, id)?.elType === 'segment';
+}
+
+/**
+ * The length that element stands for, in the numbers the sketch shows: a
+ * measurement's value, or the distance between a segment's two end points.
+ */
+export function lengthValueOf(board: Any, id: string): number | null {
+  const spec = descriptorOf(board, id);
+  if (spec) return LENGTH_OPS.includes(spec.op) ? measureValue(board, spec, new Set([id])) : null;
+  const obj = live(board, id);
+  if (!obj || obj.elType !== 'segment' || !obj.point1 || !obj.point2) return null;
+  return sep(obj.point1, obj.point2);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sep(a: Any, b: Any): number {
   const dx = a.X() - b.X();

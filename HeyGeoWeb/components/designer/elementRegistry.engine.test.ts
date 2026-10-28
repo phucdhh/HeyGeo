@@ -282,6 +282,39 @@ describe('registry against the real engine', () => {
     expect(r.errors.join(' ')).toMatch(/ghost|không tồn tại/);
   });
 
+  it('draws a circle whose radius is a segment and follows that segment', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [0, 0] }),
+      spec({ type: 'point', id: 'B', parents: [3, 0] }),
+      spec({ type: 'segment', id: 's1', parents: ['A', 'B'] }),
+      spec({ type: 'circle', id: 'c1', parents: ['A', 's1'] }),
+    ]);
+    expect(r.errors).toEqual([]);
+    expect((r.elMap.c1 as any).Radius()).toBeCloseTo(3);
+    (r.elMap.B as any).moveTo([5, 0]);
+    b.update();
+    expect((r.elMap.c1 as any).Radius()).toBeCloseTo(5);
+  });
+
+  it('draws a circle from a distance reading, scale and all', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [0, 0] }),
+      spec({ type: 'point', id: 'B', parents: [3, 0] }),
+      spec({
+        type: 'text', id: 'm1', parents: [1, 6, ''],
+        attrs: { measure: { op: 'distance', args: ['A', 'B'], scale: 2 } },
+      }),
+      spec({ type: 'circle', id: 'c1', parents: ['A', 'm1'] }),
+    ]);
+    expect(r.errors).toEqual([]);
+    expect((r.elMap.c1 as any).Radius()).toBeCloseTo(6);
+    (r.elMap.B as any).moveTo([4, 0]);
+    b.update();
+    expect((r.elMap.c1 as any).Radius()).toBeCloseTo(8);
+  });
+
   it('surfaces an engine error with its message', () => {
     const b = newBoard();
     const out = createElement(b, spec({ type: 'segment', parents: [[0, 0], [0, 0]] }));

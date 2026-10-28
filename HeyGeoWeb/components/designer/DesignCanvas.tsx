@@ -29,7 +29,10 @@ import {
   type ContextRow,
 } from './contextMenuModel';
 import { createElement } from './elementRegistry';
-import { anchorClosures, captionAnchor, measureValue, type MeasureSpec } from './measurement';
+import {
+  anchorClosures, captionAnchor, isMeasureSpec, measureValue, type MeasureSpec,
+} from './measurement';
+import { circleByRadiusPicks } from './circleByRadiusModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { numberSources, parameterPlace } from './numberMenuModel';
 import {
@@ -859,6 +862,25 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     board.update();
     onDirty();
     return true;
+  }
+
+  /**
+   * The centre and length Construct | Circle By Center+Radius would use, from
+   * the picks. The board says what kind each pick is; the document says whether
+   * a caption measures a length, which is what the desktop's isLengthMeasure
+   * asks before it offers the row.
+   */
+  function circleRadiusPicks(): { center: string; radius: string } | null {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const picks = selectedRef.current.map((o: any) => {
+      const measure = elementsRef.current.find((e) => e.id === o.id)?.attrs?.measure;
+      return {
+        id: o.id as string,
+        kind: (o.elType ?? '') as string,
+        measureOp: isMeasureSpec(measure) ? measure.op : undefined,
+      };
+    });
+    return circleByRadiusPicks(picks);
   }
 
   /**
@@ -3352,6 +3374,18 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         });
         onDirty();
       } catch { /**/ }
+    },
+
+    canCircleByRadius: () => circleRadiusPicks() !== null,
+
+    createCircleByRadius: () => {
+      const picked = circleRadiusPicks();
+      if (!picked) return false;
+      return addObject({
+        type: 'circle', id: nextElId('circ'),
+        parents: [picked.center, picked.radius],
+        attrs: { strokeColor: '#1e3c96', strokeWidth: 2, fillColor: 'none', withLabel: false },
+      });
     },
 
     createBisector: () => {
