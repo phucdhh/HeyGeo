@@ -170,6 +170,11 @@ describe('registry against the real engine', () => {
     spec({ type: 'transform', id: 'tr2', parents: ['s1'], attrs: { type: 'reflect' } }),
     // a reflected copy uses the transform as a parent, the desktop spelling
     spec({ type: 'point', id: 'Cimg', parents: ['C', 'tr2'] }),
+    // the button Edit | Action Buttons | Hide/Show makes over point A
+    spec({
+      type: 'actionbutton', id: 'btn1', parents: [6, 6.5, 'Ẩn A'],
+      attrs: { button: { action: 'hide', name: 'A', targets: ['A'] } },
+    }),
   ];
 
   it('rebuilds every registered type from production-shaped JSON', () => {
@@ -490,6 +495,53 @@ describe('registry against the real engine', () => {
     }));
     expect(out.obj).toBeNull();
     expect(out.error).toMatch(/cần 1 đối tượng cha/);
+  });
+
+  // Edit | Action Buttons | Hide/Show writes a boxed caption that acts on the
+  // elements it names. Pressing it is the canvas's business; what the document
+  // has to rebuild is a caption at the place it was put, plus the descriptor
+  // that says what a press will do.
+  it('draws an action button as a boxed caption and keeps the descriptor out of the engine', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [1, 1] }),
+      spec({
+        type: 'actionbutton', id: 'btn', parents: [6, 6.5, 'Ẩn A'],
+        attrs: { button: { action: 'hide', name: 'A', targets: ['A'] } },
+      }),
+    ]);
+    expect(r.errors).toEqual([]);
+    const btn = r.elMap.btn as any;
+    expect(btn.elType).toBe('text');
+    expect(String(btn.plaintext)).toBe('Ẩn A');
+    expect(btn.visProp.display).toBe('html');
+    // the button's own styling is the registry's, and its descriptor is data
+    expect(String(btn.visProp.cssstyle)).toContain('border-radius');
+    expect(btn.visProp.button).toBeUndefined();
+    b.update();
+    expect(btn.XEval()).toBeCloseTo(6);
+    expect(btn.YEval()).toBeCloseTo(6.5);
+  });
+
+  it('reports a button whose target is not on the board', () => {
+    const b = newBoard();
+    const before = Object.keys(b.objects).length;
+    const out = createElement(b, spec({
+      type: 'actionbutton', id: 'btn', parents: [6, 6.5, 'Ẩn ghost'],
+      attrs: { button: { action: 'hide', name: 'ghost', targets: ['ghost'] } },
+    }));
+    expect(out.obj).toBeNull();
+    expect(out.error).toMatch(/không tồn tại/);
+    expect(Object.keys(b.objects).length).toBe(before);
+  });
+
+  it('refuses a button that does not say what it does', () => {
+    const b = newBoard();
+    const out = createElement(b, spec({
+      type: 'actionbutton', id: 'btn', parents: [6, 6.5, 'nút'],
+    }));
+    expect(out.obj).toBeNull();
+    expect(out.error).toMatch(/mô tả/);
   });
 });
 

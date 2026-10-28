@@ -758,3 +758,65 @@ describe('a point plotted from the board’s numbers', () => {
     expect(reloaded.objects.P.Y()).toBeCloseTo(0, 6);
   });
 });
+
+// Edit | Action Buttons | Hide/Show writes a button as a caption in the document
+// plus a descriptor naming what a press works on. The press changes those
+// objects and the caption, never the descriptor, so a save has to carry both the
+// state the press left and the button that can undo it.
+describe('an action button the designer makes', () => {
+  const DOC = (): HeyGeoElement[] => [
+    el({ type: 'point', id: 'A', parents: [-2, 2], attrs: { name: 'A' } }),
+    el({ type: 'point', id: 'B', parents: [2, 2], attrs: { name: 'B' } }),
+    el({
+      type: 'actionbutton', id: 'btn', parents: [6, 6.5, 'Ẩn A, B'],
+      attrs: { button: { action: 'hide', name: 'A, B', targets: ['A', 'B'] } },
+    }),
+  ];
+
+  it('saves the descriptor and the caption, and draws the caption', () => {
+    const b = newBoard();
+    const saved = load(b, DOC()).elements;
+    b.update();
+
+    const stored = saved.find((e) => e.id === 'btn')!;
+    expect(stored.parents).toEqual([6, 6.5, 'Ẩn A, B']);
+    expect(stored.attrs.button).toEqual({ action: 'hide', name: 'A, B', targets: ['A', 'B'] });
+    // JSXGraph is handed the caption, never the descriptor
+    expect(b.objects.btn.visProp.button).toBeUndefined();
+    expect(String(b.objects.btn.plaintext)).toBe('Ẩn A, B');
+
+    const again = newBoard();
+    expect(load(again, JSON.parse(JSON.stringify(saved))).errors).toEqual([]);
+    again.update();
+    expect(String(again.objects.btn.plaintext)).toBe('Ẩn A, B');
+    expect(drawing(again)).toEqual(drawing(b));
+  });
+
+  it('keeps what a press left behind: hidden points and a caption offering them', () => {
+    const b = newBoard();
+    const elements = load(b, DOC()).elements;
+    b.update();
+
+    // what pressActionButton writes: the targets' visibility and the caption
+    for (const id of ['A', 'B']) {
+      const target = elements.find((e) => e.id === id)!;
+      target.attrs = { ...target.attrs, visible: false };
+      b.objects[id].setAttribute({ visible: false });
+    }
+    const btn = elements.find((e) => e.id === 'btn')!;
+    btn.parents = [btn.parents[0], btn.parents[1], 'Hiện A, B'];
+    b.objects.btn.setText('Hiện A, B');
+    b.update();
+
+    const reloaded = newBoard();
+    expect(load(reloaded, JSON.parse(JSON.stringify(elements))).errors).toEqual([]);
+    reloaded.update();
+    expect(reloaded.objects.A.visProp.visible).toBe(false);
+    expect(reloaded.objects.B.visProp.visible).toBe(false);
+    expect(String(reloaded.objects.btn.plaintext)).toBe('Hiện A, B');
+    // the button still knows what it acts on, so a second press can show them
+    expect(reloaded.objects.btn.visProp.button).toBeUndefined();
+    expect(elements.find((e: HeyGeoElement) => e.id === 'btn')!.attrs.button)
+      .toEqual({ action: 'hide', name: 'A, B', targets: ['A', 'B'] });
+  });
+});

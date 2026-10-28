@@ -76,6 +76,15 @@ import {
   type PlotPointRows,
   type PlotPointSpec,
 } from './plotPointModel';
+import {
+  actionButtonRows,
+  buttonCaption,
+  buttonOf,
+  buttonPlace,
+  buttonShows,
+  newActionButton,
+  type ActionButtonRows,
+} from './actionButtonModel';
 import { arrowDragMap, imageClosures, type ImageSpec } from './transforms';
 import {
   applyScene,
@@ -1072,6 +1081,76 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     return addPlotPoint(prunePlotPoint(spec));
   }
 
+  // ─── Action buttons ─────────────────────────────────────────────────────────
+  /**
+   * Edit | Action Buttons | Hide/Show — a button that hides what the designer
+   * selected, and shows it again the next time it is pressed.
+   *
+   * Sketchpad makes the button out of the selection and drops it in the sketch;
+   * the button keeps the names of what it acts on, so the caption reads "Ẩn AB"
+   * even after the point it names has been renamed away from its default.
+   */
+  function createActionButton(): boolean {
+    const picked = new Set(selectedRef.current.map((o: { id: string }) => o.id));
+    const targets = elementsRef.current.filter((e) => picked.has(e.id));
+    if (targets.length === 0) {
+      onNotifyRef.current?.('Cần chọn đối tượng cho nút hành động.');
+      return false;
+    }
+    const spec = newActionButton('hide', targets);
+    const [x, y] = buttonPlace(elementsRef.current);
+    return addObject({
+      type: 'actionbutton',
+      id: nextElId('btn'),
+      parents: [x, y, buttonCaption(spec, false)],
+      attrs: { button: spec },
+    });
+  }
+
+  /** The button under these page pixels, if the click landed on one. */
+  function actionButtonAt(sx: number, sy: number): { el: HeyGeoElement; obj: unknown } | null {
+    const board = boardRef.current;
+    if (!board) return null;
+    for (const obj of findObjectsAt(board, sx, sy, ['text'], 10)) {
+      const el = elementsRef.current.find((e) => e.id === obj.id);
+      if (el && buttonOf(el)) return { el, obj };
+    }
+    return null;
+  }
+
+  /**
+   * Press a button: hide what it names, or show it again, as one undo step.
+   *
+   * The objects change visibility, not the button, so its caption is rewritten to
+   * name what the next press will do and kept in the element's parents — a reload
+   * then shows the same hidden sketch with the same "Hiện …" button.
+   */
+  function pressActionButton(el: HeyGeoElement, obj: unknown): boolean {
+    const board = boardRef.current;
+    const spec = buttonOf(el);
+    if (!board || !spec) return false;
+    const targets = spec.targets
+      .map((id) => elementsRef.current.find((e) => e.id === id))
+      .filter((e): e is HeyGeoElement => e !== undefined);
+    if (targets.length === 0) return false;
+    const isVisible = (id: string): boolean => {
+      const target = targets.find((t) => t.id === id);
+      return target === undefined ? false : target.attrs?.visible !== false;
+    };
+    const shows = buttonShows(spec, isVisible);
+    saveSnapshot();
+    for (const target of targets) {
+      target.attrs = { ...(target.attrs ?? {}), visible: shows };
+      board.objects?.[target.id]?.setAttribute({ visible: shows });
+    }
+    const caption = buttonCaption(spec, shows);
+    el.parents = [el.parents[0], el.parents[1], caption];
+    (obj as { setText?: (text: string) => void }).setText?.(caption);
+    board.update();
+    onDirty();
+    return true;
+  }
+
   // ─── The frame's grid ───────────────────────────────────────────────────────
 
   /**
@@ -1625,6 +1704,15 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const rect = (board.containerObj as HTMLElement).getBoundingClientRect();
       const sx = evt.clientX - rect.left;
       const sy = evt.clientY - rect.top;
+      // A button is pressed, not selected: a plain click acts on it, and a
+      // shift-click is how the designer picks the button itself to move or delete.
+      const button = actionButtonAt(sx, sy);
+      if (button) {
+        if (evt.shiftKey) handleObjectClick(button.obj, true);
+        else pressActionButton(button.el, button.obj);
+        objectClickedRef.current = true;
+        return;
+      }
       const hits = findObjectsAt(board, sx, sy, SELECTABLE_KINDS, 12);
       // Prioritise point-like elements: if any point is within 12px, pick the
       // closest one instead of whatever came first in board.objects iteration.
@@ -3081,6 +3169,10 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     ),
     plotPickedPair,
     plotValueOnAxis,
+    createActionButton,
+    actionButtonRows: (): ActionButtonRows => (
+      actionButtonRows(selectedRef.current.map((o) => o.id))
+    ),
     plotPoint,
     setGridForm,
     toggleFrameGrid,

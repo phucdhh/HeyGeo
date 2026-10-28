@@ -1,4 +1,5 @@
 // ─── Tool modes – mirrors HeyGeoView::ToolMode enum from Desktop ─────────────
+import type { ActionButtonRows } from './actionButtonModel';
 import type { GridForm, GraphRows } from './coordsysModel';
 import type { FunctionRows } from './functionMenuModel';
 import type { MeasureItem } from './measureMenuModel';
@@ -305,6 +306,10 @@ export interface CanvasHandle {
   plotPickedPair: () => boolean;
   /** Graph | Plot Value On Axis… with the one number the designer picked. */
   plotValueOnAxis: () => boolean;
+  /** Edit | Action Buttons | Hide/Show: a button over what is selected. */
+  createActionButton: () => boolean;
+  /** Whether the Action Buttons row has a selection to make a button from. */
+  actionButtonRows: () => ActionButtonRows;
   /** Graph | Plot as (x, y)… over the two coordinates typed in its dialog. */
   plotPoint: (spec: PlotPointSpec) => boolean;
   /** Graph | Grid Form: one of the four ways a frame's grid is drawn. */

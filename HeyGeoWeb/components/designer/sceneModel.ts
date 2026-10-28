@@ -19,6 +19,7 @@ import {
 } from './elementRegistry';
 import { measureDeps } from './measurement';
 import { plotPointDeps } from './plotPointModel';
+import { buttonDeps } from './actionButtonModel';
 import { imageDeps } from './transforms';
 import type { HeyGeoElement, ToolMode } from './designTypes';
 
@@ -71,7 +72,7 @@ export function parentIds(el: HeyGeoElement): string[] {
   for (let i = 0; i < el.parents.length; i++) {
     if (isReferenceParent(el, i)) out.push(String(el.parents[i]));
   }
-  for (const id of [...measureDeps(el), ...imageDeps(el), ...plotPointDeps(el)]) {
+  for (const id of [...measureDeps(el), ...imageDeps(el), ...plotPointDeps(el), ...buttonDeps(el)]) {
     if (!out.includes(id)) out.push(id);
   }
   return out;
@@ -125,11 +126,14 @@ export function constructionKey(el: HeyGeoElement): string {
     // and the same for a plotted point: its place is decided by the closures it
     // was built from, which setAttribute cannot hand it anew
     el.attrs?.plotAt ?? null,
+    // a button's behaviour is its descriptor, so a different one is a different
+    // object even when it stands in the same place with the same caption
+    el.attrs?.button ?? null,
   ]);
 }
 
 /** Types whose position lives in numeric parents, so a change is a move. */
-const COORD_COUNT: Record<string, number> = { point: 2, glider: 2 };
+const COORD_COUNT: Record<string, number> = { point: 2, glider: 2, actionbutton: 2 };
 
 export function coordParents(el: HeyGeoElement): number[] | null {
   const n = COORD_COUNT[el.type];
@@ -141,7 +145,7 @@ export function coordParents(el: HeyGeoElement): number[] | null {
 }
 
 /** Descriptors this app reads; JSXGraph never sees them, so they are not style. */
-const APP_ATTRS = new Set(['measure', 'anchor', 'image', 'coordsys', 'plot', 'func', 'plotAt']);
+const APP_ATTRS = new Set(['measure', 'anchor', 'image', 'coordsys', 'plot', 'func', 'plotAt', 'button']);
 
 export function attrsDiffer(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
   const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);

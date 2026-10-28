@@ -27,6 +27,7 @@ import { migrateLegacyMeasure } from './legacyMeasure';
 import { migrateLegacyTransform } from './legacyTransform';
 import { isPlotSpec, PLOT_SAMPLES, plotParents, plotProblem } from './plotModel';
 import { plotPointOf, plotPointParents, plotPointProblem } from './plotPointModel';
+import { buttonOf, buttonProblem } from './actionButtonModel';
 import { imageClosures, isImageSpec, type ImageSpec } from './transforms';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,6 +97,19 @@ export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
   slider:         { jxg: 'slider',         parents: 3 },
   // parents are [x, y, caption] — only the anchor pair may reference elements.
   text:           { jxg: 'text',           parents: 3, refParents: [0, 1] },
+  // A Sketchpad action button: a caption that hides or shows the elements its
+  // `attrs.button` names. It is drawn as a boxed text where the designer put it,
+  // and pressing it is a change to those elements, not to the button.
+  actionbutton: {
+    jxg: 'text', parents: 3, refParents: [0, 1],
+    attrs: {
+      display: 'html',
+      fontSize: 14,
+      strokeColor: '#333333',
+      cssStyle: 'border:1px solid #8a8a8a;border-radius:5px;padding:2px 8px;'
+        + 'background:#f5f5f5;cursor:pointer;user-select:none;',
+    },
+  },
   ticks:          { jxg: 'ticks',          parents: atLeast(1) },
   // Parents are JSXGraph expressions or coordinate arrays, never element ids,
   // so nothing here may be looked up in elMap.
@@ -251,7 +265,7 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
 }
 
 /** Attributes that describe the element to this app, not to JSXGraph. */
-const APP_ATTRS = ['measure', 'anchor', 'image', 'coordsys', 'plot', 'func', 'plotAt'];
+const APP_ATTRS = ['measure', 'anchor', 'image', 'coordsys', 'plot', 'func', 'plotAt', 'button'];
 
 /** Build one element from its HeyGeo JSON description. */
 export function createElement(
@@ -290,6 +304,23 @@ export function createElement(
     const problem = plot !== null ? plotProblem(plot) : plotPointProblem(plotted!);
     if (problem) return { obj: null, error: `${el.type}: ${problem}` };
     const gone = el.parents.find(
+      (id) => !elMap[String(id)] && !board?.objects?.[String(id)]);
+    if (gone !== undefined) {
+      return { obj: null, error: `${el.type} tham chiếu đối tượng không tồn tại` };
+    }
+  }
+
+  // A button acts on elements named in its descriptor rather than in its parent
+  // list, so a missing target is invisible to the undefined-parent check below
+  // and a button with nothing to act on is refused rather than drawn dead.
+  const button = buttonOf(el);
+  if (el.type === 'actionbutton' && button === null) {
+    return { obj: null, error: `${el.type}: nút hành động thiếu mô tả` };
+  }
+  if (button) {
+    const problem = buttonProblem(button);
+    if (problem) return { obj: null, error: `${el.type}: ${problem}` };
+    const gone = button.targets.find(
       (id) => !elMap[String(id)] && !board?.objects?.[String(id)]);
     if (gone !== undefined) {
       return { obj: null, error: `${el.type} tham chiếu đối tượng không tồn tại` };

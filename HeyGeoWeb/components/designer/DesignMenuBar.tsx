@@ -8,6 +8,7 @@ import { type FunctionRows } from './functionMenuModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { canCalculate } from './numberMenuModel';
 import { type PlotPointRows } from './plotPointModel';
+import { type ActionButtonRows } from './actionButtonModel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MenuItemDef {
@@ -36,6 +37,9 @@ const NO_FUNCTION_ROWS: FunctionRows = { canNew: true, canPlot: false, target: n
 
 /** No frame is marked, so no point has anything to be measured on. */
 const NO_PLOT_POINT_ROWS: PlotPointRows = { canPlotPair: false, canPlotValue: false, canOpen: false };
+
+/** Nothing is picked, so there is nothing to make a button out of. */
+const NO_ACTION_BUTTON_ROWS: ActionButtonRows = { canCreate: false };
 
 /** Graph | Grid Form, named the way the desktop's submenu names its four forms. */
 const GRID_FORM_LABELS: Record<GridForm, string> = {
@@ -295,11 +299,17 @@ export default function DesignMenuBar({
     return canvasRef.current?.plotPointRows() ?? NO_PLOT_POINT_ROWS;
   }
 
+  /** Whether the Edit menu's Action Buttons row has a selection to work from. */
+  function actionButtonRow(): ActionButtonRows {
+    return canvasRef.current?.actionButtonRows() ?? NO_ACTION_BUTTON_ROWS;
+  }
+
   // ─── Menu definitions – mirrors GSP Desktop menu order ────────────────
   // File | Edit | Display | Construct | Measure | Number | Transform | Graph | Window | Help
   const frames = frameRows();
   const functions = functionRows();
   const plotted = plotPointRows();
+  const actionButtons = actionButtonRow();
   const menus: MenuDef[] = [
     // ── File ──────────────────────────────────────────────────────────────
     {
@@ -348,7 +358,22 @@ export default function DesignMenuBar({
         { label: 'Properties…',                                                action: onUnderDevelopment },
         { label: 'Preferences…',                                               action: onUnderDevelopment },
         { separator: true },
-        { label: 'Action Button',                                              action: onUnderDevelopment },
+        {
+          label: 'Action Buttons',
+          // Sketchpad builds a button out of a selection, then offers the five
+          // behaviours; only Hide/Show is written so far.
+          submenu: [
+            { label: 'Animation…', action: onUnderDevelopment },
+            { label: 'Movement…', action: onUnderDevelopment },
+            {
+              label: 'Hide/Show',
+              disabled: !actionButtons.canCreate,
+              action: () => canvasRef.current?.createActionButton(),
+            },
+            { label: 'Presentation…', action: onUnderDevelopment },
+            { label: 'Link…', action: onUnderDevelopment },
+          ],
+        },
         { label: 'Selection Group…',                                           action: onUnderDevelopment },
       ],
     },
