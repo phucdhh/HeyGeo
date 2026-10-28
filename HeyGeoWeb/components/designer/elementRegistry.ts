@@ -308,6 +308,9 @@ export function createElement(
 
   const attrs: Record<string, Any> = { ...(el.attrs ?? {}) };
   for (const key of APP_ATTRS) delete attrs[key];
+  // a parametric curve brings the sample count its dialog was answered with, the
+  // same number the desktop stores on the definition beside the domain
+  if (plot?.samples) attrs.numberPoints = plot.samples;
 
   try {
     const obj = board.create(entry.jxg, parents, {

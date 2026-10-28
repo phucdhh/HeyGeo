@@ -5,6 +5,7 @@ import type { MeasureItem } from './measureMenuModel';
 import type { MeasureSpec } from './measurement';
 import type { NumberSource } from './numberMenuModel';
 import type { PlotPointRows, PlotPointSpec } from './plotPointModel';
+import type { PlotSpec } from './plotModel';
 
 export type ToolMode =
   | 'selection'
@@ -293,6 +294,8 @@ export interface CanvasHandle {
   newFunction: (expr: string, domain: [number, number]) => boolean;
   /** Graph | Plot Function…: the picked definition drawn through the marked frame. */
   plotFunction: () => boolean;
+  /** Graph | Plot Curve…: the parametric pair drawn through the marked frame. */
+  plotCurve: (spec: PlotSpec) => boolean;
   /**
    * What Graph | Plot as (x, y)… makes of the page and this selection: two numbers
    * picked go straight onto the frame, anything else opens its dialog over it.

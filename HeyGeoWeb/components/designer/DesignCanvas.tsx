@@ -66,6 +66,7 @@ import {
   snapToGrid,
   type Viewbox,
 } from './gridModel';
+import type { PlotSpec } from './plotModel';
 import {
   plotPair,
   plotPointProblem,
@@ -976,6 +977,30 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       id: nextElId('plot'),
       parents: [...frame],
       attrs: { ...PLOT_STYLE, plot: plotOfFunction(spec) },
+    });
+  }
+
+  /**
+   * Graph | Plot Curve… — the pair x(t), y(t) the designer typed, drawn through
+   * the marked frame.
+   *
+   * The desktop's graphPlotCurve makes a coordinate system when the page has none,
+   * because the dialog carries everything else a parametric curve needs; the same
+   * happens here through Graph | New Coordinate System, which is a document change
+   * of its own and therefore an undo step beside the curve.
+   */
+  function plotCurve(spec: PlotSpec): boolean {
+    if (!framePoints(elementsRef.current)) newCoordsys();
+    const frame = framePoints(elementsRef.current);
+    if (!frame) {
+      onNotifyRef.current?.('Cần một hệ trục tọa độ để vẽ đường cong.');
+      return false;
+    }
+    return addObject({
+      type: 'plot',
+      id: nextElId('plot'),
+      parents: [...frame],
+      attrs: { ...PLOT_STYLE, plot: spec },
     });
   }
 
@@ -3033,6 +3058,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     ),
     newFunction,
     plotFunction,
+    plotCurve,
     plotPointRows: (): PlotPointRows => (
       plotPointRows(elementsRef.current, selectedRef.current.map((o) => o.id))
     ),

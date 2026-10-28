@@ -83,6 +83,8 @@ interface Props {
   onOpenNewFunction: () => void;
   /** Graph | Plot as (x, y)… — the studio plots the picked numbers or opens its dialog. */
   onPlotAsXy: () => void;
+  /** Graph | Plot Curve… — the studio opens the parametric curve dialog. */
+  onPlotCurve: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
   onUnderDevelopment: () => void;
 }
@@ -225,6 +227,7 @@ export default function DesignMenuBar({
   onOpenCalculate,
   onOpenNewFunction,
   onPlotAsXy,
+  onPlotCurve,
   onOpenTransform,
   onUnderDevelopment,
 }: Props) {
@@ -544,7 +547,7 @@ export default function DesignMenuBar({
           disabled: !functions.canPlot,
           action: () => canvasRef.current?.plotFunction(),
         },
-        { label: 'Plot Parametric Curve…',        action: onUnderDevelopment },
+        { label: 'Plot Curve…',                   action: onPlotCurve },
         { label: 'Plot Table Data…',              action: onUnderDevelopment },
         { separator: true },
         {

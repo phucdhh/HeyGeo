@@ -11,7 +11,7 @@ import { anchorClosures, captionAnchor, type MeasureSpec } from './measurement';
 import { calculateSpec, numberSources } from './numberMenuModel';
 import { frameElements } from './coordsysModel';
 import { measureItems } from './measureMenuModel';
-import { functionPlot, PLOT_SAMPLES, type PlotSpec } from './plotModel';
+import { functionPlot, parametricPlot, PLOT_SAMPLES, type PlotSpec } from './plotModel';
 import type { PlotPointSpec } from './plotPointModel';
 import type { HeyGeoElement } from './designTypes';
 
@@ -923,6 +923,25 @@ describe('a curve plotted on the marked frame', () => {
     // the frame's left half is not part of the curve, and it does not join across
     expect(Number.isFinite(curve.Y(-1))).toBe(false);
     expect(curve.Y(4)).toBeCloseTo(7, 6);
+  });
+
+  it('draws a parametric curve with the sampling its dialog was answered with', () => {
+    const b = newBoard();
+    const circle = parametricPlot('cos(t)', 'sin(t)', [0, 2 * Math.PI], 120);
+    const r = loader(b, [...FRAME, plotted(circle, 'g2')]);
+    expect(r.errors).toEqual([]);
+    b.update();
+    const curve = curveOf(r.elMap.g2);
+    // the frame's unit point is two board numbers out, so the unit circle has
+    // radius 2 around the frame's origin
+    expect(curve.X(0)).toBeCloseTo(4, 6);
+    expect(curve.Y(0)).toBeCloseTo(3, 6);
+    expect(curve.Y(Math.PI / 2)).toBeCloseTo(5, 6);
+    expect(curve.X(Math.PI)).toBeCloseTo(0, 6);
+    // the count the designer typed replaces the entry's own default
+    expect(curve.visProp.numberpoints).toBe(120);
+    // and it is still a descriptor, never a jsxgraph property
+    expect(curve.visProp.plot).toBeUndefined();
   });
 
   it('refuses a formula that reads a name the curve does not have', () => {

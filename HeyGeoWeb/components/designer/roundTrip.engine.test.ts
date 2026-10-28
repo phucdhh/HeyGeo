@@ -18,7 +18,7 @@ import { resolve } from 'node:path';
 import { applyScene, coordParents, gatherSelectionPoints, syncPositions, takeScene } from './sceneModel';
 import { coordsysOf, verticalElement } from './coordsysModel';
 import { arrowDragMap } from './transforms';
-import { functionPlot, PLOT_SAMPLES } from './plotModel';
+import { functionPlot, parametricPlot, PLOT_SAMPLES } from './plotModel';
 import type { HeyGeoElement } from './designTypes';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -102,6 +102,15 @@ const kitchenSink = (): HeyGeoElement[] => [
   el({
     type: 'plot', id: 'plot1', parents: ['O', 'U', 'O_v'],
     attrs: { plot: functionPlot('x^2-2'), strokeColor: '#800080' },
+  }),
+  // and the parametric curve Graph | Plot Curve… typed: two formulas in t, the
+  // domain they are read over and the sampling its dialog was answered with
+  el({
+    type: 'plot', id: 'plot2', parents: ['O', 'U', 'O_v'],
+    attrs: {
+      plot: parametricPlot('2*cos(t)', '2*sin(t)', [0, 6.2832], 240),
+      strokeColor: '#800080',
+    },
   }),
   // and the definition the curve was plotted from: the formula as the designer
   // typed it, shown on the page the way Sketchpad shows it
@@ -350,6 +359,32 @@ describe('a saved document rebuilds the same drawing', () => {
       .toEqual({ expr: 'x^2-2', variable: 'x', from: -5, to: 5 });
     // and JSXGraph never sees it, so the page has nothing of the formula to run
     expect(again.objects.fn1.visProp?.func).toBeUndefined();
+    expect(drawing(again)).toEqual(drawing(b));
+  });
+
+  it('keeps the parametric curve and the sampling it was drawn with', () => {
+    const b = newBoard();
+    const saved = load(b, kitchenSink()).elements;
+    b.update();
+
+    // the pair, the domain and the sample count are all data in the document
+    const stored = saved.find((e: HeyGeoElement) => e.id === 'plot2')!;
+    expect(stored.parents).toEqual(['O', 'U', 'O_v']);
+    expect(stored.attrs.plot).toEqual({
+      x: '2*cos(t)', y: '2*sin(t)', variable: 't', from: 0, to: 6.2832, samples: 240,
+    });
+    // JSXGraph is handed the curve and the count, never the descriptor
+    expect(b.objects.plot2.visProp.plot).toBeUndefined();
+    expect(b.objects.plot2.visProp.numberpoints).toBe(240);
+
+    const again = newBoard();
+    expect(load(again, JSON.parse(JSON.stringify(saved))).errors).toEqual([]);
+    again.update();
+    // this frame's x = 2 is board 4 on both axes, so a radius of 2 is 4 out
+    expect(again.objects.plot2.X(0)).toBeCloseTo(4);
+    expect(again.objects.plot2.Y(0)).toBeCloseTo(0);
+    expect(again.objects.plot2.Y(Math.PI / 2)).toBeCloseTo(4);
+    expect(again.objects.plot2.visProp.numberpoints).toBe(240);
     expect(drawing(again)).toEqual(drawing(b));
   });
 

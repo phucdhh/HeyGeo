@@ -27,6 +27,8 @@ export type CurveSample = (t: number) => number;
  * The curve as stored. A plain plot of f(x) spells its own variable in the x
  * slot; a parametric one puts its two expressions there. `from` and `to` are the
  * desktop's tMin and tMax — the domain in the variable's numbers, not the page's.
+ * `samples` is its numSamples, written only when the designer changed it from the
+ * desktop's default.
  */
 export interface PlotSpec {
   x: string;
@@ -34,13 +36,18 @@ export interface PlotSpec {
   variable: PlotVariable;
   from: number;
   to: number;
+  samples?: number;
 }
 
 /** The domain the desktop's New Function dialog opens with. */
 export const DEFAULT_DOMAIN: [number, number] = [-5, 5];
 
-/** The samples the desktop's plot is drawn from. */
+/** The domain its Plot Curve dialog opens with: one turn, t from 0 to 2π. */
+export const PARAM_DOMAIN: [number, number] = [0, 6.2832];
+
+/** The samples the desktop's plot is drawn from, and the range its dialog offers. */
 export const PLOT_SAMPLES = 300;
+export const SAMPLE_RANGE = { min: 10, max: 5000 };
 
 const PLOT_VARIABLES: PlotVariable[] = ['x', 't'];
 
@@ -51,7 +58,10 @@ export function isPlotSpec(value: unknown): value is PlotSpec {
   return typeof s.x === 'string' && typeof s.y === 'string'
     && typeof s.from === 'number' && typeof s.to === 'number'
     && typeof s.variable === 'string'
-    && PLOT_VARIABLES.includes(s.variable as PlotVariable);
+    && PLOT_VARIABLES.includes(s.variable as PlotVariable)
+    && (s.samples === undefined
+      || (Number.isInteger(s.samples) && (s.samples as number) >= SAMPLE_RANGE.min
+        && (s.samples as number) <= SAMPLE_RANGE.max));
 }
 
 /** What Graph | Plot Function makes of a typed f(x). */
@@ -60,6 +70,16 @@ export function functionPlot(
   domain: [number, number] = DEFAULT_DOMAIN,
 ): PlotSpec {
   return { x: 'x', y: expr, variable: 'x', from: domain[0], to: domain[1] };
+}
+
+/** What Graph | Plot Curve makes of a typed pair x(t), y(t). */
+export function parametricPlot(
+  x: string,
+  y: string,
+  domain: [number, number] = PARAM_DOMAIN,
+  samples: number = PLOT_SAMPLES,
+): PlotSpec {
+  return { x, y, variable: 't', from: domain[0], to: domain[1], samples };
 }
 
 /** Why this curve cannot be drawn, or null when it can. */

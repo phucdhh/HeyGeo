@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_DOMAIN,
+  PARAM_DOMAIN,
   PLOT_SAMPLES,
+  SAMPLE_RANGE,
   frameToBoard,
   functionPlot,
   isPlotSpec,
+  parametricPlot,
   plotAt,
   plotParents,
   plotProblem,
@@ -94,6 +97,35 @@ describe('a typed curve on a marked frame', () => {
   });
 });
 
+describe('a parametric curve the designer typed', () => {
+  it('opens with one turn of t, sampled the way the desktop samples it', () => {
+    expect(PARAM_DOMAIN).toEqual([0, 6.2832]);
+    const c = parametricPlot('cos(t)', 'sin(t)');
+    expect([c.variable, c.from, c.to, c.samples]).toEqual(['t', 0, 6.2832, PLOT_SAMPLES]);
+    expect(parametricPlot('2*cos(t)', '2*sin(t)', [0, 3], 500))
+      .toEqual({ x: '2*cos(t)', y: '2*sin(t)', variable: 't', from: 0, to: 3, samples: 500 });
+  });
+
+  it('traces the circle its dialog opens with', () => {
+    const c = parametricPlot('cos(t)', 'sin(t)');
+    near(plotAt(c, SQUARE, 0), 3, 3);
+    near(plotAt(c, SQUARE, Math.PI / 2), 2, 4);
+    near(plotAt(c, SQUARE, Math.PI), 1, 3);
+  });
+
+  it('reads a document’s sample count within the range its dialog offers', () => {
+    expect(SAMPLE_RANGE).toEqual({ min: 10, max: 5000 });
+    expect(isPlotSpec(parametricPlot('t', 't'))).toBe(true);
+    expect(isPlotSpec({ ...parametricPlot('t', 't'), samples: SAMPLE_RANGE.min })).toBe(true);
+    expect(isPlotSpec({ ...parametricPlot('t', 't'), samples: SAMPLE_RANGE.max })).toBe(true);
+    expect(isPlotSpec({ ...parametricPlot('t', 't'), samples: 9 })).toBe(false);
+    expect(isPlotSpec({ ...parametricPlot('t', 't'), samples: 5001 })).toBe(false);
+    expect(isPlotSpec({ ...parametricPlot('t', 't'), samples: 300.5 })).toBe(false);
+    // a curve saved without one is drawn at the desktop's own sampling
+    expect(isPlotSpec({ x: 't', y: 't', variable: 't', from: 0, to: 1 })).toBe(true);
+  });
+});
+
 describe('the reason a curve cannot be drawn', () => {
   it('is empty for a curve that reads only its own variable', () => {
     expect(plotProblem(functionPlot('x^2-2'))).toBeNull();
@@ -104,6 +136,7 @@ describe('the reason a curve cannot be drawn', () => {
     expect(plotProblem(curve('x', 'y^2'))).toContain('y');
     expect(plotProblem(curve('t', 'x', 't'))).toContain('x');
     expect(plotProblem(curve('x', 'window'))).toContain('window');
+    expect(plotProblem(parametricPlot('x', 'sin(t)'))).toContain('x');
   });
 
   it('refuses a number of the page rather than drawing a blank curve', () => {

@@ -50,6 +50,7 @@ import SliderConfigDialog from './SliderConfigDialog';
 import CalculateDialog from './CalculateDialog';
 import NewFunctionDialog from './NewFunctionDialog';
 import PlotPointDialog from './PlotPointDialog';
+import PlotCurveDialog from './PlotCurveDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
 
@@ -116,6 +117,9 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
 
   /** Graph | New Function… — open whenever the menu row is used; it needs nothing picked. */
   const [newFunctionOpen, setNewFunctionOpen] = useState(false);
+
+  /** Graph | Plot Curve… — the parametric pair is always typed; it needs nothing picked. */
+  const [plotCurveOpen, setPlotCurveOpen] = useState(false);
 
   /**
    * Graph | Plot as (x, y)… — the two numbers picked go onto the frame as they
@@ -447,6 +451,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onOpenCalculate={handleOpenCalculate}
         onOpenNewFunction={() => setNewFunctionOpen(true)}
         onPlotAsXy={handlePlotAsXy}
+        onPlotCurve={() => setPlotCurveOpen(true)}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}
       />
@@ -582,6 +587,17 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setPlotPoint(null);
           }}
           onCancel={() => setPlotPoint(null)}
+        />
+      )}
+
+      {/* ── Graph | Plot Curve… dialog ── */}
+      {plotCurveOpen && (
+        <PlotCurveDialog
+          onConfirm={(spec) => {
+            canvasRef.current?.plotCurve(spec);
+            setPlotCurveOpen(false);
+          }}
+          onCancel={() => setPlotCurveOpen(false)}
         />
       )}
 
