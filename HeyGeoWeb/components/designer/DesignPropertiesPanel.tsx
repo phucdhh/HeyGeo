@@ -62,7 +62,7 @@ export default function DesignPropertiesPanel({ selected, canvasRef }: Props) {
   const [nameEditing, setNameEditing] = useState(false);
 
   const hasFill = el ? FILL_TYPES.includes(el.type) : false;
-  const isPoint = el ? ['point', 'glider', 'midpoint', 'intersection'].includes(el.type) : false;
+  const isPoint = el ? ['point', 'glider', 'midpoint', 'circumcenter', 'intersection'].includes(el.type) : false;
 
   if (selected.length === 0) {
     return (

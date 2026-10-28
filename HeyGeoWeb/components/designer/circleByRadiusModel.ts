@@ -8,7 +8,7 @@ export interface RadiusPick {
   measureOp?: MeasureOp;
 }
 
-const POINT_KINDS = ['point', 'glider', 'midpoint', 'intersection'];
+const POINT_KINDS = ['point', 'glider', 'midpoint', 'circumcenter', 'intersection'];
 
 /** The measurements the desktop's isLengthMeasure accepts as a radius. */
 const LENGTH_OPS: MeasureOp[] = ['distance', 'pointSegmentDistance', 'length', 'radius'];

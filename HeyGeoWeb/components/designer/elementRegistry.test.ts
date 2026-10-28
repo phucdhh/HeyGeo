@@ -284,7 +284,7 @@ describe('load round-trip over real element shapes', () => {
 
 describe('registry coverage', () => {
   const persisted = [
-    'point', 'glider', 'midpoint', 'intersection', 'segment', 'line', 'ray', 'circle',
+    'point', 'glider', 'midpoint', 'circumcenter', 'intersection', 'segment', 'line', 'ray', 'circle',
     'arc', 'sector', 'circumcirclesector', 'angle', 'polygon', 'slider', 'text', 'ticks', 'curve',
     'functiongraph', 'conic', 'tracecurve', 'perpendicular', 'parallel', 'bisector',
     'anglebisector', 'transform',

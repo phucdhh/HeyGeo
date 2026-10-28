@@ -16,7 +16,7 @@ export interface ArcOnCirclePick {
 }
 
 /** What Sketchpad counts as a point when the row asks for two of them. */
-const POINT_KINDS = ['point', 'glider', 'midpoint', 'intersection'];
+const POINT_KINDS = ['point', 'glider', 'midpoint', 'circumcenter', 'intersection'];
 
 export function isPointKind(kind: string): boolean {
   return POINT_KINDS.includes(kind);

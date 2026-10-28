@@ -74,7 +74,7 @@ describe('reading a family back out of CSS', () => {
 
 describe('which picks can carry a font', () => {
   it('covers the desktop G_POINT | G_CURVE | G_TEXT kinds', () => {
-    for (const kind of ['point', 'glider', 'midpoint', 'intersection',
+    for (const kind of ['point', 'glider', 'midpoint', 'circumcenter', 'intersection',
       'curve', 'functiongraph', 'plot', 'tracecurve', 'text']) {
       expect(isFontKind(kind)).toBe(true);
     }

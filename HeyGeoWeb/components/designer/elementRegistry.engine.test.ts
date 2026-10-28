@@ -96,6 +96,7 @@ describe('real JSXGraph engine', () => {
     ['line', (b: any, A: any) => [A, b.create('point', [3, 4])], 'line'],
     ['circle', (b: any, A: any) => [A, 2], 'circle'],
     ['midpoint', (b: any, A: any) => [A, b.create('point', [3, 3])], 'midpoint'],
+    ['circumcenter', (b: any, A: any) => [A, b.create('point', [4, 0]), b.create('point', [2, 2])], 'circumcenter'],
     ['glider', (b: any, A: any) => [2, 2, b.create('segment', [A, b.create('point', [6, 1])])], 'glider'],
     ['perpendicular', (b: any, A: any) => [A, b.create('segment', [A, b.create('point', [6, 1])])], 'perpendicular'],
     ['parallel', (b: any, A: any) => [A, b.create('segment', [A, b.create('point', [6, 1])])], 'parallel'],
@@ -148,6 +149,7 @@ describe('registry against the real engine', () => {
     spec({ type: 'sector', id: 'sec1', parents: ['B', 'A', 'C'] }),
     spec({ type: 'angle', id: 'ang1', parents: ['B', 'A', 'C'] }),
     spec({ type: 'midpoint', id: 'm1', parents: ['A', 'B'] }),
+    spec({ type: 'circumcenter', id: 'cc1', parents: ['A', 'B', 'D'] }),
     spec({ type: 'intersection', id: 'i1', parents: ['c1', 'l1', 0] }),
     spec({ type: 'glider', id: 'g1', parents: [1, 0, 's1'] }),
     spec({ type: 'perpendicular', id: 'perp1', parents: ['C', 's1'] }),
@@ -280,6 +282,28 @@ describe('registry against the real engine', () => {
     ]);
     expect(r.loaded).toBe(1);
     expect(r.errors.join(' ')).toMatch(/ghost|không tồn tại/);
+  });
+
+  it('draws the centre an arc through three points implies, and follows them', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'S', parents: [3, 1] }),
+      spec({ type: 'point', id: 'E', parents: [1, 3] }),
+      spec({ type: 'point', id: 'A', parents: [1, 1] }),
+      spec({ type: 'circumcirclearc', id: 'ca', parents: ['E', 'A', 'S'] }),
+      spec({ type: 'circumcenter', id: 'cc', parents: ['E', 'A', 'S'] }),
+    ]);
+    expect(r.errors).toEqual([]);
+    const cc = r.elMap.cc as any;
+    expect(cc.elType).toBe('circumcenter');
+    expect(cc.X()).toBeCloseTo(2);
+    expect(cc.Y()).toBeCloseTo(2);
+    // moving a point of the arc moves its centre with it
+    (r.elMap.S as any).moveTo([5, 1]);
+    b.update();
+    expect(cc.X()).toBeCloseTo(3);
+    expect(cc.Y()).toBeCloseTo(2);
+    expect(cc.elType).toBe('circumcenter');
   });
 
   it('draws a circle whose radius is a segment and follows that segment', () => {

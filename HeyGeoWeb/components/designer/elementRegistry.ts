@@ -80,6 +80,9 @@ export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
   point:          { jxg: 'point',          parents: 2 },
   glider:         { jxg: 'glider',         parents: 3 },
   midpoint:       { jxg: 'midpoint',       parents: 2 },
+  // Construct | Center Point on an arc through three points: the one point the
+  // three are equally far from. JSXGraph builds it, so a document can name it.
+  circumcenter:   { jxg: 'circumcenter',   parents: 3 },
   intersection:   { jxg: 'intersection',   parents: 3 },
   segment:        { jxg: 'segment',        parents: 2 },
   line:           { jxg: 'line',           parents: 2 },

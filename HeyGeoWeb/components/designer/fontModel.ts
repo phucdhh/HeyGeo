@@ -39,7 +39,7 @@ const STACK: Record<FontFamily, string> = {
 
 /** Element types that carry a face: the desktop's G_POINT | G_CURVE | G_TEXT. */
 const FONT_KINDS = [
-  'point', 'glider', 'midpoint', 'intersection',
+  'point', 'glider', 'midpoint', 'circumcenter', 'intersection',
   'curve', 'functiongraph', 'plot', 'tracecurve',
   'text',
 ];

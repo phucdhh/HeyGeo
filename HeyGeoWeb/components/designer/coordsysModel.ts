@@ -101,7 +101,7 @@ export function framePoints(elements: HeyGeoElement[]): [string, string, string]
 }
 
 /** Point types a frame can stand on — a slider is a number, not a place. */
-const FRAME_POINT_TYPES = ['point', 'glider', 'midpoint', 'intersection'];
+const FRAME_POINT_TYPES = ['point', 'glider', 'midpoint', 'circumcenter', 'intersection'];
 
 /**
  * The points Graph | Define Coordinate System… would mark, in the order they

@@ -35,6 +35,7 @@ import {
 import { circleByRadiusPicks } from './circleByRadiusModel';
 import { arcOnCirclePicks, isPointKind, type ArcOnCircle } from './arcOnCircleModel';
 import { arcSectorPicks, type ArcSector } from './arcSectorModel';
+import { centreOf, endpointIds } from './pointConstructModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { numberSources, parameterPlace } from './numberMenuModel';
 import {
@@ -170,7 +171,7 @@ function nextPointName() {
 }
 function nextElId(prefix: string) { return `${prefix}_${++_elIdx}`; }
 
-const POINT_ELTS = ['point', 'glider', 'midpoint', 'intersection', 'slider'];
+const POINT_ELTS = ['point', 'glider', 'midpoint', 'circumcenter', 'intersection', 'slider'];
 
 /** What a click or a drag can act on. */
 const SELECTABLE_KINDS = [
@@ -265,7 +266,9 @@ function findSnapPoint(
 ): any | null {
   for (const id in board.objects) {
     const obj = board.objects[id];
-    if (obj.elType !== 'point' && obj.elType !== 'glider' && obj.elType !== 'midpoint' && obj.elType !== 'intersection' && obj.elType !== 'slider') continue;
+    if (obj.elType !== 'point' && obj.elType !== 'glider' && obj.elType !== 'midpoint'
+      && obj.elType !== 'circumcenter' && obj.elType !== 'intersection'
+      && obj.elType !== 'slider') continue;
     if (obj.visProp?.visible === false) continue;
     const sc = obj.coords?.scrCoords;
     if (!sc) continue;
@@ -453,7 +456,7 @@ function computeDecorations(
   const decs: SelDecoration[] = [];
   for (const obj of selected) {
     try {
-      if (['point','glider','midpoint','intersection'].includes(obj.elType)) {
+      if (['point','glider','midpoint','circumcenter','intersection'].includes(obj.elType)) {
         const sc = obj.coords?.scrCoords;
         if (sc) decs.push({ kind: 'point', cx: sc[1], cy: sc[2],
           r: (obj.visProp?.size ?? 4) + 1 });
@@ -938,6 +941,52 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const el = elementsRef.current.find((e) => e.id === id);
     if (!el) return null;
     return arcSectorPicks([{ id: el.id, kind: el.type, parents: el.parents.map(String) }]);
+  }
+
+  /** The one object Construct | Endpoints and Center Point read the pick from. */
+  function pointConstructPick(): { id: string; kind: string; parents: string[] } | null {
+    if (selectedRef.current.length !== 1) return null;
+    const id = selectedRef.current[0].id as string;
+    const el = elementsRef.current.find((e) => e.id === id);
+    return el ? { id: el.id, kind: el.type, parents: el.parents.map(String) } : null;
+  }
+
+  /**
+   * Construct | Endpoints / Center Point: make points the document already has
+   * visible, under the name the object gives them. A point the document never
+   * listed is stored where it stands, so the sketch reloads as it looks.
+   */
+  function revealPoints(ids: string[]): boolean {
+    const board = boardRef.current;
+    if (!board) return false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pts = ids.map((id) => (board.objects as any)[id]).filter(Boolean);
+    if (pts.length === 0) return false;
+    saveSnapshot();
+    for (const pt of pts) {
+      const el = elementsRef.current.find((e) => e.id === pt.id);
+      const stored = typeof el?.attrs?.name === 'string' ? el.attrs.name : '';
+      const name = stored || nextPointName();
+      pt.setAttribute({
+        visible: true, name,
+        size: 4, strokeColor: '#c83c3c', fillColor: '#c83c3c',
+        label: { fontSize: 14, strokeColor: '#c83c3c' },
+      });
+      if (el) {
+        el.attrs.visible = true;
+        el.attrs.name = name;
+      } else {
+        elementsRef.current.push({
+          type: 'point', id: pt.id,
+          parents: [pt.X(), pt.Y()],
+          attrs: { name, visible: true, size: 4,
+                   strokeColor: '#c83c3c', fillColor: '#c83c3c' },
+        });
+      }
+    }
+    board.update();
+    onDirty();
+    return true;
   }
 
   /**
@@ -3263,7 +3312,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const glider = sel.find((o: any) => o.elType === 'glider');
       if (!glider) return { ok: false, reason: 'no_glider' };
 
-      const TRACE_POINT_TYPES = ['point', 'glider', 'midpoint', 'intersection', 'slider'];
+      const TRACE_POINT_TYPES = ['point', 'glider', 'midpoint', 'circumcenter', 'intersection', 'slider'];
       const TRACE_LINE_TYPES  = ['line', 'segment', 'ray'];
 
       const tracePoint = sel.find((o: any) => o !== glider && TRACE_POINT_TYPES.includes(o.elType));
@@ -3550,69 +3599,29 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       } catch { /**/ }
     },
 
-    createCenter: () => {
-      const board = boardRef.current;
-      if (!board) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const circ = selectedRef.current.find((o: any) =>
-        o.elType === 'circle' || o.elType === 'arc');
-      if (!circ) return;
-      saveSnapshot();
-      const centerPt = circ.center ?? circ.point1;
-      if (!centerPt) return;
-      const name = nextPointName();
-      centerPt.setAttribute({
-        visible: true, name,
-        size: 4, strokeColor: '#c83c3c', fillColor: '#c83c3c',
-        label: { fontSize: 14, strokeColor: '#c83c3c' },
-      });
-      const existing = elementsRef.current.find(e => e.id === centerPt.id);
-      if (existing) {
-        existing.attrs.visible = true;
-        existing.attrs.name    = name;
-      } else {
-        elementsRef.current.push({
-          type: 'point', id: centerPt.id,
-          parents: [centerPt.X(), centerPt.Y()],
-          attrs: { name, visible: true, size: 4,
-                   strokeColor: '#c83c3c', fillColor: '#c83c3c' },
-        });
-      }
-      board.update();
-      onDirty();
-    },
+    canEndpoint: () => endpointIds(pointConstructPick()) !== null,
 
     createEndpoint: () => {
-      const board = boardRef.current;
-      if (!board) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const seg = selectedRef.current.find((o: any) =>
-        o.elType === 'segment' || o.elType === 'line' || o.elType === 'arc');
-      if (!seg) return;
-      saveSnapshot();
-      const pts = [seg.point1, seg.point2].filter(Boolean);
-      pts.forEach((pt: { setAttribute: (a: Record<string, unknown>) => void;
-                         id: string; X: () => number; Y: () => number; }) => {
-        if (!pt) return;
-        const name = nextPointName();
-        pt.setAttribute({
-          visible: true, name,
-          size: 4, strokeColor: '#c83c3c', fillColor: '#c83c3c',
+      const ids = endpointIds(pointConstructPick());
+      if (!ids) return false;
+      return revealPoints(ids);
+    },
+
+    canCenterPoint: () => centreOf(pointConstructPick()) !== null,
+
+    createCenterPoint: () => {
+      const centre = centreOf(pointConstructPick());
+      if (!centre) return false;
+      if ('reveal' in centre) return revealPoints([centre.reveal]);
+      return addObject({
+        type: 'circumcenter', id: nextElId('cc'),
+        parents: [...centre.circumcentre],
+        attrs: {
+          name: nextPointName(), visible: true, size: 4,
+          strokeColor: '#c83c3c', fillColor: '#c83c3c',
           label: { fontSize: 14, strokeColor: '#c83c3c' },
-        });
-        const existing = elementsRef.current.find(e => e.id === pt.id);
-        if (existing) { existing.attrs.visible = true; existing.attrs.name = name; }
-        else {
-          elementsRef.current.push({
-            type: 'point', id: pt.id,
-            parents: [pt.X(), pt.Y()],
-            attrs: { name, visible: true, size: 4,
-                     strokeColor: '#c83c3c', fillColor: '#c83c3c' },
-          });
-        }
+        },
       });
-      board.update();
-      onDirty();
     },
 
     measureRows,

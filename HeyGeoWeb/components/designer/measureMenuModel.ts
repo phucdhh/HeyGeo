@@ -27,7 +27,7 @@ export interface MeasureItem {
   specs: MeasureSpec[];
 }
 
-const POINT_TYPES = ['point', 'glider', 'midpoint', 'intersection'];
+const POINT_TYPES = ['point', 'glider', 'midpoint', 'circumcenter', 'intersection'];
 const LINE_TYPES = ['line', 'ray', 'perpendicular', 'parallel', 'bisector'];
 const ARC_TYPES = ['arc', 'circumcirclearc'];
 

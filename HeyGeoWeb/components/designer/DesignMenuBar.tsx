@@ -512,6 +512,16 @@ export default function DesignMenuBar({
         { label: 'Point On Object',        shortcut: 'Alt+P',     action: () => canvasRef.current?.createPointOnObject() },
         { label: 'Midpoint',               shortcut: 'Ctrl+M',    action: () => canvasRef.current?.createMidpoint() },
         { label: 'Intersection',           shortcut: 'Ctrl+I',    action: () => canvasRef.current?.createIntersection() },
+        {
+          label: 'Endpoints',
+          disabled: !canvasRef.current?.canEndpoint(),
+          action: () => canvasRef.current?.createEndpoint(),
+        },
+        {
+          label: 'Center Point',
+          disabled: !canvasRef.current?.canCenterPoint(),
+          action: () => canvasRef.current?.createCenterPoint(),
+        },
         { separator: true },
         // Straight objects
         { label: 'Segment',                shortcut: 'Ctrl+L',    action: () => onToolChange('segment') },

@@ -76,7 +76,8 @@ const LAYERED_KINDS = ['polygon'];
 
 /** Only the point-like objects carry a style of their own; the rest are strokes. */
 export function isPointLike(kind: string): boolean {
-  return kind === 'point' || kind === 'glider' || kind === 'midpoint' || kind === 'intersection';
+  return kind === 'point' || kind === 'glider' || kind === 'midpoint'
+    || kind === 'circumcenter' || kind === 'intersection';
 }
 
 /**

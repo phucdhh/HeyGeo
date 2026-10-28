@@ -256,8 +256,12 @@ export interface CanvasHandle {
   canCircleInterior: () => boolean;
   createCircleInterior: () => boolean;
   createBisector: () => void;
-  createCenter: () => void;
-  createEndpoint: () => void;
+  /** Construct | Endpoints — one segment, ray or arc is picked. */
+  canEndpoint: () => boolean;
+  createEndpoint: () => boolean;
+  /** Construct | Center Point — one circle or arc is picked. */
+  canCenterPoint: () => boolean;
+  createCenterPoint: () => boolean;
   createLocus: () => LocusResult;
   // Transform menu & marks
   markCenter: () => string | null;

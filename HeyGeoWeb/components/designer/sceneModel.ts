@@ -56,7 +56,7 @@ const j = (v: unknown) => JSON.stringify(v ?? null);
 const round = (v: number) => (Number.isFinite(v) ? Number(v.toFixed(6)) : v);
 
 /** The board element types that have a position of their own. */
-const POINT_ELTS = ['point', 'glider', 'midpoint', 'intersection', 'slider'];
+const POINT_ELTS = ['point', 'glider', 'midpoint', 'circumcenter', 'intersection', 'slider'];
 
 // ─── Dependency graph ────────────────────────────────────────────────────────
 

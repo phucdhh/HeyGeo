@@ -13,6 +13,7 @@ const TYPE_LABELS: Record<string, string> = {
   point:         'Điểm tự do',
   glider:        'Điểm trên đối tượng',
   midpoint:      'Trung điểm',
+  circumcenter:  'Tâm đường tròn ngoại tiếp',
   intersection:  'Giao điểm',
   segment:       'Đoạn thẳng',
   ray:           'Tia',
@@ -29,7 +30,7 @@ const TYPE_LABELS: Record<string, string> = {
   bisector:      'Tia phân giác',
 };
 
-const POINT_TYPES = ['point', 'glider', 'midpoint', 'intersection'];
+const POINT_TYPES = ['point', 'glider', 'midpoint', 'circumcenter', 'intersection'];
 
 export default function ElementPropertiesDialog({ info, canvasRef, onClose }: Props) {
   const [name,        setName]        = useState(info.name);

@@ -17,7 +17,7 @@ describe('Construct | Arc On Circle', () => {
   });
 
   it('accepts every point the desktop calls a point', () => {
-    for (const kind of ['point', 'glider', 'midpoint', 'intersection']) {
+    for (const kind of ['point', 'glider', 'midpoint', 'circumcenter', 'intersection']) {
       expect(isPointKind(kind)).toBe(true);
       expect(arcOnCirclePicks([circle, { id: 'P', kind }, { id: 'Q', kind: 'point' }]))
         .toMatchObject({ start: 'P', end: 'Q' });
