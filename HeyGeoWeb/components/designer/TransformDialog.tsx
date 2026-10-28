@@ -10,7 +10,7 @@ interface Props {
   marks: MarkInfo;
   onTranslate: (params: { type: 'vector' } | { type: 'rect'; dx: number; dy: number } | { type: 'polar'; distance: number; angleDeg: number }) => void;
   onRotate: (params: { angleDeg: number }) => void;
-  onDilate: (params: { ratio: number }) => void;
+  onDilate: (params: { ratio: number } | { marked: true }) => void;
   onClose: () => void;
 }
 
@@ -34,7 +34,10 @@ export default function TransformDialog({
   // Rotate state
   const [rotAngle, setRotAngle] = useState(marks.angle ? marks.angle.deg : 90);
 
-  // Dilate state
+  // Dilate state — the desktop opens on the marked ratio when there is one.
+  const [dilateType, setDilateType] = useState<'marked' | 'fixed'>(
+    marks.ratio ? 'marked' : 'fixed'
+  );
   const [num, setNum] = useState(2);
   const [den, setDen] = useState(1);
 
@@ -50,8 +53,12 @@ export default function TransformDialog({
     } else if (mode === 'rotate') {
       onRotate({ angleDeg: rotAngle });
     } else if (mode === 'dilate') {
-      const ratio = den !== 0 ? num / den : num;
-      onDilate({ ratio });
+      if (dilateType === 'marked') {
+        onDilate({ marked: true });
+      } else {
+        const ratio = den !== 0 ? num / den : num;
+        onDilate({ ratio });
+      }
     }
     onClose();
   }
@@ -240,6 +247,43 @@ export default function TransformDialog({
               )}
             </div>
 
+            <div className="flex rounded-lg bg-gray-100 p-1 text-xs">
+              <button
+                className={`flex-1 py-1.5 rounded-md font-medium transition-colors ${
+                  dilateType === 'marked' ? 'bg-white shadow text-brand-800' : 'text-gray-600 hover:text-gray-900'
+                }`}
+                onClick={() => setDilateType('marked')}
+              >
+                Tỉ số đánh dấu
+              </button>
+              <button
+                className={`flex-1 py-1.5 rounded-md font-medium transition-colors ${
+                  dilateType === 'fixed' ? 'bg-white shadow text-brand-800' : 'text-gray-600 hover:text-gray-900'
+                }`}
+                onClick={() => setDilateType('fixed')}
+              >
+                Nhập tỉ số
+              </button>
+            </div>
+
+            {dilateType === 'marked' && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900 space-y-1">
+                {marks.ratio ? (
+                  <p>
+                    Tỉ số đã đánh dấu:{' '}
+                    <strong className="text-brand-700">
+                      {marks.ratio.label} = {marks.ratio.value.toFixed(3)}
+                    </strong>
+                  </p>
+                ) : (
+                  <p className="text-amber-800">
+                    ⚠ Chưa đánh dấu tỉ số. Hãy chọn 2 đoạn thẳng hoặc 1 số đo rồi nhấn <strong>Transform → Mark Ratio</strong>, hoặc chuyển sang tab Nhập tỉ số.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {dilateType === 'fixed' && (
             <div className="space-y-3">
               <div className="flex items-center gap-3 text-sm">
                 <label className="w-24 text-gray-600 text-xs">Tỉ số vị tự (k)</label>
@@ -289,6 +333,7 @@ export default function TransformDialog({
                 ))}
               </div>
             </div>
+            )}
           </div>
         )}
 
@@ -305,7 +350,8 @@ export default function TransformDialog({
             disabled={
               (mode === 'translate' && transType === 'vector' && !marks.vector) ||
               (mode === 'rotate' && !marks.center) ||
-              (mode === 'dilate' && !marks.center)
+              (mode === 'dilate' && !marks.center) ||
+              (mode === 'dilate' && dilateType === 'marked' && !marks.ratio)
             }
             className="flex-1 text-sm text-white bg-brand-600 rounded-lg py-2 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >

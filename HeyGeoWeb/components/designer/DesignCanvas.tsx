@@ -112,7 +112,7 @@ import {
   type AnimationTargetState,
   type AnimatableKind,
 } from './animationModel';
-import { arrowDragMap, imageClosures, type ImageSpec } from './transforms';
+import { arrowDragMap, imageClosures, type ImageSpec, type RatioMark } from './transforms';
 import {
   applyScene,
   clearHistory,
@@ -3736,6 +3736,48 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return `${deg}°`;
     },
 
+    markRatio: () => {
+      const board = boardRef.current;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const picked: any[] = selectedRef.current;
+
+      // One number: a measurement or a parameter stands for its own value, so
+      // the copy goes on following it. This is the desktop's G_VALUE branch.
+      if (picked.length === 1) {
+        const id = picked[0].id;
+        const el = elementsRef.current.find((e) => e.id === id);
+        const measure = el?.attrs?.measure as MeasureSpec | undefined;
+        const slider = board?.objects[id] as { Value?: () => number } | undefined;
+        const raw = measure ? measureValue(board, measure) : slider?.Value?.();
+        if (typeof raw === 'number' && Number.isFinite(raw)) {
+          const label = measure?.label || (el?.attrs?.name as string | undefined) || id;
+          marksRef.current.ratio = { valueId: id, label, value: raw };
+          onNotifyRef.current?.(`Đã đánh dấu tỉ số: ${label} = ${raw.toFixed(3)}`);
+          return label;
+        }
+      }
+
+      // Two segments, in the order they were picked. The desktop's G_SCALED
+      // reads the second over the first, so that is the ratio it marks.
+      if (picked.length === 2 && picked.every((o) => o.elType === 'segment')) {
+        const [first, second] = picked;
+        const span = (o: { point1: { X: () => number; Y: () => number }; point2: { X: () => number; Y: () => number } }) =>
+          Math.hypot(o.point2.X() - o.point1.X(), o.point2.Y() - o.point1.Y());
+        const a = span(first), b = span(second);
+        const name = (o: { name?: string; id: string }) => o.name || o.id;
+        const label = `${name(second)}/${name(first)}`;
+        const value = a > 0 ? b / a : 0;
+        marksRef.current.ratio = {
+          segments: [first.id, second.id], label, value,
+        };
+        onNotifyRef.current?.(`Đã đánh dấu tỉ số: ${label} = ${value.toFixed(3)}`);
+        return label;
+      }
+
+      onNotifyRef.current?.('Hãy chọn 2 đoạn thẳng, hoặc 1 số đo, để đánh dấu tỉ số.');
+      return null;
+    },
+
     clearMarks: () => {
       marksRef.current = {};
       onNotifyRef.current?.('Đã xóa tất cả các đánh dấu.');
@@ -3779,11 +3821,31 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     },
 
     applyDilate: (params) => {
+      const board = boardRef.current;
       const cInfo = marksRef.current.center;
-      const centerPt = cInfo ? boardRef.current?.objects[cInfo.id] : null;
+      const centerPt = cInfo ? board?.objects[cInfo.id] : null;
       if (!centerPt) {
         onNotifyRef.current?.('Chưa đánh dấu tâm vị tự. Hãy chọn 1 điểm và chọn Mark Center trước.');
         return false;
+      }
+      if ('marked' in params) {
+        const mark = marksRef.current.ratio;
+        if (!mark) {
+          onNotifyRef.current?.('Chưa đánh dấu tỉ số. Hãy chọn 2 đoạn thẳng hoặc 1 số đo và chọn Transform → Mark Ratio.');
+          return false;
+        }
+        // The document keeps what the ratio is read from, so the copy goes on
+        // following those segments or that measurement after a reload.
+        const ratioMark: RatioMark | null = mark.segments
+          ? { segments: mark.segments }
+          : (() => {
+            const el = elementsRef.current.find((e) => e.id === mark.valueId);
+            const measure = el?.attrs?.measure;
+            if (isMeasureSpec(measure)) return { measure };
+            return mark.valueId ? { slider: mark.valueId } as RatioMark : null;
+          })();
+        if (!ratioMark) return false;
+        return executeTransform({ op: 'dilate', of: [centerPt.id], ratioMark });
       }
       return executeTransform({ op: 'dilate', of: [centerPt.id], k: params.ratio });
     },

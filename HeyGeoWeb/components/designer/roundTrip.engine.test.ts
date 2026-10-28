@@ -948,3 +948,42 @@ describe('an animation the designer stops', () => {
     expect(JSON.stringify(elements)).not.toMatch(/animation|direction|running/);
   });
 });
+
+describe('a dilation taken from a marked ratio', () => {
+  const DOC = (): HeyGeoElement[] => [
+    el({ type: 'point', id: 'O', parents: [0, 0], attrs: { name: 'O' } }),
+    el({ type: 'point', id: 'A', parents: [1, 0], attrs: { name: 'A' } }),
+    el({ type: 'point', id: 'B', parents: [0, 2], attrs: { name: 'B' } }),
+    el({ type: 'point', id: 'C', parents: [3, 0], attrs: { name: 'C' } }),
+    el({ type: 'segment', id: 's1', parents: ['A', 'B'], attrs: {} }),
+    el({ type: 'segment', id: 's2', parents: ['A', 'C'], attrs: {} }),
+    el({
+      type: 'point', id: 'P', parents: ['A'],
+      attrs: { name: "A'", image: { op: 'dilate', of: ['O'], ratioMark: { segments: ['s1', 's2'] } } },
+    }),
+  ];
+
+  it('scales by the second marked segment over the first, and keeps doing so after a reload', () => {
+    const b = newBoard();
+    const elements = load(b, DOC()).elements;
+    b.update();
+
+    // |AB| = √5, |AC| = 2, so the copy sits at 2/√5 of the way from O to A
+    const k = 2 / Math.sqrt(5);
+    expect(b.objects.P.X()).toBeCloseTo(k, 6);
+    expect(b.objects.P.Y()).toBeCloseTo(0, 6);
+
+    // the ratio is read live: shortening AB to 1 doubles the copy's offset
+    b.objects.B.moveTo([1, 1]);
+    b.update();
+    expect(b.objects.P.X()).toBeCloseTo(2, 6);
+
+    expect(syncPositions(elements, b)).toBe(true);
+    const after = drawing(b);
+    const reloaded = newBoard();
+    load(reloaded, JSON.parse(JSON.stringify(elements)));
+    reloaded.update();
+    expect(reloaded.objects.P.X()).toBeCloseTo(2, 6);
+    expect(drawing(reloaded)).toEqual(after);
+  });
+});

@@ -611,7 +611,7 @@ export default function DesignMenuBar({
         { label: 'Mark Center',                   action: () => canvasRef.current?.markCenter() },
         { label: 'Mark Mirror',                   action: () => canvasRef.current?.markMirror() },
         { label: 'Mark Angle',                    action: () => canvasRef.current?.markAngle() },
-        { label: 'Mark Ratio',                    action: onUnderDevelopment },
+        { label: 'Mark Ratio',                    action: () => canvasRef.current?.markRatio() },
         { label: 'Mark Distance/Length',          action: onUnderDevelopment },
         { label: 'Clear Marks',                   action: () => canvasRef.current?.clearMarks() },
         { separator: true },

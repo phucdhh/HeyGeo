@@ -17,7 +17,25 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
 
+import { measureValue, type MeasureSpec } from './measurement';
+
 export type ImageOp = 'translate' | 'rotate' | 'dilate' | 'reflect';
+
+/**
+ * A dilation factor taken from the sketch instead of typed.
+ *
+ * Sketchpad lets the designer mark a ratio — two segments, or one measured
+ * number — and then dilate by it. The factor is read at draw time, so a copy
+ * made this way keeps following the segments or the measurement it was taken
+ * from, exactly as the desktop's G_SCALED does with its parents.
+ *
+ * `segments` is in the order the two were picked and reads second over first,
+ * which is the ratio the desktop computes (`parent(3) / parent(2)`).
+ */
+export type RatioMark =
+  | { segments: [string, string] }
+  | { slider: string }
+  | { measure: MeasureSpec };
 
 export interface ImageSpec {
   op: ImageOp;
@@ -34,6 +52,8 @@ export interface ImageSpec {
   angle?: number;
   /** dilate factor. */
   k?: number;
+  /** dilate by a marked ratio rather than a typed factor. */
+  ratioMark?: RatioMark;
 }
 
 export function isImageSpec(value: unknown): value is ImageSpec {
@@ -45,7 +65,14 @@ export function isImageSpec(value: unknown): value is ImageSpec {
 /** The ids an image point hangs off, for the dependency graph. */
 export function imageDeps(el: { attrs?: Record<string, unknown> }): string[] {
   const image = el.attrs?.image as ImageSpec | undefined;
-  return image?.of ?? [];
+  if (!image) return [];
+  const ids = [...image.of];
+  const mark = image.ratioMark;
+  if (mark) {
+    if ('segments' in mark) ids.push(...mark.segments);
+    else if ('slider' in mark) ids.push(mark.slider);
+  }
+  return ids;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -152,10 +179,35 @@ export function imageClosures(board: Any, srcId: string, spec: ImageSpec): [() =
       ];
     }
     case 'dilate': {
-      const k = spec.k ?? 1;
+      // A ratio that cannot be read leaves the copy on its source, the same
+      // way a missing centre does, rather than folding it onto the centre.
+      const markedFactor = (): number => {
+        const mark = spec.ratioMark;
+        if (!mark) return spec.k ?? 1;
+        if ('segments' in mark) {
+          const span = (o: Any): number => {
+            const a = o?.point1, b = o?.point2;
+            return a && b ? Math.hypot(b.X() - a.X(), b.Y() - a.Y()) : 0;
+          };
+          return span(read(mark.segments[1])) / span(read(mark.segments[0]));
+        }
+        if ('slider' in mark) return Number(read(mark.slider)?.Value?.());
+        const v = measureValue(board, mark.measure);
+        return v === null ? Number.NaN : v;
+      };
       return [
-        number(() => { const c = read(spec.of[0]); return c.X() + k * (src().X() - c.X()); }, sourceX),
-        number(() => { const c = read(spec.of[0]); return c.Y() + k * (src().Y() - c.Y()); }, sourceY),
+        number(() => {
+          const k = markedFactor();
+          if (!Number.isFinite(k)) return sourceX();
+          const c = read(spec.of[0]);
+          return c.X() + k * (src().X() - c.X());
+        }, sourceX),
+        number(() => {
+          const k = markedFactor();
+          if (!Number.isFinite(k)) return sourceY();
+          const c = read(spec.of[0]);
+          return c.Y() + k * (src().Y() - c.Y());
+        }, sourceY),
       ];
     }
     case 'reflect': {

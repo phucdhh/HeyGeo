@@ -130,6 +130,52 @@ describe('imageClosures', () => {
   });
 });
 
+describe('dilating by a marked ratio', () => {
+  it('reads the second marked segment over the first, as the desktop does', () => {
+    const image = (segments: [string, string]): ImageSpec =>
+      ({ op: 'dilate', of: ['O'], ratioMark: { segments } });
+    expect(pos(board(), 'A', image(['mirror', 'steep']))).toEqual([2.25, 1]);
+    expect(pos(board(), 'A', image(['steep', 'mirror']))).toEqual([1.8, 1]);
+  });
+
+  it('follows the segments while they move', () => {
+    const world = {
+      A: point(2, 1),
+      O: point(1, 1),
+      one: segment(point(0, 0), point(2, 0)),
+      two: segment(point(0, 0), point(1, 0)),
+    };
+    const b = board(world);
+    const image: ImageSpec = { op: 'dilate', of: ['O'], ratioMark: { segments: ['one', 'two'] } };
+    expect(pos(b, 'A', image)).toEqual([1.5, 1]);
+    world.two.point2.moveTo(4, 0);
+    expect(pos(b, 'A', image)).toEqual([3, 1]);
+  });
+
+  it('takes a parameter or a measurement as the factor itself', () => {
+    const world = { A: point(2, 1), O: point(1, 1), k: { Value: () => 3 }, s: segment(point(0, 0), point(0, 4)) };
+    const b = board(world);
+    expect(pos(b, 'A', { op: 'dilate', of: ['O'], ratioMark: { slider: 'k' } })).toEqual([4, 1]);
+    expect(pos(b, 'A', { op: 'dilate', of: ['O'], ratioMark: { measure: { op: 'length', args: ['s'] } } })).toEqual([5, 1]);
+  });
+
+  it('stays on the source when the ratio cannot be read', () => {
+    const world = { A: point(2, 1), O: point(1, 1), zero: segment(point(1, 1), point(1, 1)) };
+    const b = board(world);
+    expect(pos(b, 'A', { op: 'dilate', of: ['O'], ratioMark: { segments: ['zero', 'zero'] } })).toEqual([2, 1]);
+    expect(pos(b, 'A', { op: 'dilate', of: ['O'], ratioMark: { measure: { op: 'length', args: ['gone'] } } })).toEqual([2, 1]);
+  });
+
+  it('hangs off the segments it reads, not only the centre', () => {
+    expect(imageDeps({
+      attrs: { image: { op: 'dilate', of: ['O'], ratioMark: { segments: ['s1', 's2'] } } },
+    })).toEqual(['O', 's1', 's2']);
+    expect(imageDeps({
+      attrs: { image: { op: 'dilate', of: ['O'], ratioMark: { slider: 'k' } } },
+    })).toEqual(['O', 'k']);
+  });
+});
+
 /**
  * The rotate and dilate arrows move the whole selection from one map, measured
  * from where the pointer went down. Everything a drag gets wrong — compounding,

@@ -188,6 +188,17 @@ export interface MarkInfo {
   mirror?: { id: string; name?: string };
   vector?: { fromId: string; fromName: string; toId: string; toName: string };
   angle?: { p1Name: string; vertexName: string; p2Name: string; deg: number };
+  /**
+   * Transform | Mark Ratio — the desktop's t_ratio. Two segments are read
+   * second over first; one measured number or parameter stands for itself.
+   * `value` is what the ratio reads now, for the dialog's caption.
+   */
+  ratio?: {
+    segments?: [string, string];
+    valueId?: string;
+    label: string;
+    value: number;
+  };
 }
 
 // ─── Cursor coords shown in status bar ────────────────────────────────────────
@@ -268,11 +279,12 @@ export interface CanvasHandle {
   markMirror: () => string | null;
   markVector: () => string | null;
   markAngle: () => string | null;
+  markRatio: () => string | null;
   clearMarks: () => void;
   getMarks: () => MarkInfo;
   applyTranslate: (params: { type: 'vector' } | { type: 'rect'; dx: number; dy: number } | { type: 'polar'; distance: number; angleDeg: number }) => boolean;
   applyRotate: (params: { angleDeg: number }) => boolean;
-  applyDilate: (params: { ratio: number }) => boolean;
+  applyDilate: (params: { ratio: number } | { marked: true }) => boolean;
   applyReflect: () => boolean;
   // Display menu
   /**
