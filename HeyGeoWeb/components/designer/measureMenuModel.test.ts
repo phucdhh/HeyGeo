@@ -93,6 +93,20 @@ describe('the Measure menu', () => {
     expect(offered(['A'], 'area')).toBeNull();
   });
 
+  it('areas the sector an arc through three points fills', () => {
+    const world = [
+      el('point', 'A', [0, 0], 'A'),
+      el('point', 'B', [4, 0], 'B'),
+      el('point', 'C', [0, 3], 'C'),
+      el('circumcirclesector', 'cs1', ['A', 'B', 'C']),
+    ];
+    const area = measureItems(world, ['cs1']).find((i) => i.id === 'area')!;
+    // the wedge is a filled shape, not an arc, so its whole area is the area
+    expect(area.specs[0]).toMatchObject({ op: 'area', label: 'Area ABC' });
+    // ... and it is not an arc to read along
+    expect(measureItems(world, ['cs1']).find((i) => i.id === 'arcLength')!.specs).toEqual([]);
+  });
+
   it('reads an arc three ways', () => {
     expect(offered(['arc1'], 'arcAngle')).toMatchObject({ op: 'arcAngle', label: 'm\u2220ABC', unit: '\u00b0' });
     expect(offered(['arc1'], 'arcLength')).toMatchObject({ op: 'arcLength', label: 'ABC', unit: ' cm' });

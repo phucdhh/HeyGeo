@@ -91,6 +91,9 @@ export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
   // through, its centre being whatever circle goes through them
   circumcirclearc: { jxg: 'circumcirclearc', parents: 3 },
   sector:         { jxg: 'sector',         parents: 3 },
+  // a sector filled around the centre three points on its circle imply, the
+  // shape Construct | Arc Sector Interior gives an arc through three points
+  circumcirclesector: { jxg: 'circumcirclesector', parents: 3 },
   angle:          { jxg: 'angle',          parents: 3 },
   // hasInnerPoints belongs to the registry rather than to each document:
   // Sketchpad lets a click anywhere inside the shape select it, and a document

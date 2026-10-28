@@ -909,6 +909,27 @@ describe('an arc measured over the real board', () => {
     expect(shown(r.elMap['areawed'])).toBe('quạt = 9.42 cm²');
     expect(shown(r.elMap['segmentAreaar'])).toBe('chúng = 11.42 cm²');
   });
+
+  it('fills a three-points arc about the centre the three points imply', () => {
+    const b = newBoard();
+    // E, A and S sit on the circle of radius √2 round (2, 2); the arc runs from
+    // E through A to S, a half turn, so the sector is half the disc: π.
+    const r = loader(b, [
+      spec({ type: 'point', id: 'S', parents: [3, 1] }),
+      spec({ type: 'point', id: 'E', parents: [1, 3] }),
+      spec({ type: 'point', id: 'A', parents: [1, 1] }),
+      spec({ type: 'circumcirclearc', id: 'ca', parents: ['E', 'A', 'S'] }),
+      spec({
+        type: 'circumcirclesector', id: 'cw', parents: ['E', 'A', 'S'],
+        attrs: { strokeOpacity: 0, fillColor: '#1e3c96', fillOpacity: 0.12, withLabel: false },
+      }),
+      caption('area', ['cw'], 'quạt', { unit: ' cm²' }),
+    ]);
+    expect(r.errors).toEqual([]);
+    expect((r.elMap.cw as any).elType).toBe('circumcirclesector');
+    b.update();
+    expect(shown(r.elMap['areacw'])).toBe('quạt = 3.14 cm²');
+  });
 });
 
 // Construct | Arc On Circle authors [centre, start, end] — the same shape the

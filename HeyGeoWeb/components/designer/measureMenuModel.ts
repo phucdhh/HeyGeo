@@ -208,7 +208,7 @@ export function measureItems(
       picked.length === 3 && isPoint(a) && isPoint(b) && isPoint(c)),
     // an arc has no area of its own, so it gives the bow between it and its chord
     row('area', 'Area', [[isArc(a) ? 'segmentArea' : 'area', [id(a)]]], CM2,
-      one(picked, (e) => ['polygon', 'circle', 'sector'].includes(e?.type ?? '') || isArc(e))),
+      one(picked, (e) => ['polygon', 'circle', 'sector', 'circumcirclesector'].includes(e?.type ?? '') || isArc(e))),
     row('arcAngle', 'Arc Angle', [['arcAngle', [id(a)]]], DEG, one(picked, isArc)),
     row('arcLength', 'Arc Length', [['arcLength', [id(a)]]], CM, one(picked, isArc)),
     row('radius', 'Radius', [['radius', [id(a)]]], CM,

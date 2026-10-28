@@ -34,7 +34,7 @@ import {
 } from './measurement';
 import { circleByRadiusPicks } from './circleByRadiusModel';
 import { arcOnCirclePicks, isPointKind, type ArcOnCircle } from './arcOnCircleModel';
-import { arcSectorPicks } from './arcSectorModel';
+import { arcSectorPicks, type ArcSector } from './arcSectorModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { numberSources, parameterPlace } from './numberMenuModel';
 import {
@@ -928,9 +928,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   /**
    * The arc Construct | Arc Sector Interior would fill. The desktop hangs the
    * sector off the picked arc, and the exporter gives the sector the arc's own
-   * [centre, start, end] parents, so the wedge is the arc's own wedge.
+   * parents, so the wedge is the arc's own wedge — about its centre when the
+   * arc carries one, and about the circumcentre JSXGraph finds when it is an
+   * arc through three points.
    */
-  function arcSectorSelection(): { arc: string; parents: string[] } | null {
+  function arcSectorSelection(): ArcSector | null {
     if (selectedRef.current.length !== 1) return null;
     const id = selectedRef.current[0].id as string;
     const el = elementsRef.current.find((e) => e.id === id);
@@ -3520,7 +3522,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const picked = arcSectorSelection();
       if (!picked) return false;
       return addObject({
-        type: 'sector', id: nextElId('sec'),
+        type: picked.type, id: nextElId('sec'),
         parents: [...picked.parents],
         attrs: { ...INTERIOR_STYLE },
       });
