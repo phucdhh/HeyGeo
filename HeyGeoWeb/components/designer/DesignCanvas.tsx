@@ -167,6 +167,10 @@ const SELECTABLE_KINDS = [
  *  cannot select, so the Context menu looks at these as well. */
 const CONTEXT_MENU_KINDS = [...SELECTABLE_KINDS, 'text', 'angle'];
 
+/** Display | Label Object… relabels one point or one curve, as the desktop's
+ *  canEditChangeLabel does; a slider or a caption has no label of its own. */
+const RELABEL_KINDS = SELECTABLE_KINDS.filter((k) => k !== 'slider');
+
 // ─── The frame's grid, as it is painted on the page ─────────────────────────
 // The desktop draws it inside G_coordsys::draw(): a grey pen for the lines and the
 // axis ink for the ticks and their numbers. Where the picture goes is the grid
@@ -3041,6 +3045,14 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       elementsRef.current.forEach(e => { if (ids.has(e.id)) e.attrs.fixed = f; });
       onSelectionChange(selectedRef.current.map(toSelectedInfo));
       onDirty();
+    },
+
+    labelObjectInfo: () => {
+      const sel = selectedRef.current;
+      if (sel.length !== 1) return null;
+      const obj = sel[0] as { elType?: string; name?: string };
+      if (!RELABEL_KINDS.includes(obj.elType ?? '')) return null;
+      return obj.name ?? '';
     },
 
     updateSelectedName: (n: string) => {

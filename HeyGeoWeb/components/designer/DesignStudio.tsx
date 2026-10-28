@@ -52,6 +52,7 @@ import NewFunctionDialog from './NewFunctionDialog';
 import PlotPointDialog from './PlotPointDialog';
 import PlotCurveDialog from './PlotCurveDialog';
 import AnimateDialog from './AnimateDialog';
+import LabelObjectDialog from './LabelObjectDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
 
@@ -128,6 +129,14 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
    * makes it.
    */
   const [animateMode, setAnimateMode] = useState<'run' | 'button' | null>(null);
+
+  /** Display | Label Object… — the label the one picked point or curve carries. */
+  const [labelObject, setLabelObject] = useState<string | null>(null);
+
+  function handleLabelObject() {
+    const label = canvasRef.current?.labelObjectInfo();
+    if (label != null) setLabelObject(label);
+  }
 
   /**
    * Graph | Plot as (x, y)… — the two numbers picked go onto the frame as they
@@ -474,6 +483,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onPlotValueOnAxis={() => canvasRef.current?.plotValueOnAxis()}
         onPlotCurve={() => setPlotCurveOpen(true)}
         onAnimateObjects={() => setAnimateMode('run')}
+        onLabelObject={handleLabelObject}
         onActionButtonAnimation={() => setAnimateMode('button')}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}
@@ -634,6 +644,18 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setAnimateMode(null);
           }}
           onCancel={() => setAnimateMode(null)}
+        />
+      )}
+
+      {/* ── Display | Label Object… dialog ── */}
+      {labelObject !== null && (
+        <LabelObjectDialog
+          initial={labelObject}
+          onConfirm={(label) => {
+            canvasRef.current?.updateSelectedName(label);
+            setLabelObject(null);
+          }}
+          onCancel={() => setLabelObject(null)}
         />
       )}
 

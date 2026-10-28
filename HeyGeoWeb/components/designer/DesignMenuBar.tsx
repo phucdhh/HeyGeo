@@ -100,6 +100,8 @@ interface Props {
   onPlotCurve: () => void;
   /** Display | Animate Objects… — the studio opens the animation dialog. */
   onAnimateObjects: () => void;
+  /** Display | Label Object… — the studio opens the label dialog. */
+  onLabelObject: () => void;
   /** Edit | Action Buttons | Animation… — the studio asks how the button runs. */
   onActionButtonAnimation: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
@@ -250,6 +252,7 @@ export default function DesignMenuBar({
   onPlotValueOnAxis,
   onPlotCurve,
   onAnimateObjects,
+  onLabelObject,
   onActionButtonAnimation,
   onOpenTransform,
   onUnderDevelopment,
@@ -335,6 +338,8 @@ export default function DesignMenuBar({
   const plotted = plotPointRows();
   const actionButtons = actionButtonRow();
   const animation = animationRow();
+  // Display | Label Object… asks for the current text only when it may relabel.
+  const labelText = canvasRef.current?.labelObjectInfo() ?? null;
   const menus: MenuDef[] = [
     // ── File ──────────────────────────────────────────────────────────────
     {
@@ -455,7 +460,7 @@ export default function DesignMenuBar({
         { label: 'Text Style',                                     action: onUnderDevelopment },
         { separator: true },
         { label: 'Show/Hide Label',        shortcut: 'Ctrl+K',    action: () => canvasRef.current?.toggleSelectedLabel() },
-        { label: 'Label Object…',                                  action: onUnderDevelopment },
+        { label: 'Label Object…',          disabled: labelText === null, action: onLabelObject },
         { separator: true },
         { label: 'Hide Object',            shortcut: 'Ctrl+H',    action: () => canvasRef.current?.updateSelectedVisible(false) },
         { label: 'Show All Hidden',                                action: () => canvasRef.current?.showAllHidden() },

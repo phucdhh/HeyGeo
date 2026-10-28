@@ -263,6 +263,12 @@ export interface CanvasHandle {
   applyDilate: (params: { ratio: number }) => boolean;
   applyReflect: () => boolean;
   // Display menu
+  /**
+   * Display | Label Object… reads the label of the one picked point or curve,
+   * and answers null when the selection is not something the desktop's
+   * canEditChangeLabel would relabel.
+   */
+  labelObjectInfo: () => string | null;
   toggleSelectedLabel: () => void;
   toggleSelectedTrace: () => void;
   clearAllTraces: () => void;

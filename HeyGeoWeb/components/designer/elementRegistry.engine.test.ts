@@ -606,6 +606,18 @@ describe('the Display attributes the Context menu writes', () => {
     expect((r.elMap.A as any).visProp.withlabel).toBe(true);
     expect((r.elMap.A as any).visProp.trace).toBe(true);
   });
+
+  it('keeps the label text Display | Label Object… writes', () => {
+    const b = newBoard();
+    const elements = [
+      spec({ type: 'point', id: 'A', parents: [2, 3], attrs: { name: 'P' } }),
+      spec({ type: 'segment', id: 's1', parents: ['A', [4, 3]], attrs: { name: 'd' } }),
+    ];
+    const r = loader(b, elements);
+    expect(r.errors).toEqual([]);
+    expect((r.elMap.A as any).name).toBe('P');
+    expect((r.elMap.s1 as any).name).toBe('d');
+  });
 });
 
 // A desktop calculation used to arrive as the number the exporter had already
