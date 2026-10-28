@@ -1,5 +1,6 @@
 // ─── Tool modes – mirrors HeyGeoView::ToolMode enum from Desktop ─────────────
 import type { GridForm, GraphRows } from './coordsysModel';
+import type { FunctionRows } from './functionMenuModel';
 import type { MeasureItem } from './measureMenuModel';
 import type { MeasureSpec } from './measurement';
 import type { NumberSource } from './numberMenuModel';
@@ -282,6 +283,15 @@ export interface CanvasHandle {
   newCoordsys: () => boolean;
   /** Graph | Define Coordinate System…: the frame the picked points describe. */
   defineCoordsys: () => boolean;
+  /**
+   * Which of the two function rows the page answers to: a definition is always
+   * available, a plot needs one picked and a frame marked to be measured on.
+   */
+  functionRows: () => FunctionRows;
+  /** Graph | New Function…: the typed definition, shown on the page as text. */
+  newFunction: (expr: string, domain: [number, number]) => boolean;
+  /** Graph | Plot Function…: the picked definition drawn through the marked frame. */
+  plotFunction: () => boolean;
   /** Graph | Grid Form: one of the four ways a frame's grid is drawn. */
   setGridForm: (form: GridForm) => boolean;
   /** Graph | Hide Show Grid: the frame's own grid, not the page's. */

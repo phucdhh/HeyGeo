@@ -47,6 +47,7 @@ import SaveModelDialog       from './SaveModelDialog';
 import ElementPropertiesDialog from './ElementPropertiesDialog';
 import SliderConfigDialog from './SliderConfigDialog';
 import CalculateDialog from './CalculateDialog';
+import NewFunctionDialog from './NewFunctionDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
 
@@ -110,6 +111,9 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
 
   // Transform dialog (opened from Transform → Translate / Rotate / Dilate…)
   const [transformMode, setTransformMode] = useState<TransformMode | null>(null);
+
+  /** Graph | New Function… — open whenever the menu row is used; it needs nothing picked. */
+  const [newFunctionOpen, setNewFunctionOpen] = useState(false);
 
   // Locus dialog (opened from Construct → Locus…)
   const [locusDialogOpen, setLocusDialogOpen] = useState(false);
@@ -416,6 +420,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onCreateLocus={handleOpenLocusDialog}
         onNewParameter={handleNewParameter}
         onOpenCalculate={handleOpenCalculate}
+        onOpenNewFunction={() => setNewFunctionOpen(true)}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}
       />
@@ -527,6 +532,17 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setCalculate(null);
           }}
           onCancel={() => setCalculate(null)}
+        />
+      )}
+
+      {/* ── Graph | New Function… dialog ── */}
+      {newFunctionOpen && (
+        <NewFunctionDialog
+          onConfirm={(expr, domain) => {
+            canvasRef.current?.newFunction(expr, domain);
+            setNewFunctionOpen(false);
+          }}
+          onCancel={() => setNewFunctionOpen(false)}
         />
       )}
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { ToolMode, CanvasHandle, NumberValue } from './designTypes';
 import { COLOR_SWATCHES, POINT_STYLES } from './contextMenuModel';
 import { GRID_FORMS, type GridForm, type GraphRows } from './coordsysModel';
+import { type FunctionRows } from './functionMenuModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { canCalculate } from './numberMenuModel';
 
@@ -28,6 +29,9 @@ const NO_FRAME_ROWS: GraphRows = {
   canNew: false, canDefine: false, canGrid: false,
   grid: 'square', showGrid: false, snap: false,
 };
+
+/** A definition can always be typed; nothing is picked to plot yet. */
+const NO_FUNCTION_ROWS: FunctionRows = { canNew: true, canPlot: false, target: null };
 
 /** Graph | Grid Form, named the way the desktop's submenu names its four forms. */
 const GRID_FORM_LABELS: Record<GridForm, string> = {
@@ -71,6 +75,8 @@ interface Props {
   onNewParameter: () => void;
   /** Number | Calculate… — the studio opens the Calculator. */
   onOpenCalculate: () => void;
+  /** Graph | New Function… — the studio opens the function dialog. */
+  onOpenNewFunction: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
   onUnderDevelopment: () => void;
 }
@@ -211,6 +217,7 @@ export default function DesignMenuBar({
   onCreateLocus,
   onNewParameter,
   onOpenCalculate,
+  onOpenNewFunction,
   onOpenTransform,
   onUnderDevelopment,
 }: Props) {
@@ -258,9 +265,18 @@ export default function DesignMenuBar({
     return canvasRef.current?.graphRows() ?? NO_FRAME_ROWS;
   }
 
+  /**
+   * Whether the Graph menu's two function rows have something to work with: a
+   * definition can always be typed, a curve needs one picked and a frame marked.
+   */
+  function functionRows(): FunctionRows {
+    return canvasRef.current?.functionRows() ?? NO_FUNCTION_ROWS;
+  }
+
   // ─── Menu definitions – mirrors GSP Desktop menu order ────────────────
   // File | Edit | Display | Construct | Measure | Number | Transform | Graph | Window | Help
   const frames = frameRows();
+  const functions = functionRows();
   const menus: MenuDef[] = [
     // ── File ──────────────────────────────────────────────────────────────
     {
@@ -497,8 +513,14 @@ export default function DesignMenuBar({
         { separator: true },
         { label: 'Plot As (x, y)…',               action: onUnderDevelopment },
         { label: 'Plot Value On Axis…',           action: onUnderDevelopment },
-        { label: 'New Function…',                 action: onUnderDevelopment },
-        { label: 'Plot Function…',                action: onUnderDevelopment },
+        { label: 'New Function…',                 action: onOpenNewFunction },
+        // the desktop's canGraphPlotFunction: one definition picked, and a frame
+        // marked for it to be measured against
+        {
+          label: 'Plot Function…',
+          disabled: !functions.canPlot,
+          action: () => canvasRef.current?.plotFunction(),
+        },
         { label: 'Plot Parametric Curve…',        action: onUnderDevelopment },
         { label: 'Plot Table Data…',              action: onUnderDevelopment },
         { separator: true },

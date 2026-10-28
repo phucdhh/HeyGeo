@@ -233,7 +233,7 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
 }
 
 /** Attributes that describe the element to this app, not to JSXGraph. */
-const APP_ATTRS = ['measure', 'anchor', 'image', 'coordsys', 'plot'];
+const APP_ATTRS = ['measure', 'anchor', 'image', 'coordsys', 'plot', 'func'];
 
 /** Build one element from its HeyGeo JSON description. */
 export function createElement(

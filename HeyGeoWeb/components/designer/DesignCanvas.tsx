@@ -36,6 +36,7 @@ import {
   coordsysOf,
   defaultFrame,
   frameElements,
+  framePoints,
   frameSelection,
   graphRows,
   hasCoordsys,
@@ -46,6 +47,17 @@ import {
   type GridForm,
   type GraphRows,
 } from './coordsysModel';
+import {
+  functionCaption,
+  functionOf,
+  functionPlace,
+  functionRows,
+  nextFunctionName,
+  plotOfFunction,
+  plotTarget,
+  type FunctionRows,
+  type FunctionSpec,
+} from './functionMenuModel';
 import {
   frameGeometry,
   gridInk,
@@ -880,6 +892,82 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       unit: unitId
         ? { id: unitId, name: nameOf(unitId), coords: liveCoords(unitId) }
         : { id: nextElId('pt'), name: nextPointName(), coords: [origin[0] + 1, origin[1]] },
+    });
+  }
+
+  // ─── Functions and their plots ──────────────────────────────────────────────
+  /** The desktop writes a function definition as a 14pt italic label. */
+  const FUNCTION_STYLE = { strokeColor: '#333333', fontSize: 14, cssStyle: 'font-style: italic' };
+  /** and plots it in purple, two units thick. */
+  const PLOT_STYLE = { strokeColor: '#800080', strokeWidth: 2 };
+
+  /**
+   * Build one element, add it to the document as its own undo step and leave it
+   * picked, the way the desktop's graph menu does: it ends with clearSel and
+   * addSel, so the row that acts on what was just made is already answered.
+   */
+  function addObject(el: HeyGeoElement): boolean {
+    const board = boardRef.current;
+    if (!board) return false;
+    const { obj, error } = createElement(board, el, { ...board.objects });
+    if (!obj) {
+      onNotifyRef.current?.(error ?? `Không tạo được ${el.type}`);
+      return false;
+    }
+    saveSnapshot();
+    elementsRef.current.push(el);
+    board.update();
+    selectedRef.current = [obj];
+    setSelDecorations(computeDecorations(selectedRef.current, board));
+    onSelectionChange(selectedRef.current.map(toSelectedInfo));
+    onDirty();
+    return true;
+  }
+
+  /**
+   * Graph | New Function… — the definition the designer typed, shown on the page.
+   *
+   * What is stored is the formula as infix text plus its variable and domain, so
+   * the caption reads back what was typed and Plot Function has something to draw
+   * without the page ever compiling it.
+   */
+  function newFunction(expr: string, domain: [number, number]): boolean {
+    const board = boardRef.current;
+    if (!board) return false;
+    const spec: FunctionSpec = { expr, variable: 'x', from: domain[0], to: domain[1] };
+    const elements = elementsRef.current;
+    const [x, y] = functionPlace(elements);
+    return addObject({
+      type: 'text',
+      id: nextElId('fn'),
+      parents: [x, y, functionCaption(nextFunctionName(elements), spec)],
+      attrs: { ...FUNCTION_STYLE, func: spec },
+    });
+  }
+
+  /**
+   * Graph | Plot Function… — the picked definition drawn through the marked frame.
+   *
+   * The curve names the frame's three points as its parents and carries the
+   * formula, so it is measured in the frame and re-scales when the designer drags
+   * the unit point, exactly as Sketchpad's plot does.
+   */
+  function plotFunction(): boolean {
+    const board = boardRef.current;
+    if (!board) return false;
+    const elements = elementsRef.current;
+    const target = plotTarget(elements, selectedRef.current.map((o) => o.id));
+    const frame = framePoints(elements);
+    const spec = target ? functionOf(elements.find((e) => e.id === target)!) : null;
+    if (!frame || !spec) {
+      onNotifyRef.current?.('Cần một hàm số được chọn và một hệ trục tọa độ.');
+      return false;
+    }
+    return addObject({
+      type: 'plot',
+      id: nextElId('plot'),
+      parents: [...frame],
+      attrs: { ...PLOT_STYLE, plot: plotOfFunction(spec) },
     });
   }
 
@@ -2880,6 +2968,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     ),
     newCoordsys,
     defineCoordsys,
+    functionRows: (): FunctionRows => (
+      functionRows(elementsRef.current, selectedRef.current.map((o) => o.id))
+    ),
+    newFunction,
+    plotFunction,
     setGridForm,
     toggleFrameGrid,
     toggleSnap,

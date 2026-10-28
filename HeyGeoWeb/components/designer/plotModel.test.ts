@@ -106,6 +106,12 @@ describe('the reason a curve cannot be drawn', () => {
     expect(plotProblem(curve('x', 'window'))).toContain('window');
   });
 
+  it('refuses a number of the page rather than drawing a blank curve', () => {
+    // every sample of these is undefined, so the curve would simply not appear
+    expect(plotProblem(functionPlot('#0'))).toContain('trang vẽ');
+    expect(plotProblem(curve('t', '#1+#2', 't'))).toContain('trang vẽ');
+  });
+
   it('is not a domain that runs backwards', () => {
     expect(plotProblem({ ...curve('x', 'x'), from: 5, to: 5 })).toContain('miền');
     expect(plotProblem({ ...curve('x', 'x'), from: 5, to: -5 })).toContain('miền');

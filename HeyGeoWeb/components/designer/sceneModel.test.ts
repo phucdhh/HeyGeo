@@ -390,6 +390,25 @@ describe('measurement descriptors in the scene model', () => {
     expect(board.objects.m1.attrs.fontSize).toBe(13);
   });
 
+  it('re-creates a function definition when its formula changes', () => {
+    const func = (expr: string) => el({
+      type: 'text', id: 'f1', parents: [-7, 6, `f(x) = ${expr}`],
+      attrs: { fontSize: 14, func: { expr, variable: 'x', from: -5, to: 5 } },
+    });
+    // the caption is the formula it stores, and the plot drawn from it is bound
+    // to that formula, so an edit has to build both again
+    expect(constructionKey(func('x^2'))).not.toBe(constructionKey(func('x^2+1')));
+    expect(constructionKey(func('x^2'))).toBe(constructionKey(el({
+      type: 'text', id: 'other', parents: [1, 1, 'f(x) = x^2'],
+      attrs: { fontSize: 13, func: { expr: 'x^2', variable: 'x', from: -5, to: 5 } },
+    })));
+
+    const board = fakeBoard([]);
+    applyScene(board, scene(func('x^2')));
+    expect(board.objects.f1.attrs.func).toBeUndefined();
+    expect(board.objects.f1.attrs.fontSize).toBe(14);
+  });
+
   it('migrates a stored code caption on the way in, so a save writes data', () => {
     const legacy = el({
       type: 'text', id: 'old', parents: [1, 1,

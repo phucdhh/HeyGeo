@@ -11,6 +11,7 @@
  * may be read, how the caption names them, and where a new slider goes.
  */
 import { expressionRefs } from './expression';
+import { COLUMN_X, marginRow } from './functionMenuModel';
 import type { MeasureOp, MeasureSpec } from './measurement';
 import type { HeyGeoElement, SliderPos } from './designTypes';
 
@@ -114,19 +115,16 @@ export function calculateSpec(
 }
 
 /** A new parameter is dropped in the left margin, the way the desktop stacks value objects in a column. */
-const PARAM_LEFT = -7;
-const PARAM_RIGHT = -3.5;
-const PARAM_TOP = 6.5;
-/** Board units from one parameter's bar to the next. */
-const PARAM_ROW = 1.5;
+const PARAM_WIDTH = 3.5;
 
 /**
  * Where Number | New Parameter… puts its slider: the first near the top of the
  * left margin, each further one below it, so a page of parameters reads as the
- * column the desktop's positionNewValueObject builds.
+ * column the desktop's positionNewValueObject builds. The column is shared with
+ * the definitions of the Graph menu, which is what keeps the two from printing
+ * on top of each other.
  */
 export function parameterPlace(elements: HeyGeoElement[]): SliderPos {
-  const rows = elements.filter((e) => e.type === 'slider').length;
-  const y = PARAM_TOP - rows * PARAM_ROW;
-  return { x1: PARAM_LEFT, y1: y, x2: PARAM_RIGHT, y2: y };
+  const y = marginRow(elements);
+  return { x1: COLUMN_X, y1: y, x2: COLUMN_X + PARAM_WIDTH, y2: y };
 }

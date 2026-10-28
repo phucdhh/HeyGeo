@@ -87,6 +87,19 @@ export function hasCoordsys(elements: HeyGeoElement[]): boolean {
   return coordsysOf(elements) !== null;
 }
 
+/**
+ * The three points a plot is measured against: the origin, its unit point and the
+ * point that gives the y-direction. A curve drawn through the frame reads all
+ * three, so a document that is missing the third has no frame to plot on even
+ * though its origin still carries the mark.
+ */
+export function framePoints(elements: HeyGeoElement[]): [string, string, string] | null {
+  const sys = coordsysOf(elements);
+  if (!sys) return null;
+  const vertical = `${sys.origin}_v`;
+  return elements.some((e) => e.id === vertical) ? [sys.origin, sys.unit, vertical] : null;
+}
+
 /** Point types a frame can stand on — a slider is a number, not a place. */
 const FRAME_POINT_TYPES = ['point', 'glider', 'midpoint', 'intersection'];
 

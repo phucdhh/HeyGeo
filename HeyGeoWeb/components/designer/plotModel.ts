@@ -14,7 +14,7 @@
  * every load, so a saved document draws the same curve and the page never runs
  * anything it read from storage.
  */
-import { evalExpression, expressionVariables, type Variable } from './expression';
+import { evalExpression, expressionRefs, expressionVariables, type Variable } from './expression';
 import { frameGeometry, isMeasurable, type BoardPoint, type FrameGeometry } from './gridModel';
 
 /** The variables the desktop writes a formula in: `x`, and `t` for a curve. */
@@ -64,6 +64,12 @@ export function functionPlot(
 
 /** Why this curve cannot be drawn, or null when it can. */
 export function plotProblem(spec: PlotSpec): string | null {
+  // A `#0` is a number of the page, and a curve reads only its own variable: an
+  // operand slot would answer with no number at every sample, which draws as an
+  // empty board rather than as a curve the designer can see is missing.
+  if (expressionRefs(spec.x).length + expressionRefs(spec.y).length > 0) {
+    return `biểu thức lấy số từ trang vẽ, đường cong chỉ có biến ${spec.variable}`;
+  }
   const other = [...expressionVariables(spec.x), ...expressionVariables(spec.y)]
     .find((name) => name !== spec.variable);
   if (other) return `biểu thức cần ${other}, đường cong chỉ có biến ${spec.variable}`;

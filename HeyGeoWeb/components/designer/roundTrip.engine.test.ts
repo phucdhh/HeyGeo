@@ -103,6 +103,12 @@ const kitchenSink = (): HeyGeoElement[] => [
     type: 'plot', id: 'plot1', parents: ['O', 'U', 'O_v'],
     attrs: { plot: functionPlot('x^2-2'), strokeColor: '#800080' },
   }),
+  // and the definition the curve was plotted from: the formula as the designer
+  // typed it, shown on the page the way Sketchpad shows it
+  el({
+    type: 'text', id: 'fn1', parents: [-7, 6.5, 'f(x) = x^2-2'],
+    attrs: { fontSize: 14, strokeColor: '#333333', func: { expr: 'x^2-2', variable: 'x', from: -5, to: 5 } },
+  }),
   el({ type: 'slider', id: 'sl1', parents: [[-6, -6], [-2, -6], [0, 10, 4]], attrs: {} }),
   // The locus needs a traced point that really depends on the driver: JSXGraph
   // recurses until the stack dies when it does not.
@@ -329,6 +335,15 @@ describe('a saved document rebuilds the same drawing', () => {
     expect(again.objects.plot1.Y(0)).toBeCloseTo(-4);
     expect(again.objects.plot1.visProp.numberpoints).toBe(PLOT_SAMPLES);
     expect(String(again.objects.plot1.visProp.strokecolor)).toBe('#800080');
+    // the definition it was plotted from reloads as the caption the designer read.
+    // JSXGraph sets a power as a superscript of its own, so the two boards are
+    // compared on what they render rather than on the text that was typed
+    expect(String(b.objects.fn1.plaintext)).toMatch(/^f\(x\) = x/);
+    expect(String(again.objects.fn1.plaintext)).toBe(String(b.objects.fn1.plaintext));
+    expect(saved.find((e: HeyGeoElement) => e.id === 'fn1')!.attrs.func)
+      .toEqual({ expr: 'x^2-2', variable: 'x', from: -5, to: 5 });
+    // and JSXGraph never sees it, so the page has nothing of the formula to run
+    expect(again.objects.fn1.visProp?.func).toBeUndefined();
     expect(drawing(again)).toEqual(drawing(b));
   });
 

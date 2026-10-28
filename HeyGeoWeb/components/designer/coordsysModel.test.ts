@@ -3,6 +3,7 @@ import {
   coordsysOf,
   defaultFrame,
   frameElements,
+  framePoints,
   frameSelection,
   graphRows,
   hasCoordsys,
@@ -257,5 +258,18 @@ describe('dragging the origin', () => {
 
   it('is quiet on a board with no frame', () => {
     expect(originCarriesUnit([point('A', 0, 0)], dragged({ A: [1, 1] }), 'A')).toBeNull();
+  });
+});
+
+describe('the three points a plot is measured against', () => {
+  it('names the origin, its unit point and the point that gives the y direction', () => {
+    expect(framePoints(FRAME)).toEqual(['O', 'U', 'O_v']);
+  });
+
+  it('has none without a marked frame, nor with a frame missing its y direction', () => {
+    expect(framePoints([point('A', 0, 0), point('U', 1, 0)])).toBeNull();
+    // a hand-written document that marks a frame but never draws it has nothing
+    // to read a curve's y spacing from
+    expect(framePoints(FRAME.filter((e) => e.id !== 'O_v'))).toBeNull();
   });
 });

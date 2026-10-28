@@ -117,6 +117,9 @@ export function constructionKey(el: HeyGeoElement): string {
     el.attrs?.image ?? null,
     el.attrs?.coordsys ?? null,
     el.attrs?.plot ?? null,
+    // a definition's caption is the formula it stores, so editing it means the
+    // text object has to be built again with the new one
+    el.attrs?.func ?? null,
   ]);
 }
 
@@ -133,7 +136,7 @@ export function coordParents(el: HeyGeoElement): number[] | null {
 }
 
 /** Descriptors this app reads; JSXGraph never sees them, so they are not style. */
-const APP_ATTRS = new Set(['measure', 'anchor', 'image', 'coordsys', 'plot']);
+const APP_ATTRS = new Set(['measure', 'anchor', 'image', 'coordsys', 'plot', 'func']);
 
 export function attrsDiffer(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
   const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
