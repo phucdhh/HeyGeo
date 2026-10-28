@@ -54,6 +54,7 @@ import PlotCurveDialog from './PlotCurveDialog';
 import AnimateDialog from './AnimateDialog';
 import LabelObjectDialog from './LabelObjectDialog';
 import ColorDialog from './ColorDialog';
+import SamplesDialog from './SamplesDialog';
 import LocusDialog from './LocusDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
 
@@ -145,6 +146,14 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
   function handleOtherColor() {
     const color = canvasRef.current?.selectedColor();
     if (color != null) setOtherColor(color);
+  }
+
+  /** Display | Number of Samples… — how many times the picked locus is stepped. */
+  const [samples, setSamples] = useState<number | null>(null);
+
+  function handleSamples() {
+    const count = canvasRef.current?.samplesInfo();
+    if (count != null) setSamples(count);
   }
 
   /**
@@ -494,6 +503,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onAnimateObjects={() => setAnimateMode('run')}
         onLabelObject={handleLabelObject}
         onOtherColor={handleOtherColor}
+        onSamples={handleSamples}
         onActionButtonAnimation={() => setAnimateMode('button')}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}
@@ -678,6 +688,18 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setOtherColor(null);
           }}
           onCancel={() => setOtherColor(null)}
+        />
+      )}
+
+      {/* ── Display | Number of Samples… dialog ── */}
+      {samples !== null && (
+        <SamplesDialog
+          initial={samples}
+          onConfirm={(count) => {
+            canvasRef.current?.setSamples(count);
+            setSamples(null);
+          }}
+          onCancel={() => setSamples(null)}
         />
       )}
 

@@ -104,6 +104,8 @@ interface Props {
   onLabelObject: () => void;
   /** Display | Color | Other Color… — the studio opens the colour dialog. */
   onOtherColor: () => void;
+  /** Display | Number of Samples… — the studio opens the sample-count dialog. */
+  onSamples: () => void;
   /** Edit | Action Buttons | Animation… — the studio asks how the button runs. */
   onActionButtonAnimation: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
@@ -256,6 +258,7 @@ export default function DesignMenuBar({
   onAnimateObjects,
   onLabelObject,
   onOtherColor,
+  onSamples,
   onActionButtonAnimation,
   onOpenTransform,
   onUnderDevelopment,
@@ -345,6 +348,8 @@ export default function DesignMenuBar({
   const labelText = canvasRef.current?.labelObjectInfo() ?? null;
   // Display | Color | Other Color… writes to the same picks the swatches do.
   const pickedColor = canvasRef.current?.selectedColor() ?? null;
+  // Display | Number of Samples… needs exactly one locus picked.
+  const samples = canvasRef.current?.samplesInfo() ?? null;
   const menus: MenuDef[] = [
     // ── File ──────────────────────────────────────────────────────────────
     {
@@ -481,7 +486,7 @@ export default function DesignMenuBar({
         { label: 'Trace Object',                                   action: () => canvasRef.current?.toggleSelectedTrace() },
         { label: 'Clear Traces',                                   action: () => canvasRef.current?.clearAllTraces() },
         { separator: true },
-        { label: 'Number of Samples…',                             action: onUnderDevelopment },
+        { label: 'Number of Samples…',     disabled: samples === null, action: onSamples },
       ],
     },
 

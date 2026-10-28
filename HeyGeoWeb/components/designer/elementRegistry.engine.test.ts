@@ -338,6 +338,26 @@ describe('registry against the real engine', () => {
     expect(disc.visProp.hasinnerpoints).toBe(true);
   });
 
+  it('samples a locus as many times as the document says, and resamples on change', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [0, 0] }),
+      spec({ type: 'point', id: 'B', parents: [5, 0] }),
+      spec({ type: 'segment', id: 's1', parents: ['A', 'B'] }),
+      spec({ type: 'glider', id: 'G', parents: [2, 0, 's1'] }),
+      spec({ type: 'midpoint', id: 'M', parents: ['A', 'G'] }),
+      spec({ type: 'tracecurve', id: 'lc1', parents: ['G', 'M'], attrs: { numberPoints: 40 } }),
+    ]);
+    expect(r.errors).toEqual([]);
+    const locus = r.elMap.lc1 as any;
+    expect(locus.elType).toBe('curve');
+    expect(locus.dataX.length).toBe(41);
+
+    locus.setAttribute({ numberPoints: 60 });
+    b.update();
+    expect(locus.dataX.length).toBe(61);
+  });
+
   it('surfaces an engine error with its message', () => {
     const b = newBoard();
     const out = createElement(b, spec({ type: 'segment', parents: [[0, 0], [0, 0]] }));

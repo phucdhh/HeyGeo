@@ -278,6 +278,9 @@ export interface CanvasHandle {
    */
   labelObjectInfo: () => string | null;
   toggleSelectedLabel: () => void;
+  /** Display | Number of Samples… — the picked locus' count, or null. */
+  samplesInfo: () => number | null;
+  setSamples: (samples: number) => boolean;
   toggleSelectedTrace: () => void;
   clearAllTraces: () => void;
   showAllHidden: () => void;

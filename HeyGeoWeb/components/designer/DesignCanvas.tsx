@@ -3690,6 +3690,30 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       onDirty();
     },
 
+    samplesInfo: () => {
+      const sel = selectedRef.current;
+      if (sel.length !== 1) return null;
+      const rec = elementsRef.current.find((e) => e.id === sel[0].id);
+      if (rec?.type !== 'tracecurve') return null;
+      const obj = boardRef.current?.objects[rec.id] as { numberPoints?: number } | undefined;
+      return typeof obj?.numberPoints === 'number' ? obj.numberPoints : null;
+    },
+
+    setSamples: (samples: number) => {
+      const board = boardRef.current;
+      const sel = selectedRef.current;
+      if (!board || sel.length !== 1) return false;
+      const rec = elementsRef.current.find((e) => e.id === sel[0].id);
+      const obj = board.objects[rec?.id ?? ''] as { setAttribute?: (a: Record<string, unknown>) => void } | undefined;
+      if (rec?.type !== 'tracecurve' || !obj?.setAttribute) return false;
+      saveSnapshot();
+      obj.setAttribute({ numberPoints: samples });
+      rec.attrs.numberPoints = samples;
+      board.update();
+      onDirty();
+      return true;
+    },
+
     toggleSelectedTrace: () => {
       saveSnapshot();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
