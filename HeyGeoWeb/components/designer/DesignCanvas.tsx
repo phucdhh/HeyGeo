@@ -1833,7 +1833,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     let panStartX = 0, panStartY = 0;
     let panBB: [number, number, number, number] | null = null;
 
-    function getLocalXY(evt: MouseEvent): { sx: number; sy: number } {
+    function getLocalXY(evt: { clientX: number; clientY: number }): { sx: number; sy: number } {
       const rect = container!.getBoundingClientRect();
       return { sx: evt.clientX - rect.left, sy: evt.clientY - rect.top };
     }
@@ -1908,6 +1908,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       }
 
       if (!rubberRef.current.active) return;
+      finishRubberBand();
+    }
+
+    /** Finish the rubber band: everything inside it becomes the selection. */
+    function finishRubberBand() {
       rubberRef.current.active = false;
       const rb = rubberBandRef.current;
       if (rb && (rb.w > 5 || rb.h > 5)) {
@@ -1968,14 +1973,73 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       if (container) container.style.cursor = '';
     }
 
+    /**
+     * Touch answers the same gestures as the mouse for the parts the browser
+     * does not synthesise: a drag on empty canvas draws the rubber band instead
+     * of scrolling the page, and two fingers are left to the board's own pinch
+     * zoom. A touch that lands on a shape is left alone, so JSXGraph still
+     * drags the point or line under the finger.
+     */
+    const onEmptyCanvas = (target: EventTarget | null): boolean => {
+      const el = target as Element | null;
+      if (!el || !el.tagName) return false;
+      const tag = el.tagName.toLowerCase();
+      // The board's own root SVG and the grid layer are the page; a shape is a
+      // path, circle or text, and a label is an HTML label — never empty space.
+      if (tag === 'svg') return true;
+      if (tag === 'div') return el.id === BOARD_ID || el.classList.contains('jxgbox');
+      return false;
+    };
+
+    function onTouchStart(evt: TouchEvent) {
+      if (toolRef.current !== 'selection') return;
+      if (evt.touches.length !== 1) return;
+      if (!onEmptyCanvas(evt.target)) return;
+      const t = evt.changedTouches[0];
+      if (!t) return;
+      const { sx, sy } = getLocalXY(t);
+      clearSelection();
+      rubberRef.current = { active: true, startX: sx, startY: sy, curX: sx, curY: sy };
+      evt.preventDefault();
+    }
+
+    function onTouchMove(evt: TouchEvent) {
+      if (!rubberRef.current.active) return;
+      const t = evt.touches[0];
+      if (!t) return;
+      const { sx, sy } = getLocalXY(t);
+      rubberRef.current.curX = sx;
+      rubberRef.current.curY = sy;
+      const x = Math.min(rubberRef.current.startX, sx);
+      const y = Math.min(rubberRef.current.startY, sy);
+      const w = Math.abs(sx - rubberRef.current.startX);
+      const h = Math.abs(sy - rubberRef.current.startY);
+      if (w > 3 || h > 3) setRubberBand({ x, y, w, h });
+      evt.preventDefault();
+    }
+
+    function onTouchEnd(evt: TouchEvent) {
+      if (!rubberRef.current.active) return;
+      // Stopping the touch here also suppresses the mouse events the browser
+      // would replay afterwards, which would clear what the band just picked.
+      if (evt.cancelable) evt.preventDefault();
+      finishRubberBand();
+    }
+
     container.addEventListener('mousedown', onMouseDown);
     container.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup',   onMouseUp);
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend',  onTouchEnd);
     return () => {
       container.removeEventListener('mousedown', onMouseDown);
+      container.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup',   onMouseUp);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend',  onTouchEnd);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2863,6 +2927,20 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const curTool = toolRef.current;
     if (isPolygonTool(curTool) && p.phase === 'polygon' && (p.polyVerts?.length ?? 0) >= 3) {
       finishPolygon(curTool);
+    }
+  }
+
+  /** A double tap is a double click on a touch screen; the browser may not send one. */
+  const lastTapRef = useRef<{ at: number; x: number; y: number } | null>(null);
+  function handleOverlayTouchEnd(evt: React.TouchEvent<HTMLDivElement>) {
+    const t = evt.changedTouches[0];
+    if (!t) return;
+    const now = Date.now();
+    const last = lastTapRef.current;
+    lastTapRef.current = { at: now, x: t.clientX, y: t.clientY };
+    if (last && now - last.at < 300 && Math.hypot(t.clientX - last.x, t.clientY - last.y) < 24) {
+      lastTapRef.current = null;
+      handleOverlayDblClick();
     }
   }
 
@@ -4039,9 +4117,12 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           onClick={handleOverlayClick}
           onDoubleClick={handleOverlayDblClick}
           onMouseMove={handleOverlayMove}
+          onTouchEnd={handleOverlayTouchEnd}
           style={{
             position: 'absolute', inset: 0,
             pointerEvents: tool === 'selection' ? 'none' : 'auto',
+            // A tap places a point; it must not also pan or zoom the page.
+            touchAction: 'none',
             cursor: tool === 'selection'      ? 'default'
               : tool === 'point'              ? 'crosshair'
               : tool === 'point_on_object'    ? 'cell'
