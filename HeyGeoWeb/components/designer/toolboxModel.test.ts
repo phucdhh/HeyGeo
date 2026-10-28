@@ -13,6 +13,7 @@ import {
   cycleVariation,
   familyOf,
   isPolygonTool,
+  rowVariation,
   TOOL_FAMILIES,
   variationHint,
   variationLabel,
@@ -109,5 +110,21 @@ describe('keyboard tool switching', () => {
       'arrow', 'point', 'compass', 'straight', 'polygon', 'slider', 'text', 'pen', 'info', 'arrow',
     ]);
     expect(cycleFamily('info', 'translate', -1)?.tool).toBe('pen');
+  });
+
+  it('gives every row a member a single click activates', () => {
+    // the row of the tool in hand keeps the variation it shows
+    expect(rowVariation(family('straight'), 'line', 'translate')).toEqual(
+      family('straight').variations[2]);
+    // another family's row falls back to its first member, so Point, Text and
+    // Pen are reachable with a mouse or a finger, not only by shortcut
+    expect(rowVariation(family('point'), 'segment', 'translate')).toEqual(
+      family('point').variations[0]);
+    expect(rowVariation(family('text'), 'selection', 'dilate')).toEqual(
+      family('text').variations[0]);
+    expect(rowVariation(family('arrow'), 'segment', 'translate')).toEqual(
+      family('arrow').variations[0]);
+    // the custom tray has nothing to offer yet
+    expect(rowVariation(family('custom'), 'segment', 'translate')).toBeUndefined();
   });
 });

@@ -102,6 +102,20 @@ export function isActiveVariation(v: ToolVariation, tool: ToolMode, arrow: Arrow
 }
 
 /**
+ * The variation a click on this row activates: the one the row is showing when
+ * its family is the current tool, and otherwise the family's first member, so
+ * a row is always a way into its tool and not only into the one already held.
+ * `undefined` for the custom-tool row, which has nothing to offer yet.
+ */
+export function rowVariation(
+  family: ToolFamily,
+  tool: ToolMode,
+  arrow: ArrowMode,
+): ToolVariation | undefined {
+  return family.variations.find((v) => sameVariation(v, tool, arrow)) ?? family.variations[0];
+}
+
+/**
  * The three polygon tools gather vertices the same way; only what they leave on
  * the board differs.
  */

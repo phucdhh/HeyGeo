@@ -6,6 +6,7 @@ import {
   isActiveVariation,
   TOOL_FAMILIES,
   variationLabel,
+  rowVariation,
   type ArrowMode,
   type ToolFamily,
   type ToolVariation,
@@ -363,7 +364,7 @@ function ToolRow({ family, current, active, open, onOpen, onClose, onSelect, onE
         <Flyout
           familyId={family.id}
           items={family.variations}
-          isCurrent={(v) => v === current}
+          isCurrent={(v) => active && v === current}
           onSelect={onSelect}
           onClose={onClose}
         />
@@ -396,7 +397,11 @@ export default function DesignToolbar({ tool, arrow, onToolChange, onUnderDevelo
       style={{ minHeight: 0 }}
     >
       {TOOL_FAMILIES.map((family) => {
-        const rowCurrent = family.variations.find((v) => isActiveVariation(v, tool, arrow));
+        // The row shows, and a single click activates, the member the family is
+        // on — or its first member when another tool is held. Without the
+        // fallback a mouse or a finger could never reach Point, Text or Pen.
+        const active = family.variations.some((v) => isActiveVariation(v, tool, arrow));
+        const shown = rowVariation(family, tool, arrow);
         return (
           <div key={family.id} className="contents">
             {SEPARATOR_BEFORE.has(family.id) && (
@@ -404,8 +409,8 @@ export default function DesignToolbar({ tool, arrow, onToolChange, onUnderDevelo
             )}
             <ToolRow
               family={family}
-              current={rowCurrent}
-              active={!!rowCurrent}
+              current={shown}
+              active={active}
               open={openFamily === family.id}
               onOpen={() => setOpenFamily(family.id)}
               onClose={() => setOpenFamily(null)}
