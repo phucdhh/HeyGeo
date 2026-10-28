@@ -285,6 +285,10 @@ export interface CanvasHandle {
   fontInfo: () => { size: number | null; family: string | null } | null;
   /** Display | Font — set the size, the family or both as one undo step. */
   updateSelectedFont: (font: { family?: string; size?: number }) => boolean;
+  /** Construct | Arc On Circle — one circle and two points are picked. */
+  canArcOnCircle: () => boolean;
+  /** Construct | Arc On Circle — draw the counterclockwise arc between them. */
+  createArcOnCircle: () => boolean;
   /** Display | Number of Samples… — the picked locus' count, or null. */
   samplesInfo: () => number | null;
   setSamples: (samples: number) => boolean;

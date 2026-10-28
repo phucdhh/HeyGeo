@@ -877,6 +877,48 @@ describe('an arc measured over the real board', () => {
   });
 });
 
+// Construct | Arc On Circle authors [centre, start, end] — the same shape the
+// desktop exporter writes — with the start a glider on the circle, so the arc
+// spans whatever quarter the designer slides it to.
+describe('an arc on a circle the designer picks', () => {
+  const elements = [
+    spec({ type: 'point', id: 'A', parents: [1, 1], attrs: { name: 'A' } }),
+    spec({ type: 'point', id: 'B', parents: [3, 1], attrs: { name: 'B' } }),
+    spec({ type: 'circle', id: 'c1', parents: ['A', 'B'] }),
+    spec({ type: 'glider', id: 'S', parents: [3, 1, 'c1'] }),
+    spec({ type: 'point', id: 'E', parents: [1, 3] }),
+    spec({ type: 'arc', id: 'ar', parents: ['A', 'S', 'E'] }),
+  ];
+
+  it('sweeps counterclockwise from the first point to the second', () => {
+    const b = newBoard();
+    const r = loader(b, elements);
+    expect(r.errors).toEqual([]);
+    b.update();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const arc = r.elMap.ar as any;
+    expect(arc.elType).toBe('arc');
+    expect(arc.dataX[0]).toBeCloseTo(3, 6);
+    expect(arc.dataY[0]).toBeCloseTo(1, 6);
+    expect(arc.dataX[arc.dataX.length - 1]).toBeCloseTo(1, 6);
+    expect(arc.dataY[arc.dataY.length - 1]).toBeCloseTo(3, 6);
+  });
+
+  it('turns with the glider it starts at', () => {
+    const b = newBoard();
+    const r = loader(b, elements);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (r.elMap.S as any).moveTo([1, -1]);
+    b.update();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const arc = r.elMap.ar as any;
+    expect(arc.dataX[0]).toBeCloseTo(1, 6);
+    expect(arc.dataY[0]).toBeCloseTo(-1, 6);
+    expect(arc.dataX[arc.dataX.length - 1]).toBeCloseTo(1, 6);
+    expect(arc.dataY[arc.dataY.length - 1]).toBeCloseTo(3, 6);
+  });
+});
+
 // Choosing Measure | Area writes its caption beside the shape, through the
 // anchor captionAnchor gives the designer. The number has to keep its place over
 // the shape as the shape is dragged, because that anchor is the only position

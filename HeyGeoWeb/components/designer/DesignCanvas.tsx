@@ -33,6 +33,7 @@ import {
   anchorClosures, captionAnchor, isMeasureSpec, measureValue, type MeasureSpec,
 } from './measurement';
 import { circleByRadiusPicks } from './circleByRadiusModel';
+import { arcOnCirclePicks, isPointKind, type ArcOnCircle } from './arcOnCircleModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { numberSources, parameterPlace } from './numberMenuModel';
 import {
@@ -901,6 +902,26 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       };
     });
     return circleByRadiusPicks(picks);
+  }
+
+  /**
+   * The circle and endpoints Construct | Arc On Circle would use, with the
+   * centre point the circle is built from. The document stores the arc as
+   * [centre, start, end] — the same shape the desktop exporter writes — and
+   * the engine sweeps that counterclockwise, the way the desktop does.
+   */
+  function arcOnCircleSelection(): { arc: ArcOnCircle; centre: string } | null {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const picked = arcOnCirclePicks(selectedRef.current.map((o: any) => ({
+      id: o.id as string,
+      kind: (o.elType ?? '') as string,
+    })));
+    if (!picked) return null;
+    const circle = elementsRef.current.find((e) => e.id === picked.circle);
+    const centre = String(circle?.parents[0] ?? '');
+    const centreEl = elementsRef.current.find((e) => e.id === centre);
+    if (!centreEl || !isPointKind(centreEl.type)) return null;
+    return { arc: picked, centre };
   }
 
   /**
@@ -3464,6 +3485,18 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         type: 'circle', id: nextElId('circ'),
         parents: [picked.center, picked.radius],
         attrs: { strokeColor: '#1e3c96', strokeWidth: 2, fillColor: 'none', withLabel: false },
+      });
+    },
+
+    canArcOnCircle: () => arcOnCircleSelection() !== null,
+
+    createArcOnCircle: () => {
+      const picked = arcOnCircleSelection();
+      if (!picked) return false;
+      return addObject({
+        type: 'arc', id: nextElId('arc'),
+        parents: [picked.centre, picked.arc.start, picked.arc.end],
+        attrs: { strokeColor: '#1e3c96', strokeWidth: 2, withLabel: false },
       });
     },
 

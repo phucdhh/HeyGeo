@@ -528,7 +528,11 @@ export default function DesignMenuBar({
           disabled: !canvasRef.current?.canCircleByRadius(),
           action: () => canvasRef.current?.createCircleByRadius(),
         },
-        { label: 'Arc On Circle',                                  action: onUnderDevelopment },
+        {
+          label: 'Arc On Circle',
+          disabled: !canvasRef.current?.canArcOnCircle(),
+          action: () => canvasRef.current?.createArcOnCircle(),
+        },
         { label: 'Arc Through 3 Points',                           action: () => onToolChange('arc') },
         { separator: true },
         // Interiors
