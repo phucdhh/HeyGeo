@@ -103,6 +103,28 @@ export function withDependents(els: HeyGeoElement[], seed: Iterable<string>): Se
   return out;
 }
 
+/**
+ * Edit | Select Parents: what the picks are built from, in document order.
+ * Descriptor references count, so a caption picks the segment it measures.
+ */
+export function parentsOf(els: HeyGeoElement[], selection: Iterable<string>): string[] {
+  const picked = new Set(selection);
+  const wants = new Set<string>();
+  for (const el of els) {
+    if (!picked.has(el.id)) continue;
+    for (const p of parentIds(el)) wants.add(p);
+  }
+  return els.filter((e) => wants.has(e.id)).map((e) => e.id);
+}
+
+/** Edit | Select Children: what is built directly on the picks, in document order. */
+export function childrenOf(els: HeyGeoElement[], selection: Iterable<string>): string[] {
+  const picked = new Set(selection);
+  return els
+    .filter((e) => !picked.has(e.id) && parentIds(e).some((p) => picked.has(p)))
+    .map((e) => e.id);
+}
+
 // ─── What counts as a change ──────────────────────────────────────────────────
 
 /**

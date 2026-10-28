@@ -115,6 +115,8 @@ import {
   gatherSelectionPoints,
   planScene,
   polygonElements,
+  parentsOf,
+  childrenOf,
   pushCapped,
   setSceneChrome,
   syncPositions,
@@ -2188,23 +2190,42 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     onDirty();
   }
 
+  /** Replace the selection with these objects, drawn and announced. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function selectObjects(objs: any[]) {
+    clearSelection();
+    selectedRef.current = objs;
+    objs.forEach((o) => highlightObj(o, true));
+    setSelDecorations(computeDecorations(objs, boardRef.current));
+    onSelectionChange(objs.map(toSelectedInfo));
+  }
+
   /** Sketchpad's Select Parents: the objects these were built from become the selection. */
   function selectParentsOfSelection() {
     const board = boardRef.current;
     if (!board) return;
-    const ids = new Set<string>();
-    for (const obj of selectedRef.current) {
-      const rec = elementsRef.current.find((e) => e.id === obj.id);
-      rec?.parents.forEach((p) => {
-        if (typeof p === 'string' && board.objects[p as string]) ids.add(p as string);
-      });
-    }
+    const ids = parentsOf(elementsRef.current, selectedRef.current.map((o: { id: string }) => o.id));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parents = [...ids].map((id) => board.objects[id]).filter(Boolean) as any[];
-    if (parents.length === 0) return;
-    selectedRef.current = parents;
-    setSelDecorations(computeDecorations(parents, board));
-    onSelectionChange(parents.map(toSelectedInfo));
+    const parents = ids.map((id) => board.objects[id]).filter(Boolean) as any[];
+    if (parents.length === 0) {
+      onNotifyRef.current?.('Những đối tượng này không được dựng từ đối tượng nào.');
+      return;
+    }
+    selectObjects(parents);
+  }
+
+  /** Edit | Select Children: what is built directly on the picks becomes the selection. */
+  function selectChildrenOfSelection() {
+    const board = boardRef.current;
+    if (!board) return;
+    const ids = childrenOf(elementsRef.current, selectedRef.current.map((o: { id: string }) => o.id));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const children = ids.map((id) => board.objects[id]).filter(Boolean) as any[];
+    if (children.length === 0) {
+      onNotifyRef.current?.('Không có đối tượng nào được dựng từ những đối tượng này.');
+      return;
+    }
+    selectObjects(children);
   }
 
   /**
@@ -3005,6 +3026,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     updateSelectedPointSize: (size: number) => attrToSelected({ size }),
 
     selectParents: selectParentsOfSelection,
+
+    selectChildren: selectChildrenOfSelection,
 
     bringSelectedForward: () => shiftSelectedLayer(1),
 

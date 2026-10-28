@@ -236,6 +236,8 @@ export interface CanvasHandle {
   closeContextMenu: () => boolean;
   // Display commands the Context menu reaches directly
   selectParents: () => void;
+  /** Edit | Select Children: what is built directly on the picks. */
+  selectChildren: () => void;
   updateSelectedPointSize: (size: number) => void;
   bringSelectedForward: () => void;
   sendSelectedToBack: () => void;

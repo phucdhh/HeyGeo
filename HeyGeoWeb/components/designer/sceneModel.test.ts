@@ -10,6 +10,8 @@ import {
   takeScene,
   UNDO_LIMIT,
   withDependents,
+  parentsOf,
+  childrenOf,
   type SceneSnapshot,
 } from './sceneModel';
 import type { HeyGeoElement } from './designTypes';
@@ -97,6 +99,24 @@ describe('dependency graph', () => {
       el({ type: 'point', id: 'p1', parents: ['s1'] }),
     ];
     expect([...withDependents(cyclic, ['s1'])].sort()).toEqual(['p1', 's1']);
+  });
+
+  it('walks one step either way for Select Parents and Select Children', () => {
+    // one step up from the circle reaches both the point and the midpoint, but
+    // the segment they share is a grandparent and stays out of it
+    expect(parentsOf(tri, ['c1'])).toEqual(['A', 'm1']);
+    expect(childrenOf(tri, ['A'])).toEqual(['s1', 'c1']);
+    expect(childrenOf(tri, ['m1'])).toEqual(['c1']);
+    // a caption's measurement is a parent even though it is not a coordinate
+    const withCaption = [
+      ...tri,
+      el({
+        type: 'text', id: 't1', parents: [0, 0, 'AB'],
+        attrs: { measure: { op: 'distance', args: ['A', 'B'], label: 'AB' } },
+      }),
+    ];
+    expect(parentsOf(withCaption, ['t1'])).toEqual(['A', 'B']);
+    expect(childrenOf(withCaption, ['B'])).toEqual(['s1', 't1']);
   });
 });
 
