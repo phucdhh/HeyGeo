@@ -252,6 +252,9 @@ export interface CanvasHandle {
   /** Construct | Circle By Center+Radius: a point and a segment or length reading. */
   canCircleByRadius: () => boolean;
   createCircleByRadius: () => boolean;
+  /** Construct | Circle Interior: one picked circle, filled as its own disc. */
+  canCircleInterior: () => boolean;
+  createCircleInterior: () => boolean;
   createBisector: () => void;
   createCenter: () => void;
   createEndpoint: () => void;

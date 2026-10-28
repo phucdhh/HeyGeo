@@ -514,7 +514,11 @@ export default function DesignMenuBar({
         { separator: true },
         // Interiors
         { label: 'Polygon',                shortcut: 'Alt+G',     action: () => onToolChange('polygon') },
-        { label: 'Circle Interior',                                action: onUnderDevelopment },
+        {
+          label: 'Circle Interior',
+          disabled: !canvasRef.current?.canCircleInterior(),
+          action: () => canvasRef.current?.createCircleInterior(),
+        },
         { label: 'Sector Interior',                                action: onUnderDevelopment },
         { label: 'Arc Interior',                                   action: onUnderDevelopment },
         { separator: true },

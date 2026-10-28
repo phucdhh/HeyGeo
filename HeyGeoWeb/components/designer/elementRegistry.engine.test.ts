@@ -315,6 +315,29 @@ describe('registry against the real engine', () => {
     expect((r.elMap.c1 as any).Radius()).toBeCloseTo(8);
   });
 
+  it('draws a circle interior as the filled disc the desktop exports', () => {
+    const b = newBoard();
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [0, 0] }),
+      spec({ type: 'point', id: 'B', parents: [3, 0] }),
+      spec({ type: 'circle', id: 'c1', parents: ['A', 'B'] }),
+      spec({
+        type: 'circle', id: 'int1', parents: ['A', 'B'],
+        attrs: {
+          strokeColor: '#1e3c96', strokeOpacity: 0,
+          fillColor: '#1e3c96', fillOpacity: 0.12,
+          hasInnerPoints: true, withLabel: false,
+        },
+      }),
+    ]);
+    expect(r.errors).toEqual([]);
+    const disc = r.elMap.int1 as any;
+    expect(disc.elType).toBe('circle');
+    expect(disc.visProp.fillopacity).toBeCloseTo(0.12);
+    expect(disc.visProp.strokeopacity).toBeCloseTo(0);
+    expect(disc.visProp.hasinnerpoints).toBe(true);
+  });
+
   it('surfaces an engine error with its message', () => {
     const b = newBoard();
     const out = createElement(b, spec({ type: 'segment', parents: [[0, 0], [0, 0]] }));

@@ -174,6 +174,15 @@ const CONTEXT_MENU_KINDS = [...SELECTABLE_KINDS, 'text', 'angle'];
  *  canEditChangeLabel does; a slider or a caption has no label of its own. */
 const RELABEL_KINDS = SELECTABLE_KINDS.filter((k) => k !== 'slider');
 
+/** Construct | Circle Interior: the filled disc alone, with no second outline
+ *  drawn over the circle it fills. The desktop exports the interior as the same
+ *  circle with fill attributes, so this is the shape a reload reads back. */
+const INTERIOR_STYLE = {
+  strokeColor: '#1e3c96', strokeOpacity: 0,
+  fillColor: '#1e3c96', fillOpacity: 0.12,
+  hasInnerPoints: true, withLabel: false,
+};
+
 // ─── The frame's grid, as it is painted on the page ─────────────────────────
 // The desktop draws it inside G_coordsys::draw(): a grey pen for the lines and the
 // axis ink for the ticks and their numbers. Where the picture goes is the grid
@@ -3374,6 +3383,24 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         });
         onDirty();
       } catch { /**/ }
+    },
+
+    canCircleInterior: () => {
+      const sel = selectedRef.current;
+      if (sel.length !== 1) return false;
+      return elementsRef.current.find((e) => e.id === sel[0].id)?.type === 'circle';
+    },
+
+    createCircleInterior: () => {
+      const sel = selectedRef.current;
+      if (sel.length !== 1) return false;
+      const source = elementsRef.current.find((e) => e.id === sel[0].id);
+      if (source?.type !== 'circle') return false;
+      return addObject({
+        type: 'circle', id: nextElId('int'),
+        parents: [...source.parents],
+        attrs: { ...INTERIOR_STYLE },
+      });
     },
 
     canCircleByRadius: () => circleRadiusPicks() !== null,
