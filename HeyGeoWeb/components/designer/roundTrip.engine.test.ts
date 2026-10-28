@@ -595,6 +595,62 @@ describe('a document exported from the desktop app', () => {
     expect(String(b.objects.mea0.plaintext)).toContain('= 1.50');
     expect(String(b.objects.mea1.plaintext)).toContain('(1.50; 0.50)');
   });
+
+  it('loads the frame the exporter builds, without its own viewer wiring', () => {
+    // A desktop coordinate system arrives as plain lines and ticks plus two
+    // eventbindings that only its viewer runs (U follows O, ticks re-space).
+    // The drawing is all this app should keep; the bindings must not be
+    // reported as types it does not know.
+    const b = newBoard();
+    const loaded = load(b, [
+      el({ type: 'point', id: 'p0', parents: [0, 0], attrs: { name: 'O' } }),
+      el({ type: 'point', id: 'p1', parents: [2, 0], attrs: { name: 'U' } }),
+      el({
+        type: 'point', id: 'cs0_v', parents: ['p1'],
+        attrs: { visible: false, withLabel: false, image: { op: 'rotate', of: ['p0'], angle: 90 } },
+      }),
+      el({
+        type: 'line', id: 'cs0_x', parents: ['p0', 'p1'],
+        attrs: { straightFirst: true, straightLast: true, lastArrow: true, firstArrow: false, name: 'x' },
+      }),
+      el({
+        type: 'ticks', id: 'cs0_xticks', parents: ['cs0_x', 2],
+        attrs: { drawLabels: false, insertTicks: false, minorTicks: 0, majorHeight: 12, ticksdistance: 2 },
+      }),
+      el({
+        type: 'line', id: 'cs0_y', parents: ['p0', 'cs0_v'],
+        attrs: { straightFirst: true, straightLast: true, lastArrow: true, firstArrow: false, name: 'y' },
+      }),
+      el({
+        type: 'ticks', id: 'cs0_yticks', parents: ['cs0_y', 2],
+        attrs: { drawLabels: false, insertTicks: false, minorTicks: 0, majorHeight: 12, ticksdistance: 2 },
+      }),
+      el({ type: 'eventbinding', id: 'cs0_bind', parents: ['p0', 'p1'], attrs: { event: 'move_with' } }),
+      el({
+        type: 'eventbinding', id: 'cs0_constr', parents: ['p1', 'p0', 'cs0_xticks', 'cs0_yticks'],
+        attrs: { event: 'coordsys_u_drag' },
+      }),
+    ]);
+    b.update();
+
+    // the axes are drawn and both ticks exist; the bindings are simply not here
+    expect(b.objects.cs0_x).toBeTruthy();
+    expect(b.objects.cs0_y).toBeTruthy();
+    expect(b.objects.cs0_xticks).toBeTruthy();
+    expect(b.objects.cs0_yticks).toBeTruthy();
+    expect(loaded.elements.some((e: HeyGeoElement) => e.type === 'eventbinding')).toBe(false);
+    expect(b.objects.cs0_bind).toBeUndefined();
+
+    // and a save no longer carries them, so the next open has nothing to skip
+    const saved = JSON.stringify(loaded.elements);
+    expect(saved).not.toMatch(/eventbinding/);
+    const reloaded = newBoard();
+    const again = load(reloaded, JSON.parse(saved)).elements;
+    reloaded.update();
+    expect(JSON.stringify(again)).toEqual(saved);
+    expect(reloaded.objects.cs0_x.visProp.lastarrow).toBe(true);
+    expect(reloaded.objects.cs0_yticks).toBeTruthy();
+  });
 });
 
 /**

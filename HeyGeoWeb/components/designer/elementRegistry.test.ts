@@ -57,6 +57,15 @@ describe('createElement', () => {
     expect(board.create).not.toHaveBeenCalled();
   });
 
+  it('drops the desktop’s coordinate-system wiring without calling it a failure', () => {
+    const board = fakeBoard();
+    const out = createElement(board, el({ type: 'eventbinding', parents: ['O', 'U'] }), built());
+    expect(out.obj).toBeNull();
+    expect(out.skipped).toBe(true);
+    expect(out.error).toBeUndefined();
+    expect(board.create).not.toHaveBeenCalled();
+  });
+
   it('rejects the wrong parent count before touching the engine', () => {
     const board = fakeBoard();
     const out = createElement(board, el({ type: 'segment', parents: ['A'] }), built());

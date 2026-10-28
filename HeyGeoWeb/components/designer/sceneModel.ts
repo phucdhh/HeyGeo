@@ -283,7 +283,7 @@ export function applyScene(board: LiveBoard, next: SceneSnapshot, plan?: ScenePl
       if (missing !== null) { deferred.push(el); continue; }
       const outcome = createElement(board, el, liveMap(board, made));
       if (outcome.obj) { made.set(el.id, outcome.obj); createdIds.push(el.id); }
-      else errors.push(outcome.error ?? `${el.type} "${el.id}"`);
+      else if (!outcome.skipped) errors.push(outcome.error ?? `${el.type} "${el.id}"`);
     }
     if (deferred.length === pending.length) {
       for (const el of deferred) {

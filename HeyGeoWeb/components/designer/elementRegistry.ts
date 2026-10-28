@@ -46,7 +46,21 @@ export interface ElementSpec {
 export interface CreateOutcome {
   obj: Any;
   error?: string;
+  /**
+   * A type the document may name that this app deliberately draws nothing
+   * for, so the loader drops it without calling it a failure.
+   */
+  skipped?: boolean;
 }
+
+/**
+ * The desktop exporter writes these beside a coordinate system it builds out of
+ * plain lines and ticks: `move_with` makes the unit point follow the origin and
+ * `coordsys_u_drag` re-spaces the ticks. They are the desktop viewer's own
+ * wiring, not a drawing; this app draws frames from its own model, so they have
+ * nothing to drive and nothing to report.
+ */
+const UNPICTURED_TYPES = new Set(['eventbinding']);
 
 interface RegistryEntry {
   /** JSXGraph element type to create. */
@@ -295,6 +309,7 @@ export function createElement(
   // Normalising here as well as in the loaders means no caller can hand this
   // function a stored code source and have it reach the engine.
   const el = normalizeElement(source);
+  if (UNPICTURED_TYPES.has(el.type)) return { obj: null, skipped: true };
   const entry = ELEMENT_REGISTRY[el.type];
   if (!entry) return { obj: null, error: `Không nhận kiểu đối tượng "${el.type}"` };
 
