@@ -451,6 +451,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onOpenCalculate={handleOpenCalculate}
         onOpenNewFunction={() => setNewFunctionOpen(true)}
         onPlotAsXy={handlePlotAsXy}
+        onPlotValueOnAxis={() => canvasRef.current?.plotValueOnAxis()}
         onPlotCurve={() => setPlotCurveOpen(true)}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}

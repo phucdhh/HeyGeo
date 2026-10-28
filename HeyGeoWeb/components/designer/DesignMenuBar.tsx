@@ -35,7 +35,7 @@ const NO_FRAME_ROWS: GraphRows = {
 const NO_FUNCTION_ROWS: FunctionRows = { canNew: true, canPlot: false, target: null };
 
 /** No frame is marked, so no point has anything to be measured on. */
-const NO_PLOT_POINT_ROWS: PlotPointRows = { canPlotPair: false, canOpen: false };
+const NO_PLOT_POINT_ROWS: PlotPointRows = { canPlotPair: false, canPlotValue: false, canOpen: false };
 
 /** Graph | Grid Form, named the way the desktop's submenu names its four forms. */
 const GRID_FORM_LABELS: Record<GridForm, string> = {
@@ -83,6 +83,8 @@ interface Props {
   onOpenNewFunction: () => void;
   /** Graph | Plot as (x, y)… — the studio plots the picked numbers or opens its dialog. */
   onPlotAsXy: () => void;
+  /** Graph | Plot Value On Axis… — the studio puts the picked number on the x axis. */
+  onPlotValueOnAxis: () => void;
   /** Graph | Plot Curve… — the studio opens the parametric curve dialog. */
   onPlotCurve: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
@@ -227,6 +229,7 @@ export default function DesignMenuBar({
   onOpenCalculate,
   onOpenNewFunction,
   onPlotAsXy,
+  onPlotValueOnAxis,
   onPlotCurve,
   onOpenTransform,
   onUnderDevelopment,
@@ -538,7 +541,12 @@ export default function DesignMenuBar({
           disabled: !plotted.canOpen,
           action: onPlotAsXy,
         },
-        { label: 'Plot Value On Axis…',           action: onUnderDevelopment },
+        // the desktop's canGraphPlotValueOnAxis: one number picked, and a frame
+        {
+          label: 'Plot Value On Axis…',
+          disabled: !plotted.canPlotValue,
+          action: onPlotValueOnAxis,
+        },
         { label: 'New Function…',                 action: onOpenNewFunction },
         // the desktop's canGraphPlotFunction: one definition picked, and a frame
         // marked for it to be measured against

@@ -68,6 +68,7 @@ import {
 } from './gridModel';
 import type { PlotSpec } from './plotModel';
 import {
+  plotOnAxis,
   plotPair,
   plotPointProblem,
   plotPointRows,
@@ -1043,6 +1044,22 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function plotPickedPair(): boolean {
     const pair = plotPair(numberSources(elementsRef.current), selectedRef.current.map((o) => o.id));
     return pair === null ? false : addPlotPoint(pair);
+  }
+
+  /**
+   * Graph | Plot Value On Axis… with the one number the designer picked.
+   *
+   * The desktop's graphPlotValueOnAxis translates a free point to the frame's
+   * `mathToScreen(value, 0)`, so the point lands on the x axis; here it names the
+   * number instead, which keeps it on the axis when the frame is moved.
+   */
+  function plotValueOnAxis(): boolean {
+    const spec = plotOnAxis(numberSources(elementsRef.current), selectedRef.current.map((o) => o.id));
+    if (spec === null) {
+      onNotifyRef.current?.('Cần một số được chọn để vẽ lên trục.');
+      return false;
+    }
+    return addPlotPoint(spec);
   }
 
   /**
@@ -3063,6 +3080,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       plotPointRows(elementsRef.current, selectedRef.current.map((o) => o.id))
     ),
     plotPickedPair,
+    plotValueOnAxis,
     plotPoint,
     setGridForm,
     toggleFrameGrid,

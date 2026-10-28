@@ -303,6 +303,8 @@ export interface CanvasHandle {
   plotPointRows: () => PlotPointRows;
   /** Graph | Plot as (x, y)… with the two numbers the designer picked. */
   plotPickedPair: () => boolean;
+  /** Graph | Plot Value On Axis… with the one number the designer picked. */
+  plotValueOnAxis: () => boolean;
   /** Graph | Plot as (x, y)… over the two coordinates typed in its dialog. */
   plotPoint: (spec: PlotPointSpec) => boolean;
   /** Graph | Grid Form: one of the four ways a frame's grid is drawn. */

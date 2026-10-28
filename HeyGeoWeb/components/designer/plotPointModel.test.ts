@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isPlotPointSpec,
+  plotOnAxis,
   plotPair,
   plotPointCoords,
   plotPointDeps,
@@ -190,7 +191,8 @@ describe('what the Plot as (x, y)… row answers to', () => {
   it('opens its dialog for anything else the page can be measured on', () => {
     expect(picked([]).canOpen).toBe(true);
     expect(picked(['A']).canOpen).toBe(true);
-    expect(plotPointRows(PAGE, ['m1', 'sl'])).toEqual({ canPlotPair: false, canOpen: false });
+    expect(plotPointRows(PAGE, ['m1', 'sl']))
+      .toEqual({ canPlotPair: false, canPlotValue: false, canOpen: false });
   });
 
   it('starts the dialog with the number that was picked', () => {
@@ -199,5 +201,39 @@ describe('what the Plot as (x, y)… row answers to', () => {
     expect(plotPointSeed(sources, ['m1', 'sl'])).toEqual(spec({ x: '#0', y: '#1', args: ['m1', 'sl'] }));
     expect(plotPointSeed(sources, ['A'])).toEqual(spec({ x: '', y: '', args: [] }));
     expect(plotPointSeed(sources, [])).toEqual(spec({ x: '', y: '', args: [] }));
+  });
+});
+
+describe('what the Plot Value On Axis… row answers to', () => {
+  const MARKED = [
+    el({ id: 'O', parents: [0, 0], attrs: { name: 'O', coordsys: { unit: 'U' } } }),
+    point('U', 1, 0),
+    point('O_v', 0, 1),
+  ];
+  const PAGE = [
+    point('A', 1, 1),
+    el({ type: 'slider', id: 'sl', attrs: { name: 'a' } }),
+    el({ type: 'text', id: 'm1', attrs: { measure: { op: 'distance', args: ['A', 'B'], label: 'AB', precision: 2 } } }),
+    el({ type: 'text', id: 'mCo', attrs: { measure: { op: 'coordinates', args: ['A'], label: 'A', precision: 2 } } }),
+  ];
+
+  it('puts the one number picked on the frame’s x axis', () => {
+    const sources = [{ id: 'sl', label: 'a' }, { id: 'm1', label: 'AB' }];
+    expect(plotOnAxis(sources, ['m1']))
+      .toEqual(spec({ x: '#0', y: '0', args: ['m1'] }));
+    // the desktop reads mathToScreen(value, 0), so the y coordinate is the axis
+    expect(plotPointCoords(plotOnAxis(sources, ['m1'])!, () => 3)).toEqual([3, 0]);
+    expect(plotPointRows([...PAGE, ...MARKED], ['m1']).canPlotValue).toBe(true);
+  });
+
+  it('waits for exactly one number of the page', () => {
+    const rows = (ids: string[]) => plotPointRows([...PAGE, ...MARKED], ids);
+    expect(rows(['m1', 'sl']).canPlotValue).toBe(false);
+    expect(rows([]).canPlotValue).toBe(false);
+    expect(rows(['A']).canPlotValue).toBe(false);
+    // a coordinate pair is not a number
+    expect(rows(['mCo']).canPlotValue).toBe(false);
+    // and a number with no frame has no axis to land on
+    expect(plotPointRows(PAGE, ['m1']).canPlotValue).toBe(false);
   });
 });

@@ -160,6 +160,19 @@ export function plotPair(sources: NumberSource[], selection: string[]): PlotPoin
 }
 
 /**
+ * The point Graph | Plot Value On Axis makes of one number: it sits on the x
+ * axis of the frame at that number, which is where the desktop's
+ * `mathToScreen(value, 0)` puts it. Naming the number keeps the point on the
+ * axis when the frame or the number moves.
+ */
+export function plotOnAxis(sources: NumberSource[], selection: string[]): PlotPointSpec | null {
+  if (selection.length !== 1) return null;
+  const id = selection[0];
+  if (!sources.some((s) => s.id === id)) return null;
+  return { shape: 'rectangular', x: '#0', y: '0', args: [id] };
+}
+
+/**
  * What the Plot Point dialog opens with. A number picked before asking is the
  * first field's reading, so picking a length and plotting it puts the point on
  * the x axis rather than leaving the designer to type the operand in.
@@ -177,14 +190,18 @@ export function plotPointSeed(sources: NumberSource[], selection: string[]): Plo
 export interface PlotPointRows {
   /** The desktop's canGraphPlotAsXY: two numbers picked, and a frame to place them on. */
   canPlotPair: boolean;
+  /** The desktop's canGraphPlotValueOnAxis: one number picked, and a frame. */
+  canPlotValue: boolean;
   /** The row is live whenever there is a frame for a typed point to be measured on. */
   canOpen: boolean;
 }
 
 export function plotPointRows(elements: HeyGeoElement[], selection: string[]): PlotPointRows {
   const canOpen = framePoints(elements) !== null;
+  const sources = numberSources(elements);
   return {
-    canPlotPair: canOpen && plotPair(numberSources(elements), selection) !== null,
+    canPlotPair: canOpen && plotPair(sources, selection) !== null,
+    canPlotValue: canOpen && plotOnAxis(sources, selection) !== null,
     canOpen,
   };
 }
