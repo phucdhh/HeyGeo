@@ -1,10 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword, signToken } from '@/lib/auth';
+import { rateLimit } from '@/lib/rate-limit';
+
+/** The client address behind the tunnel's proxy headers, for the limiter. */
+function clientIp(request: NextRequest): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  return forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+}
 
 // POST /api/auth/register
 export async function POST(request: NextRequest) {
   try {
+    // Account creation is cheap to attempt and expensive to hold: a handful per
+    // address per hour is plenty for a class, and stops scripted sign-ups.
+    if (!rateLimit(`register:${clientIp(request)}`, 5, 60 * 60_000)) {
+      return NextResponse.json(
+        { error: 'Quá nhiều lần đăng ký. Vui lòng thử lại sau.' },
+        { status: 429 },
+      );
+    }
+
     const body = await request.json();
     const { email, password, name } = body as { email?: string; password?: string; name?: string };
 

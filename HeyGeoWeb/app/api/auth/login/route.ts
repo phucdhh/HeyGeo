@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { comparePassword, signToken } from '@/lib/auth';
+import { rateLimit } from '@/lib/rate-limit';
+
+/** The client address behind the tunnel's proxy headers, for the limiter. */
+function clientIp(request: NextRequest): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  return forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+}
 
 // POST /api/auth/login
 export async function POST(request: NextRequest) {
@@ -12,7 +19,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email và mật khẩu là bắt buộc' }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    const normalized = email.toLowerCase().trim();
+    // Password guessing: a burst from one address, or against one account, is
+    // refused before bcrypt runs. The message is the same as a wrong password,
+    // so the limit says nothing about which emails exist.
+    const tooMany = 'Quá nhiều lần thử. Vui lòng thử lại sau ít phút.';
+    if (!rateLimit(`login-ip:${clientIp(request)}`, 20, 60_000)
+        || !rateLimit(`login-email:${normalized}`, 8, 60_000)) {
+      return NextResponse.json({ error: tooMany }, { status: 429 });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email: normalized } });
     if (!user) {
       return NextResponse.json({ error: 'Email hoặc mật khẩu không đúng' }, { status: 401 });
     }

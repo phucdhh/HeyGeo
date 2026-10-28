@@ -14,6 +14,16 @@ export function sanitizeSvg(svg: string): string {
     .replace(/\s+on\w+\s*=\s*"[^"]*"/gi, '')
     .replace(/\s+on\w+\s*=\s*'[^']*'/gi, '');
 
+  // Security: elements that can carry their own document or handler — an
+  // <iframe srcdoc> or a <foreignObject> full of HTML survives the script strip
+  // above, and an <a href="javascript:"> is a click away from running code.
+  out = out
+    .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '')
+    .replace(/<(iframe|object|embed|script)\b[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(iframe|embed|object)\b[^>]*\/?>/gi, '')
+    .replace(/\s+(xlink:href|href)\s*=\s*"\s*(javascript|vbscript|data:text\/html)[^"]*"/gi, '')
+    .replace(/\s+(xlink:href|href)\s*=\s*'\s*(javascript|vbscript|data:text\/html)[^']*'/gi, '');
+
   // Normalise the root <svg> tag so the thumbnail scales correctly.
   // Match the opening <svg ...> tag (everything up to the first ">").
   out = out.replace(/(<svg\b[^>]*>)/, (svgTag) => {
