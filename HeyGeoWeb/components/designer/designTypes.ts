@@ -289,6 +289,9 @@ export interface CanvasHandle {
   canArcOnCircle: () => boolean;
   /** Construct | Arc On Circle — draw the counterclockwise arc between them. */
   createArcOnCircle: () => boolean;
+  /** Construct | Arc Sector Interior — one picked arc is the wedge to fill. */
+  canArcSector: () => boolean;
+  createArcSector: () => boolean;
   /** Display | Number of Samples… — the picked locus' count, or null. */
   samplesInfo: () => number | null;
   setSamples: (samples: number) => boolean;

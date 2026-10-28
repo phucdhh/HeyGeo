@@ -542,8 +542,12 @@ export default function DesignMenuBar({
           disabled: !canvasRef.current?.canCircleInterior(),
           action: () => canvasRef.current?.createCircleInterior(),
         },
-        { label: 'Sector Interior',                                action: onUnderDevelopment },
-        { label: 'Arc Interior',                                   action: onUnderDevelopment },
+        {
+          label: 'Arc Sector Interior',
+          disabled: !canvasRef.current?.canArcSector(),
+          action: () => canvasRef.current?.createArcSector(),
+        },
+        { label: 'Arc Segment Interior',                           action: onUnderDevelopment },
         { separator: true },
         // Locus
         { label: 'Locus…',                                         action: onCreateLocus },

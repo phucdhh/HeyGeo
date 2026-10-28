@@ -34,6 +34,7 @@ import {
 } from './measurement';
 import { circleByRadiusPicks } from './circleByRadiusModel';
 import { arcOnCirclePicks, isPointKind, type ArcOnCircle } from './arcOnCircleModel';
+import { arcSectorPicks } from './arcSectorModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { numberSources, parameterPlace } from './numberMenuModel';
 import {
@@ -922,6 +923,19 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const centreEl = elementsRef.current.find((e) => e.id === centre);
     if (!centreEl || !isPointKind(centreEl.type)) return null;
     return { arc: picked, centre };
+  }
+
+  /**
+   * The arc Construct | Arc Sector Interior would fill. The desktop hangs the
+   * sector off the picked arc, and the exporter gives the sector the arc's own
+   * [centre, start, end] parents, so the wedge is the arc's own wedge.
+   */
+  function arcSectorSelection(): { arc: string; parents: string[] } | null {
+    if (selectedRef.current.length !== 1) return null;
+    const id = selectedRef.current[0].id as string;
+    const el = elementsRef.current.find((e) => e.id === id);
+    if (!el) return null;
+    return arcSectorPicks([{ id: el.id, kind: el.type, parents: el.parents.map(String) }]);
   }
 
   /**
@@ -3497,6 +3511,18 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         type: 'arc', id: nextElId('arc'),
         parents: [picked.centre, picked.arc.start, picked.arc.end],
         attrs: { strokeColor: '#1e3c96', strokeWidth: 2, withLabel: false },
+      });
+    },
+
+    canArcSector: () => arcSectorSelection() !== null,
+
+    createArcSector: () => {
+      const picked = arcSectorSelection();
+      if (!picked) return false;
+      return addObject({
+        type: 'sector', id: nextElId('sec'),
+        parents: [...picked.parents],
+        attrs: { ...INTERIOR_STYLE },
       });
     },
 

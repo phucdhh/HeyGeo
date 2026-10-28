@@ -875,6 +875,40 @@ describe('an arc measured over the real board', () => {
     expect(shown(r.elMap['arcAngleca'])).toBe('α = 180.00°');
     expect(shown(r.elMap['arcLengthca'])).toBe(`cung = ${(Math.PI * Math.SQRT2).toFixed(2)}`);
   });
+
+  it('fills the wedge Construct | Arc Sector Interior builds from an arc', () => {
+    const b = newBoard();
+    // the shape that row writes: the arc's own parents, filled the way an
+    // interior is filled
+    const r = loader(b, [
+      spec({ type: 'point', id: 'A', parents: [1, 1] }),
+      spec({ type: 'point', id: 'S', parents: [3, 1] }),
+      spec({ type: 'point', id: 'E', parents: [1, 3] }),
+      spec({ type: 'arc', id: 'ar', parents: ['A', 'S', 'E'] }),
+      spec({
+        type: 'sector', id: 'wed', parents: ['A', 'S', 'E'],
+        attrs: {
+          strokeColor: '#1e3c96', strokeOpacity: 0,
+          fillColor: '#1e3c96', fillOpacity: 0.12,
+          hasInnerPoints: true, withLabel: false,
+        },
+      }),
+      caption('area', ['wed'], 'quạt', { unit: ' cm²' }),
+      caption('segmentArea', ['ar'], 'chúng', { unit: ' cm²' }),
+    ]);
+    expect(r.errors).toEqual([]);
+    const wedge = r.elMap.wed as any;
+    expect(wedge.elType).toBe('sector');
+    expect(wedge.visProp.fillopacity).toBeCloseTo(0.12);
+    expect(wedge.visProp.strokeopacity).toBeCloseTo(0);
+    b.update();
+    expect(shown(r.elMap['areawed'])).toBe('quạt = 3.14 cm²');
+    // the wedge follows the arc, and the arc keeps its own bow
+    (r.elMap.E as any).moveTo([1, -1]);
+    b.update();
+    expect(shown(r.elMap['areawed'])).toBe('quạt = 9.42 cm²');
+    expect(shown(r.elMap['segmentAreaar'])).toBe('chúng = 11.42 cm²');
+  });
 });
 
 // Construct | Arc On Circle authors [centre, start, end] — the same shape the
