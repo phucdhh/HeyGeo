@@ -49,6 +49,10 @@ export interface CoordsysSpec {
   grid?: GridForm;
   showGrid?: boolean;
   snap?: boolean;
+  /** Graph | Dotted Grid: the grid drawn as dots where its lines cross. */
+  dotted?: boolean;
+  /** Graph | Hide Coordinate System: the grid, axes and origin off the page. */
+  hidden?: boolean;
   marked?: boolean;
 }
 
@@ -59,6 +63,8 @@ export interface Coordsys {
   grid: GridForm;
   showGrid: boolean;
   snap: boolean;
+  dotted: boolean;
+  hidden: boolean;
 }
 
 export function isCoordsysSpec(value: unknown): value is CoordsysSpec {
@@ -77,6 +83,8 @@ function frameOf(el: HeyGeoElement, elements: HeyGeoElement[]): Coordsys & { mar
     grid: gridFormOf(spec.grid, 'square'),
     showGrid: spec.showGrid === true,
     snap: spec.snap === true,
+    dotted: spec.dotted === true,
+    hidden: spec.hidden === true,
     marked: spec.marked === true,
   };
 }
@@ -92,7 +100,8 @@ export function coordsysList(elements: HeyGeoElement[]): Coordsys[] {
     .map((el) => frameOf(el, elements))
     .filter((s): s is Coordsys & { marked: boolean } => s !== null);
   const ordered = [...frames.filter((f) => f.marked), ...frames.filter((f) => !f.marked)];
-  return ordered.map(({ origin, unit, grid, showGrid, snap }) => ({ origin, unit, grid, showGrid, snap }));
+  return ordered.map(({ origin, unit, grid, showGrid, snap, dotted, hidden }) =>
+    ({ origin, unit, grid, showGrid, snap, dotted, hidden }));
 }
 
 /**
@@ -214,9 +223,13 @@ export interface GraphRows {
   defineLabel: string;
   /** Marking needs a second system to mark and a pick that says which one it is. */
   canMark: boolean;
+  /** A sketch without a system reads the Shift row as Show, because it makes one. */
+  hasFrame: boolean;
   grid: GridForm;
   showGrid: boolean;
   snap: boolean;
+  dotted: boolean;
+  hidden: boolean;
 }
 
 export function graphRows(elements: HeyGeoElement[], selection: string[]): GraphRows {
@@ -229,9 +242,12 @@ export function graphRows(elements: HeyGeoElement[], selection: string[]): Graph
   return {
     defineLabel: definePlan(elements, selection).label,
     canMark: frames.length > 1 && only !== null && only !== marked?.origin,
+    hasFrame: marked !== null,
     grid: marked?.grid ?? 'square',
     showGrid: marked?.showGrid ?? false,
     snap: marked?.snap ?? false,
+    dotted: marked?.dotted ?? false,
+    hidden: marked?.hidden ?? false,
   };
 }
 
@@ -429,7 +445,7 @@ export function defaultFrame(
  */
 export function withGrid(
   elements: HeyGeoElement[],
-  next: Partial<Pick<Coordsys, 'grid' | 'showGrid' | 'snap'>>,
+  next: Partial<Pick<Coordsys, 'grid' | 'showGrid' | 'snap' | 'dotted' | 'hidden'>>,
   live: (id: string) => [number, number] | null,
 ): HeyGeoElement[] | null {
   const sys = coordsysOf(elements);
@@ -438,27 +454,54 @@ export function withGrid(
     grid: next.grid ?? sys.grid,
     showGrid: next.showGrid ?? sys.showGrid,
     snap: next.snap ?? sys.snap,
+    dotted: next.dotted ?? sys.dotted,
+    hidden: next.hidden ?? sys.hidden,
   };
-  if (settings.grid === sys.grid && settings.showGrid === sys.showGrid && settings.snap === sys.snap) {
+  if (settings.grid === sys.grid && settings.showGrid === sys.showGrid
+    && settings.snap === sys.snap && settings.dotted === sys.dotted
+    && settings.hidden === sys.hidden) {
     return null;
   }
 
+  // Show/Hide Coordinate System is the only row that takes the frame's own
+  // objects off the page; a grid row leaves what the designer hid alone.
+  const shown = next.hidden === undefined ? null : !settings.hidden;
+  return elements.map((el) => withSettings(el, sys, settings, live, shown));
+}
+
+/**
+ * One element of the document as these settings leave it: the origin carries the
+ * mark, the y-direction point takes the shape its form needs, and Show/Hide
+ * Coordinate System puts every object of the frame on or off the page.
+ */
+function withSettings(
+  el: HeyGeoElement,
+  sys: Coordsys,
+  settings: Pick<Coordsys, 'grid' | 'showGrid' | 'snap' | 'dotted' | 'hidden'>,
+  live: (id: string) => [number, number] | null,
+  shown: boolean | null,
+): HeyGeoElement {
   const verticalId = `${sys.origin}_v`;
-  return elements.map((el) => {
-    if (el.id === sys.origin) {
-      // Which of several systems is marked is the designer's answer, not the grid's,
-      // so the flag rides along when a grid row rewrites the rest of the mark.
-      const spec = (el.attrs.coordsys ?? {}) as CoordsysSpec;
-      return { ...el, attrs: { ...el.attrs, coordsys: { ...spec, unit: sys.unit, ...settings } } };
-    }
-    if (el.id === verticalId) {
-      return verticalElement(
-        sys.origin,
-        sys.unit,
-        settings.grid,
-        settings.grid === 'rectangular' ? live(el.id) : null,
-      );
-    }
-    return el;
-  });
+  const member = el.id === sys.origin || el.id === sys.unit
+    || el.id === verticalId || el.id === `${sys.origin}_x` || el.id === `${sys.origin}_y`;
+  let out = el;
+  if (el.id === sys.origin) {
+    // Which of several systems is marked is the designer's answer, not the grid's,
+    // so the flag rides along when a grid row rewrites the rest of the mark.
+    const spec = (el.attrs.coordsys ?? {}) as CoordsysSpec;
+    out = { ...el, attrs: { ...el.attrs, coordsys: { ...spec, unit: sys.unit, ...settings } } };
+  } else if (el.id === verticalId) {
+    out = verticalElement(
+      sys.origin,
+      sys.unit,
+      settings.grid,
+      settings.grid === 'rectangular' ? live(el.id) : null,
+    );
+  }
+  if (shown === null || !member) return out;
+  // The welded y-direction point is hidden by design; showing the system only
+  // shows it when the rectangular form draws it as a draggable handle, while the
+  // origin, the unit point and the two axes come back with their names.
+  const wanted = el.id === verticalId ? shown && settings.grid === 'rectangular' : shown;
+  return { ...out, attrs: { ...out.attrs, visible: wanted, withLabel: wanted } };
 }

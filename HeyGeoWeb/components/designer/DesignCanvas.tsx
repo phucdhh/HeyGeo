@@ -2195,7 +2195,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       p.setAttribute('stroke-dasharray', dash);
       return p;
     };
-    const furniture = path(GRID_INK, '1 3');
+    const furniture = path(GRID_INK, 'none');
     const ticks = path(TICK_INK, 'none');
     const labels = document.createElementNS(SVG_NS, 'g') as SVGGElement;
     layer.replaceChildren(furniture, ticks, labels);
@@ -2247,6 +2247,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     };
     return [
       sys.origin, sys.unit, sys.grid, sys.showGrid ? 1 : 0, sys.snap ? 1 : 0,
+      sys.dotted ? 1 : 0, sys.hidden ? 1 : 0,
       at(sys.origin), at(sys.unit), at(`${sys.origin}_v`),
       ...(board.getBoundingBox() as number[]).map((v) => v.toFixed(2)),
       Math.round(board.unitX),
@@ -2267,7 +2268,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     const f = frameOnBoard(board);
     const zero = board.origin?.scrCoords as number[] | undefined;
-    if (!f || !zero) {
+    if (!f || !zero || f.sys.hidden) {
       parts.furniture.removeAttribute('d');
       parts.ticks.removeAttribute('d');
       parts.labels.replaceChildren();
@@ -2276,10 +2277,14 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     const marks = gridInk(
       viewboxOf(board), f.geo, f.plan,
-      [zero[1], zero[2]], [board.unitX, board.unitY],
+      [zero[1], zero[2]], [board.unitX, board.unitY], f.sys.dotted,
     );
     const tickInk = foregroundRef.current;
-    parts.furniture.setAttribute('stroke-dasharray', marks.solid ? 'none' : '1 3');
+    // A dotted grid is the same path drawn with a round pen, so each zero-length
+    // step of it is a dot where two grid lines would have crossed.
+    parts.furniture.setAttribute('stroke-dasharray', 'none');
+    parts.furniture.setAttribute('stroke-linecap', marks.dots ? 'round' : 'butt');
+    parts.furniture.setAttribute('stroke-width', marks.dots ? '2.5' : '1');
     parts.furniture.setAttribute('d', marks.furniture);
     parts.ticks.setAttribute('stroke', tickInk);
     parts.ticks.setAttribute('d', marks.ticks);
@@ -2354,7 +2359,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
    * frame subtree by itself — which is what a point that stops being welded to the
    * unit point needs.
    */
-  function changeGrid(next: Partial<Pick<Coordsys, 'grid' | 'showGrid' | 'snap'>>): boolean {
+  function changeGrid(next: Partial<Pick<Coordsys, 'grid' | 'showGrid' | 'snap' | 'dotted' | 'hidden'>>): boolean {
     const board = boardRef.current;
     if (!board) return false;
     // A grid belongs to a system, so a grid command on a sketch without one gets
@@ -2384,6 +2389,22 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function toggleFrameGrid(): boolean {
     const sys = frameForGrid();
     return sys ? changeGrid({ showGrid: !sys.showGrid }) : false;
+  }
+
+  /** Graph | Dotted Grid: the same grid, drawn where its lines cross. */
+  function toggleFrameDotted(): boolean {
+    const sys = frameForGrid();
+    return sys ? changeGrid({ dotted: !sys.dotted }) : false;
+  }
+
+  /**
+   * Graph | Show/Hide Coordinate System — the row Shift shows in place of Show
+   * Grid. It takes the whole system off the page: grid, axes, origin and names.
+   */
+  function toggleCoordsysShown(): boolean {
+    const sys = coordsysOf(elementsRef.current);
+    if (!sys) return newCoordsys();
+    return changeGrid({ hidden: !sys.hidden });
   }
 
   /** Graph | Snap Points. */
@@ -5096,6 +5117,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     plotPoint,
     setGridForm,
     toggleFrameGrid,
+    toggleFrameDotted,
+    toggleCoordsysShown,
     toggleSnap,
 
     // ── Transform menu & marks ────────────────────────────────────────────────

@@ -35,6 +35,7 @@ describe('a frame marked on its origin', () => {
   it('reads the mark back out of the document', () => {
     expect(coordsysOf(FRAME)).toEqual({
       origin: 'O', unit: 'U', grid: 'square', showGrid: false, snap: false,
+      dotted: false, hidden: false,
     });
     expect(hasCoordsys(FRAME)).toBe(true);
   });
@@ -63,6 +64,7 @@ describe('a frame marked on its origin', () => {
     ];
     expect(coordsysOf(two)).toEqual({
       origin: 'P', unit: 'Q', grid: 'square', showGrid: false, snap: false,
+      dotted: false, hidden: false,
     });
     // and with nothing marked the first of them is the one everything reads, which
     // is what a sketch with a single system has always done
@@ -170,8 +172,8 @@ describe('the Graph menu over a selection', () => {
 
   it('keeps every row live but the mark, which needs a second system', () => {
     expect(graphRows(PLAIN, ['A', 'B'])).toEqual({
-      defineLabel: 'Define Coordinate System', canMark: false,
-      grid: 'square', showGrid: false, snap: false,
+      defineLabel: 'Define Coordinate System', canMark: false, hasFrame: false,
+      grid: 'square', showGrid: false, snap: false, dotted: false, hidden: false,
     });
     // a grid, a plot and a point all make the default system for themselves
     expect(graphRows(PLAIN, []).canMark).toBe(false);
@@ -233,7 +235,10 @@ describe('Graph | Mark Coordinate System', () => {
     const marked = withMark(TWO, 'P')!;
     const gridded = withGrid(marked, { grid: 'polar', showGrid: true }, () => [0, 1])!;
     expect(gridded.find((e) => e.id === 'P')!.attrs.coordsys)
-      .toEqual({ unit: 'Q', grid: 'polar', showGrid: true, snap: false, marked: true });
+      .toEqual({
+        unit: 'Q', grid: 'polar', showGrid: true, snap: false,
+        dotted: false, hidden: false, marked: true,
+      });
     expect(gridded.find((e) => e.id === 'O')!.attrs.coordsys).not.toHaveProperty('marked');
     expect(coordsysOf(gridded)!.origin).toBe('P');
   });
@@ -272,9 +277,53 @@ describe('changing the grid of a frame', () => {
   it('rewrites the mark in full and leaves every other element alone', () => {
     const next = withGrid(FRAME, { showGrid: true }, live)!;
     expect(next).toHaveLength(FRAME.length);
-    expect(next[0].attrs.coordsys).toEqual({ unit: 'U', grid: 'square', showGrid: true, snap: false });
+    expect(next[0].attrs.coordsys).toEqual({
+      unit: 'U', grid: 'square', showGrid: true, snap: false, dotted: false, hidden: false,
+    });
     expect(next[1]).toBe(FRAME[1]);
     expect(next[3]).toBe(FRAME[3]);
+  });
+
+  it('keeps Dotted Grid on the mark, so a save brings the dots back', () => {
+    const dotted = withGrid(FRAME, { dotted: true }, live)!;
+    expect(coordsysOf(dotted)!.dotted).toBe(true);
+    expect(withGrid(dotted, { dotted: false }, live)![0].attrs.coordsys).toMatchObject({ dotted: false });
+  });
+
+  it('takes every object of a hidden system off the page, and puts it back', () => {
+    const hidden = withGrid(FRAME, { hidden: true }, live)!;
+    for (const id of ['O', 'U', 'O_x', 'O_y']) {
+      const el = hidden.find((e) => e.id === id)!;
+      expect(el.attrs.visible).toBe(false);
+      expect(el.attrs.withLabel).toBe(false);
+    }
+    // the welded y-direction point was hidden already and stays that way
+    expect(hidden.find((e) => e.id === 'O_v')!.attrs.visible).toBe(false);
+
+    const shown = withGrid(hidden, { hidden: false }, live)!;
+    for (const id of ['O', 'U', 'O_x', 'O_y']) {
+      expect(shown.find((e) => e.id === id)!.attrs.visible).toBe(true);
+    }
+    expect(shown.find((e) => e.id === 'O_v')!.attrs.visible).toBe(false);
+  });
+
+  it('shows a rectangular frame’s y handle again with the system', () => {
+    const rect = withGrid(FRAME, { grid: 'rectangular' }, live)!;
+    const hidden = withGrid(rect, { hidden: true }, live)!;
+    expect(hidden.find((e) => e.id === 'O_v')!.attrs.visible).toBe(false);
+    const shown = withGrid(hidden, { hidden: false }, live)!;
+    expect(shown.find((e) => e.id === 'O_v')!.attrs.visible).toBe(true);
+  });
+
+  it('leaves every object the frame does not own on the page', () => {
+    const stranger = point('A', 4, 4);
+    const hidden = withGrid([...FRAME, stranger], { hidden: true }, live)!;
+    expect(hidden.find((e) => e.id === 'A')).toBe(stranger);
+  });
+
+  it('touches visibility for the show/hide row only, not for a grid row', () => {
+    const gridded = withGrid(FRAME, { showGrid: true, dotted: true }, live)!;
+    expect(gridded.find((e) => e.id === 'O_x')!.attrs).not.toHaveProperty('visible');
   });
 
   it('changes only the shape of the y-direction point, and only for rectangular', () => {

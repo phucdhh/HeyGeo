@@ -30,8 +30,8 @@ interface MenuDef {
 
 /** The Graph menu before the canvas has anything to say about a frame. */
 const NO_FRAME_ROWS: GraphRows = {
-  defineLabel: 'Define Coordinate System', canMark: false,
-  grid: 'square', showGrid: false, snap: false,
+  defineLabel: 'Define Coordinate System', canMark: false, hasFrame: false,
+  grid: 'square', showGrid: false, snap: false, dotted: false, hidden: false,
 };
 
 /** A definition can always be typed; nothing is picked to plot yet. */
@@ -291,7 +291,24 @@ export default function DesignMenuBar({
   onUnderDevelopment,
 }: Props) {
   const [openMenu, setOpenMenu] = useState<number | null>(null);
+  // The Graph menu names its grid row after the Shift key: held, the row shows or
+  // hides the whole coordinate system instead of only its grid.
+  const [shiftHeld, setShiftHeld] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftHeld(true); };
+    const up = (e: KeyboardEvent) => { if (e.key === 'Shift') setShiftHeld(false); };
+    const lost = () => setShiftHeld(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', lost);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', lost);
+    };
+  }, []);
 
   // Close when clicking outside
   useEffect(() => {
@@ -732,10 +749,21 @@ export default function DesignMenuBar({
         { separator: true },
         // The frame's grid, not the page's: a rectangular frame drags its own y
         // spacing, a polar one counts rings, and the graph paper behind everything
-        // else stays where Display | Grid puts it.
+        // else stays where Display | Grid puts it. With Shift held the same row
+        // shows or hides the whole system, the way the desktop's does.
         {
-          label: frames.showGrid ? 'Hide Grid' : 'Show Grid',
-          action: () => canvasRef.current?.toggleFrameGrid(),
+          label: shiftHeld
+            ? (frames.hasFrame && !frames.hidden ? 'Hide Coordinate System' : 'Show Coordinate System')
+            : (frames.showGrid ? 'Hide Grid' : 'Show Grid'),
+          action: () => (shiftHeld
+            ? canvasRef.current?.toggleCoordsysShown()
+            : canvasRef.current?.toggleFrameGrid()),
+        },
+        // changes the grid between ruled lines and a dot at each crossing
+        {
+          label: 'Dotted Grid',
+          checked: frames.dotted,
+          action: () => canvasRef.current?.toggleFrameDotted(),
         },
         {
           label: 'Snap Points',

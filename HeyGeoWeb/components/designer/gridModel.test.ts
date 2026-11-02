@@ -267,16 +267,28 @@ describe('the frame grid as it is painted on the page', () => {
     expect(furniture).toContain('M400,600L400,0');
     expect(furniture).toContain('M0,500L1000,500');
     expect(furniture).not.toContain('M240');
-    expect(ink(shown).solid).toBe(false);
+    expect(ink(shown).dots).toBe(false);
     // with no grid to show, only the ticks and their numbers are left
     const hidden = ink(planGrid(VIEW, SQUARE, 'square', PPU, false));
     expect(hidden.furniture).toBe('');
     expect(hidden.ticks).toContain('M400,295L400,305');
   });
 
-  it('draws a polar frame solid, with its rings numbered to the right', () => {
+  it('puts a dot where two grid lines cross when Dotted Grid is on', () => {
+    const dots = gridInk(VIEW, SQUARE, shown, ZERO, [PPU, PPU], true);
+    expect(dots.dots).toBe(true);
+    // one zero-length step per crossing of a ruled column with a ruled row
+    expect(dots.furniture).toContain('M400,500l0,0');
+    expect(dots.furniture).not.toContain('L400,0');
+    const crossings = shown.verticals.length * shown.horizontals.length;
+    expect(dots.furniture.split('M').length - 1).toBe(crossings);
+    // ticks and their numbers are the same either way
+    expect(dots.ticks).toBe(ink(shown).ticks);
+  });
+
+  it('draws a polar frame with its rings numbered to the right', () => {
     const polar = ink(planGrid(VIEW, SQUARE, 'polar', PPU, false));
-    expect(polar.solid).toBe(true);
+    expect(polar.dots).toBe(false);
     expect(polar.ticks).toBe('');
     expect(polar.labels.map((l) => [l.x, l.text, l.side])).toEqual([
       [302, '1', 'right'], [402, '2', 'right'], [502, '3', 'right'], [602, '4', 'right'],

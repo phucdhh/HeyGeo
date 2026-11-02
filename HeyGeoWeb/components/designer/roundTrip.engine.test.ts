@@ -345,6 +345,7 @@ describe('a saved document rebuilds the same drawing', () => {
       .toEqual({ unit: 'U', grid: 'rectangular', showGrid: true, snap: true });
     expect(coordsysOf(saved)).toEqual({
       origin: 'O', unit: 'U', grid: 'rectangular', showGrid: true, snap: true,
+      dotted: false, hidden: false,
     });
     // the y point stayed a free point of the document, not a derived one
     expect(again.objects.O_v.X()).toBeCloseTo(0, 6);

@@ -309,10 +309,13 @@ export interface InkLabel {
 
 /** The grid as SVG: two paths and the numbers between them. */
 export interface GridInk {
-  /** The dotted lines between the majors, or a polar frame's rings and radials. */
+  /** The lines between the majors, or a polar frame's rings and radials. */
   furniture: string;
-  /** A polar frame is drawn with a solid pen; the others rule their grid in dots. */
-  solid: boolean;
+  /**
+   * Graph | Dotted Grid: the same grid drawn as dots where its lines cross. The
+   * path then holds zero-length segments, which a round pen draws as dots.
+   */
+  dots: boolean;
   ticks: string;
   labels: InkLabel[];
 }
@@ -329,6 +332,7 @@ export function gridInk(
   plan: GridPlan,
   zero: BoardPoint,
   pixelsPerUnit: [number, number],
+  dotted = false,
 ): GridInk {
   const px = (x: number) => zero[0] + x * pixelsPerUnit[0];
   const py = (y: number) => zero[1] - y * pixelsPerUnit[1];
@@ -341,13 +345,21 @@ export function gridInk(
   if (plan.form === 'polar') {
     for (const ring of plan.rings) {
       const r = ring.radius * pixelsPerUnit[0];
-      furniture.push(
-        `M${n(axisX + r)},${n(axisY)}` +
-        `A${n(r)},${n(r)} 0 1 0 ${n(axisX - r)},${n(axisY)}` +
-        `A${n(r)},${n(r)} 0 1 0 ${n(axisX + r)},${n(axisY)}Z`,
-      );
+      if (dotted) {
+        // a dot where each radial crosses the ring, the way the lines meet
+        for (const [dx, dy] of plan.rays) {
+          furniture.push(`M${n(axisX + dx * r)},${n(axisY - dy * r)}l0,0`);
+        }
+      } else {
+        furniture.push(
+          `M${n(axisX + r)},${n(axisY)}` +
+          `A${n(r)},${n(r)} 0 1 0 ${n(axisX - r)},${n(axisY)}` +
+          `A${n(r)},${n(r)} 0 1 0 ${n(axisX + r)},${n(axisY)}Z`,
+        );
+      }
       labels.push({ x: n(axisX + r + 2), y: n(axisY), text: ring.label, side: 'right' });
     }
+    if (dotted) return { furniture: furniture.join(''), dots: true, ticks: '', labels };
     // Long enough to cross the whole visible page from the origin, whichever way.
     const reach = Math.hypot(view[2] - view[0], view[3] - view[1]) * pixelsPerUnit[0];
     for (const [dx, dy] of plan.rays) {
@@ -356,14 +368,24 @@ export function gridInk(
         `L${n(axisX + dx * reach)},${n(axisY - dy * reach)}`,
       );
     }
-    return { furniture: furniture.join(''), solid: true, ticks: '', labels };
+    return { furniture: furniture.join(''), dots: false, ticks: '', labels };
   }
 
-  for (const x of plan.verticals) {
-    furniture.push(`M${n(px(x))},${n(py(view[1]))}L${n(px(x))},${n(py(view[3]))}`);
-  }
-  for (const y of plan.horizontals) {
-    furniture.push(`M${n(px(view[0]))},${n(py(y))}L${n(px(view[2]))},${n(py(y))}`);
+  if (dotted) {
+    // one dot per crossing of a vertical with a horizontal, so the plane reads as
+    // a pegboard rather than as ruled paper
+    for (const x of plan.verticals) {
+      for (const y of plan.horizontals) {
+        furniture.push(`M${n(px(x))},${n(py(y))}l0,0`);
+      }
+    }
+  } else {
+    for (const x of plan.verticals) {
+      furniture.push(`M${n(px(x))},${n(py(view[1]))}L${n(px(x))},${n(py(view[3]))}`);
+    }
+    for (const y of plan.horizontals) {
+      furniture.push(`M${n(px(view[0]))},${n(py(y))}L${n(px(view[2]))},${n(py(y))}`);
+    }
   }
   for (const t of plan.xTicks) {
     const h = t.major ? TICK_MAJOR_PX : TICK_MINOR_PX;
@@ -377,5 +399,5 @@ export function gridInk(
     ticks.push(`M${n(axisX - h)},${n(at)}L${n(axisX + h)},${n(at)}`);
     if (t.label) labels.push({ x: n(axisX - h - 2), y: n(at), text: t.label, side: 'left' });
   }
-  return { furniture: furniture.join(''), solid: false, ticks: ticks.join(''), labels };
+  return { furniture: furniture.join(''), dots: dotted, ticks: ticks.join(''), labels };
 }

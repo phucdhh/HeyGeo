@@ -432,6 +432,10 @@ export interface CanvasHandle {
   setGridForm: (form: GridForm) => boolean;
   /** Graph | Hide Show Grid: the frame's own grid, not the page's. */
   toggleFrameGrid: () => boolean;
+  /** Graph | Dotted Grid: the same grid, drawn where its lines cross. */
+  toggleFrameDotted: () => boolean;
+  /** Graph | Show/Hide Coordinate System, the row Shift shows in place of Show Grid. */
+  toggleCoordsysShown: () => boolean;
   /** Graph | Snap Points: whether a dragged point stops on that grid. */
   toggleSnap: () => boolean;
   // Zoom & export
