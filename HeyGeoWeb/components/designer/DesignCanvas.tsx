@@ -55,6 +55,7 @@ import {
   framePoints,
   graphRows,
   originCarriesUnit,
+  unitOnAxis,
   withGrid,
   withMark,
   withMarkOnly,
@@ -1593,11 +1594,20 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
    * system and finds the sketch without one, so this is called from the rows that
    * plot as much as from Graph | Define Coordinate System.
    */
+  /**
+   * Sketchpad calls a default system’s origin O and its unit point 1. A sketch that
+   * already shows one of those names gives the new frame the next free letter rather
+   * than putting two points on the page under the same label.
+   */
+  function frameName(want: string): string {
+    return elementsRef.current.some((e) => e.attrs?.name === want) ? nextPointName() : want;
+  }
+
   function newCoordsys(): boolean {
     const board = boardRef.current;
     if (!board) return false;
     return addFrame(board, defaultFrame(
-      nextElId('pt'), nextElId('pt'), nextPointName(), nextPointName(),
+      nextElId('pt'), nextElId('pt'), frameName('O'), frameName('1'),
     ));
   }
 
@@ -1620,7 +1630,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       origin: { id: originId, name: nameOf(originId), coords: origin },
       unit: unitId
         ? { id: unitId, name: nameOf(unitId), coords: liveCoords(unitId) }
-        : { id: nextElId('pt'), name: nextPointName(), coords: [origin[0] + 1, origin[1]] },
+        : { id: nextElId('pt'), name: frameName('1'), coords: [origin[0] + 1, origin[1]] },
     });
   }
 
@@ -2308,6 +2318,23 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     if (obj.id === sys.origin || obj.id === sys.unit || obj.id === `${sys.origin}_v`) return null;
     if (arrowRef.current !== 'translate' || selectedRef.current.length > 1) return null;
     return snapToFrame(board, [obj.X(), obj.Y()]);
+  }
+
+  /**
+   * A frame held by the pointer keeps its shape. Dragging its unit point slides it
+   * along the axis it was made on, so the drag changes the length of a unit and
+   * nothing else; dragging its origin carries the unit point with it, so the system
+   * travels without turning or rescaling. Both are held against the direction the
+   * document states, which is the one every curve, grid and coordinate on the frame
+   * is already measured by — a frame that swivelled under the cursor would leave
+   * the plot of a function standing where it was while its axes turned away.
+   */
+  function holdFrameDrag(board: JXGBoard, obj: { id: string; moveTo: (p: [number, number]) => unknown }) {
+    const live = (id: string) => board.objects[id];
+    const onAxis = unitOnAxis(elementsRef.current, live, obj.id);
+    if (onAxis) { obj.moveTo(onAxis); return; }
+    const carry = originCarriesUnit(elementsRef.current, live, obj.id);
+    if (carry) board.objects[carry.id]?.moveTo(carry.coords);
   }
 
   /**
@@ -3139,6 +3166,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           if (selectedRef.current.length === 1 && selectedRef.current[0] === obj) {
             const held = snapDuringDrag(board, obj);
             if (held) obj.moveTo(held);
+            holdFrameDrag(board, obj);
             return;
           }
           selectedRef.current = [obj];
@@ -3147,6 +3175,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           // Graph | Snap Points holds the point to the grid while it is dragged.
           const held = snapDuringDrag(board, obj);
           if (held) obj.moveTo(held);
+          holdFrameDrag(board, obj);
         });
         // ── drop: a moved object has to land back in the document ───────────
         obj.on('up', () => {
@@ -3158,11 +3187,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           // is what the designer sees.
           const held = snapDuringDrag(board, obj);
           if (held) obj.moveTo(held);
-          // A frame is rigid: dragging its origin carries its unit point along, so
-          // the unit keeps its length and the axes their angle.
-          const carry = originCarriesUnit(
-            elementsRef.current, (id: string) => board.objects[id], obj.id);
-          if (carry) board.objects[carry.id]?.moveTo(carry.coords);
+          // A frame is rigid: dragging its origin carries its unit point along and
+          // dragging the unit slides it along the axis, so the axes keep their angle.
+          holdFrameDrag(board, obj);
           // A locus of a line follows what it was built from, so a drag ends by
           // sampling the family again at full quality.
           syncLocusSamples(board);

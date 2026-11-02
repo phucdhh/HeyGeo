@@ -12,6 +12,7 @@ import {
   hasCoordsys,
   isCoordsysSpec,
   originCarriesUnit,
+  unitOnAxis,
   verticalElement,
   withGrid,
   withMark,
@@ -327,6 +328,39 @@ describe('dragging the origin', () => {
 
   it('is quiet on a board with no frame', () => {
     expect(originCarriesUnit([point('A', 0, 0)], dragged({ A: [1, 1] }), 'A')).toBeNull();
+  });
+});
+
+describe('dragging the unit point', () => {
+  // the frame the designer defined from two points a line apart at 45°
+  const OBLIQUE = FRAME.map((e) => (e.id === 'U' ? { ...e, parents: [1, 1] } : e));
+
+  it('takes the sideways part of the drag away, so the axis does not turn', () => {
+    expect(unitOnAxis(FRAME, dragged({ O: [0, 0], U: [3, 2] }), 'U')).toEqual([3, 0]);
+    expect(unitOnAxis(OBLIQUE, dragged({ O: [0, 0], U: [2, 0] }), 'U')).toEqual([1, 1]);
+  });
+
+  it('keeps the length the designer dragged out along the axis', () => {
+    expect(unitOnAxis(FRAME, dragged({ O: [0, 0], U: [0.25, 0] }), 'U')).toBeNull();
+    // a unit dragged past the origin reads as a negative one, still on the axis
+    expect(unitOnAxis(FRAME, dragged({ O: [0, 0], U: [-2, 1] }), 'U')).toEqual([-2, 0]);
+  });
+
+  it('holds to the axis where the origin now stands', () => {
+    // the origin has travelled and the document has not caught up yet
+    expect(unitOnAxis(FRAME, dragged({ O: [0, 2], U: [3, 5] }), 'U')).toEqual([3, 2]);
+  });
+
+  it('leaves the origin and every other point of the sketch alone', () => {
+    expect(unitOnAxis(FRAME, dragged({ O: [2, 1], U: [3, 0] }), 'O')).toBeNull();
+    expect(unitOnAxis(FRAME, dragged({ O: [0, 0], U: [1, 0], A: [7, 7] }), 'A')).toBeNull();
+  });
+
+  it('is quiet on a board with no frame, and on one it cannot place', () => {
+    expect(unitOnAxis([point('A', 0, 0)], dragged({ A: [1, 1] }), 'A')).toBeNull();
+    const onMidpoint = FRAME.map((e) => (e.id === 'O'
+      ? { ...e, parents: ['A', 'B'] as HeyGeoElement['parents'] } : e));
+    expect(unitOnAxis(onMidpoint, dragged({ O: [0, 0], U: [3, 1] }), 'U')).toBeNull();
   });
 });
 

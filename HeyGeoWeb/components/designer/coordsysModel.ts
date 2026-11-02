@@ -321,8 +321,8 @@ export function frameElements(points: FramePoints, elements: HeyGeoElement[]): H
 }
 
 /** A frame point's position, when the document states it as numbers. */
-function coords(el: HeyGeoElement): [number, number] | null {
-  const [x, y] = el.parents;
+function coords(el: HeyGeoElement | null): [number, number] | null {
+  const [x, y] = el?.parents ?? [];
   return typeof x === 'number' && typeof y === 'number' ? [x, y] : null;
 }
 
@@ -365,6 +365,39 @@ export function originCarriesUnit(
   if (!moved || cameAlong) return null;
 
   return { id: sys.unit, coords: [unit[0] + dx, unit[1] + dy] };
+}
+
+/**
+ * The unit point held to the axis it was made on. Dragging it is how a designer
+ * changes the length of a unit, not how the system turns: a curve already plotted
+ * is measured on the angle the document holds, so a frame that swivelled under the
+ * pointer would leave every curve, grid and coordinate behind. The point keeps its
+ * distance along the stored direction and loses whatever the drag took sideways.
+ *
+ * null means the drag is not the unit point’s, or the frame states no direction to
+ * hold it to.
+ */
+export function unitOnAxis(
+  elements: HeyGeoElement[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  live: (id: string) => any,
+  movedId: string,
+): [number, number] | null {
+  const sys = coordsysOf(elements);
+  if (!sys || sys.unit !== movedId) return null;
+  const from = coords(elements.find((e) => e.id === sys.origin) ?? null);
+  const to = coords(elements.find((e) => e.id === sys.unit) ?? null);
+  if (!from || !to) return null;
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const squared = dx * dx + dy * dy;
+  if (squared < 1e-12) return null;
+  const origin = live(sys.origin);
+  const unit = live(sys.unit);
+  if (!origin?.X || !unit?.X) return null;
+  const along = ((unit.X() - origin.X()) * dx + (unit.Y() - origin.Y()) * dy) / squared;
+  const held: [number, number] = [origin.X() + along * dx, origin.Y() + along * dy];
+  return Math.hypot(unit.X() - held[0], unit.Y() - held[1]) < 1e-9 ? null : held;
 }
 
 /**
