@@ -193,10 +193,10 @@ export function frameSelection(elements: HeyGeoElement[], selection: string[]): 
 
 /**
  * What the first Graph row does with this selection. Sketchpad names the command
- * after the objects it finds picked — one point gives an origin, anything else
- * falls back to the default system — so the row says what it is about to do.
+ * after the objects it finds picked: one point gives an origin, a circle or a
+ * length gives the scale, and anything else falls back to the default system.
  */
-export type DefineKind = 'system' | 'origin' | 'unit';
+export type DefineKind = 'system' | 'origin' | 'unit' | 'circle' | 'distance' | 'distances';
 
 export interface DefinePlan {
   kind: DefineKind;
@@ -204,13 +204,53 @@ export interface DefinePlan {
   label: string;
   /** The points the frame stands on, empty when the default origin is used. */
   points: string[];
+  /** The picked lengths, in pick order: a segment or a distance measurement. */
+  scale: string[];
+  /** The picked circle whose centre and radius the frame takes. */
+  circle: string | null;
+}
+
+/** A picked object whose length can fix a unit: a segment or a distance value. */
+const DEFINING_DISTANCE_OPS = new Set(['distance', 'pointSegmentDistance', 'length']);
+
+export function isDefiningDistance(el: HeyGeoElement): boolean {
+  if (el.type === 'segment') return true;
+  const op = (el.attrs?.measure as { op?: unknown } | undefined)?.op;
+  return typeof op === 'string' && DEFINING_DISTANCE_OPS.has(op);
 }
 
 export function definePlan(elements: HeyGeoElement[], selection: string[]): DefinePlan {
-  const picked = frameSelection(elements, selection);
-  if (picked.length === 1) return { kind: 'origin', label: 'Define Origin', points: picked };
-  if (picked.length === 2) return { kind: 'unit', label: 'Define Coordinate System', points: picked };
-  return { kind: 'system', label: 'Define Coordinate System', points: [] };
+  const picked = selection
+    .map((id) => elements.find((e) => e.id === id))
+    .filter((e): e is HeyGeoElement => !!e);
+  const points = picked.filter((e) => FRAME_POINT_TYPES.includes(e.type));
+  const lengths = picked.filter(isDefiningDistance);
+  const circles = picked.filter((e) => e.type === 'circle');
+  // anything the row does not recognise — or no pick at all — is the default system
+  const known = picked.length > 0 && picked.length === selection.length
+    && points.length + lengths.length + circles.length === picked.length;
+  const fields = {
+    points: points.map((e) => e.id),
+    scale: lengths.map((e) => e.id),
+    circle: circles[0]?.id ?? null,
+  };
+
+  if (known && picked.length === 1 && circles.length === 1) {
+    return { kind: 'circle', label: 'Define Unit Circle', ...fields };
+  }
+  if (known && circles.length === 0 && lengths.length === 0 && points.length === 1) {
+    return { kind: 'origin', label: 'Define Origin', ...fields };
+  }
+  if (known && circles.length === 0 && lengths.length === 0 && points.length === 2) {
+    return { kind: 'unit', label: 'Define Coordinate System', ...fields };
+  }
+  if (known && circles.length === 0 && points.length <= 1 && lengths.length === 1) {
+    return { kind: 'distance', label: 'Define Unit Distance', ...fields };
+  }
+  if (known && circles.length === 0 && points.length <= 1 && lengths.length === 2) {
+    return { kind: 'distances', label: 'Define Unit Distances', ...fields };
+  }
+  return { kind: 'system', label: 'Define Coordinate System', points: [], scale: [], circle: null };
 }
 
 /**
@@ -264,6 +304,10 @@ const AXIS_STYLE = {
 export interface FramePoints {
   origin: { id: string; name: string; coords: [number, number] };
   unit: { id: string; name: string; coords: [number, number] };
+  /** The form the frame is asked for; a frame from two lengths is rectangular. */
+  form?: GridForm;
+  /** Where the y-direction point stands, when the definition gives that length. */
+  vertical?: [number, number];
 }
 
 /** A point of the frame that is not in the document yet. */
@@ -318,14 +362,24 @@ export function frameElements(points: FramePoints, elements: HeyGeoElement[]): H
   const find = (id: string) => elements.find((e) => e.id === id) ?? null;
   const existingOrigin = find(origin.id);
   const existingUnit = find(unit.id);
+  const form = points.form ?? 'square';
 
   const originBase = existingOrigin ?? framePoint(origin);
+  // A form other than the default is part of what the definition asked for, so it
+  // is written on the mark with the unit point: a rectangular frame is read back
+  // as one, and its y-direction point stays the handle its spacing is set by.
+  const mark: CoordsysSpec = form === 'square' ? { unit: unit.id } : { unit: unit.id, grid: form };
   const originEl: HeyGeoElement = {
     ...originBase,
-    attrs: { ...originBase.attrs, coordsys: { unit: unit.id } },
+    attrs: { ...originBase.attrs, coordsys: mark },
   };
   const unitEl = existingUnit ?? framePoint(unit);
-  const vertical = verticalElement(origin.id, unit.id, 'square', null);
+  const vertical = verticalElement(
+    origin.id,
+    unit.id,
+    form,
+    form === 'rectangular' ? (points.vertical ?? null) : null,
+  );
 
   return [
     originEl,

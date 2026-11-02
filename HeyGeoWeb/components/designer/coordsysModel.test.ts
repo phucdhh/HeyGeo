@@ -123,6 +123,20 @@ describe('the elements a frame is made of', () => {
     expect(origin.parents).toEqual([0, 0]);
     expect(unit.parents).toEqual([1, 0]);
   });
+
+  it('writes the form a definition asked for, with its own y-direction point', () => {
+    const rect = frameElements({
+      origin: { id: 'O', name: 'O', coords: [0, 0] },
+      unit: { id: 'U', name: '1', coords: [2, 0] },
+      form: 'rectangular',
+      vertical: [0, 3],
+    }, []);
+    // the mark says rectangular, so the frame is read back with two scales
+    expect(rect[0].attrs.coordsys).toEqual({ unit: 'U', grid: 'rectangular' });
+    // and the y-direction point is the handle that spacing is dragged by
+    expect(rect[2].parents).toEqual([0, 3]);
+    expect(rect[2].attrs.visible).toBe(true);
+  });
 });
 
 /** A board that has been dragged: positions the document has not caught up with. */
@@ -157,17 +171,44 @@ describe('the Graph menu over a selection', () => {
   });
 
   it('names the define row after the points it finds picked', () => {
-    // one point is an origin, two give the length of a unit, anything else is the
-    // default system Sketchpad makes rather than refusing the row
-    expect(definePlan(PLAIN, ['A'])).toEqual({ kind: 'origin', label: 'Define Origin', points: ['A'] });
+    // one point is an origin, two give the length of a unit, a circle gives both,
+    // anything else is the default system Sketchpad makes rather than refusing the row
+    expect(definePlan(PLAIN, ['A'])).toEqual({
+      kind: 'origin', label: 'Define Origin', points: ['A'], scale: [], circle: null,
+    });
     expect(definePlan(PLAIN, ['A', 'B'])).toEqual({
-      kind: 'unit', label: 'Define Coordinate System', points: ['A', 'B'],
+      kind: 'unit', label: 'Define Coordinate System',
+      points: ['A', 'B'], scale: [], circle: null,
     });
     expect(definePlan(PLAIN, []).label).toBe('Define Coordinate System');
     expect(definePlan(PLAIN, ['k'])).toEqual({
-      kind: 'system', label: 'Define Coordinate System', points: [],
+      kind: 'circle', label: 'Define Unit Circle', points: [], scale: [], circle: 'k',
     });
     expect(definePlan(PLAIN, ['A', 'B', 'k']).kind).toBe('system');
+  });
+
+  it('takes its scale from a picked length, and from two lengths a rectangular frame', () => {
+    const edge = anything('segment', 'seg', ['A', 'B']);
+    const length = anything('text', 'd', [], { measure: { op: 'length', args: ['seg'] } });
+    const angle = anything('text', 'ang', [], { measure: { op: 'angle', args: ['A', 'B', 'A'] } });
+    const sketch = [...PLAIN, edge, length, angle, point('C', 5, 5)];
+
+    expect(definePlan(sketch, ['seg'])).toEqual({
+      kind: 'distance', label: 'Define Unit Distance', points: [], scale: ['seg'], circle: null,
+    });
+    expect(definePlan(sketch, ['C', 'seg'])).toMatchObject({
+      kind: 'distance', label: 'Define Unit Distance', points: ['C'], scale: ['seg'],
+    });
+    expect(definePlan(sketch, ['seg', 'd'])).toMatchObject({
+      kind: 'distances', label: 'Define Unit Distances', scale: ['seg', 'd'],
+    });
+    expect(definePlan(sketch, ['C', 'seg', 'd'])).toMatchObject({
+      kind: 'distances', points: ['C'], scale: ['seg', 'd'],
+    });
+    // an angle is a value, but not a length the scale can be set by
+    expect(definePlan(sketch, ['ang']).kind).toBe('system');
+    // and a circle mixed with anything else is not a definition on its own
+    expect(definePlan(sketch, ['k', 'seg']).kind).toBe('system');
   });
 
   it('keeps every row live but the mark, which needs a second system', () => {

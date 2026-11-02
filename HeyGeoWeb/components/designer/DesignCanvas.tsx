@@ -35,7 +35,8 @@ import {
   LINE_LOCUS_TYPE, LOCUS_SAMPLES, locusSamples, refreshLineLocuses,
 } from './lineLocusModel';
 import {
-  anchorClosures, captionAnchor, isAnchorSpec, isMeasureSpec, measureValue, type MeasureSpec,
+  anchorClosures, captionAnchor, isAnchorSpec, isMeasureSpec, lengthValueOf, measureValue,
+  type MeasureSpec,
 } from './measurement';
 import { circleByRadiusPicks } from './circleByRadiusModel';
 import { arcOnCirclePicks, isPointKind, type ArcOnCircle } from './arcOnCircleModel';
@@ -1595,9 +1596,10 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
    * plot as much as from Graph | Define Coordinate System.
    */
   /**
-   * Sketchpad calls a default system’s origin O and its unit point 1. A sketch that
-   * already shows one of those names gives the new frame the next free letter rather
-   * than putting two points on the page under the same label.
+   * Sketchpad calls a default system’s origin O and its unit point 1. The unit
+   * point is a datum of its system and keeps that name even when a second system
+   * brings its own; the origin, which marks a place on the page, takes the next
+   * free letter rather than putting a second O under the first.
    */
   function frameName(want: string): string {
     return elementsRef.current.some((e) => e.attrs?.name === want) ? nextPointName() : want;
@@ -1607,31 +1609,88 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const board = boardRef.current;
     if (!board) return false;
     return addFrame(board, defaultFrame(
-      nextElId('pt'), nextElId('pt'), frameName('O'), frameName('1'),
+      nextElId('pt'), nextElId('pt'), frameName('O'), '1',
     ));
   }
 
   /**
    * Graph | Define Coordinate System, which is the row Sketchpad names after what
-   * is picked: one point becomes the origin of a system with the default unit, two
-   * give the origin and the length of a unit in the order they were clicked, and
-   * anything else — a lone segment or nothing at all — takes the default system.
+   * is picked: a point is an origin, two give the origin and the length of a unit
+   * in the order they were clicked, a circle gives both its centre and its radius,
+   * and one or two lengths set the scale on the page's own origin. Anything else —
+   * a lone slider or nothing at all — takes the default system.
    */
   function defineCoordsys(): boolean {
     const board = boardRef.current;
     if (!board) return false;
     const plan = definePlan(elementsRef.current, selectedRef.current.map((o) => o.id));
     if (plan.kind === 'system') return newCoordsys();
-    const [originId, unitId] = plan.points;
-    const origin = liveCoords(originId);
+
     const nameOf = (id: string) => String(
       elementsRef.current.find((e) => e.id === id)?.attrs?.name ?? id);
+    // a definition with no point in it stands on the middle of the page
+    const originId = plan.points[0] ?? null;
+    const origin: [number, number] = originId ? liveCoords(originId) : [0, 0];
+    const originPoint = originId
+      ? { id: originId, name: nameOf(originId), coords: origin }
+      : { id: nextElId('pt'), name: frameName('O'), coords: origin };
+    const newUnit = (coords: [number, number]) =>
+      ({ id: nextElId('pt'), name: '1', coords });
+
+    if (plan.kind === 'origin') {
+      return addFrame(board, { origin: originPoint, unit: newUnit([origin[0] + 1, origin[1]]) });
+    }
+    if (plan.kind === 'unit') {
+      const unitId = plan.points[1];
+      return addFrame(board, {
+        origin: originPoint,
+        unit: { id: unitId, name: nameOf(unitId), coords: liveCoords(unitId) },
+      });
+    }
+    if (plan.kind === 'circle') {
+      const circle = elementsRef.current.find((e) => e.id === plan.circle);
+      const radius = circleRadius(circle);
+      const centreId = String(circle?.parents[0] ?? '');
+      if (!radius || !centreId) return newCoordsys();
+      const centre = liveCoords(centreId);
+      return addFrame(board, {
+        origin: { id: centreId, name: nameOf(centreId), coords: centre },
+        unit: newUnit([centre[0] + radius, centre[1]]),
+      });
+    }
+    // a picked length sets the horizontal unit, measured from the origin along it
+    const across = plan.scale[0] ? lengthValueOf(board, plan.scale[0]) : null;
+    if (!across) return newCoordsys();
+    if (plan.kind === 'distance') {
+      return addFrame(board, {
+        origin: originPoint,
+        unit: newUnit([origin[0] + across, origin[1]]),
+      });
+    }
+    // two lengths make a rectangular frame: the second one is its own y spacing
+    const up = plan.scale[1] ? lengthValueOf(board, plan.scale[1]) : null;
+    if (!up) return newCoordsys();
     return addFrame(board, {
-      origin: { id: originId, name: nameOf(originId), coords: origin },
-      unit: unitId
-        ? { id: unitId, name: nameOf(unitId), coords: liveCoords(unitId) }
-        : { id: nextElId('pt'), name: frameName('1'), coords: [origin[0] + 1, origin[1]] },
+      origin: originPoint,
+      unit: newUnit([origin[0] + across, origin[1]]),
+      form: 'rectangular',
+      vertical: [origin[0], origin[1] + up],
     });
+  }
+
+  /** The radius a circle draws right now: its rim point, or the length it was given. */
+  function circleRadius(circle: HeyGeoElement | undefined): number | null {
+    const board = boardRef.current;
+    if (!board || !circle) return null;
+    const [centreId, rimId] = circle.parents;
+    if (typeof centreId !== 'string' || typeof rimId !== 'string') return null;
+    const centre = liveCoords(centreId);
+    const rim = board.objects[rimId];
+    if (typeof rim?.X === 'function') {
+      const reach = Math.hypot(rim.X() - centre[0], rim.Y() - centre[1]);
+      return reach > 1e-9 ? reach : null;
+    }
+    return lengthValueOf(board, rimId);
   }
 
   /**
