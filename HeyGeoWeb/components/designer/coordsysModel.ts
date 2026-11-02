@@ -39,12 +39,17 @@ function gridFormOf(value: unknown, fallback: GridForm): GridForm {
  * frame is drawn and used on top of that. The three grid settings keep the
  * desktop's defaults — a square frame, no grid, no snapping — and stay out of a
  * document that never changed them.
+ *
+ * `marked` says which of several systems measures and plots go onto. Sketchpad
+ * marks one at a time, and the newest one is the marked one, so a document with a
+ * single frame leaves the flag out and reads the same as it always did.
  */
 export interface CoordsysSpec {
   unit: string;
   grid?: GridForm;
   showGrid?: boolean;
   snap?: boolean;
+  marked?: boolean;
 }
 
 /** Both points a relative measurement is read against, and the frame's settings. */
@@ -61,30 +66,91 @@ export function isCoordsysSpec(value: unknown): value is CoordsysSpec {
   return typeof (value as Record<string, unknown>).unit === 'string';
 }
 
+/** One element's mark as a frame, or null when it carries none or points at nothing. */
+function frameOf(el: HeyGeoElement, elements: HeyGeoElement[]): Coordsys & { marked: boolean } | null {
+  const spec = el.attrs?.coordsys as CoordsysSpec | undefined;
+  if (!isCoordsysSpec(spec) || spec.unit === el.id) return null;
+  if (!elements.some((e) => e.id === spec.unit)) return null;
+  return {
+    origin: el.id,
+    unit: spec.unit,
+    grid: gridFormOf(spec.grid, 'square'),
+    showGrid: spec.showGrid === true,
+    snap: spec.snap === true,
+    marked: spec.marked === true,
+  };
+}
+
 /**
- * The marked frame, or null when the document has none. Both points have to still
- * be in the document: JSXGraph's cascade takes the axes away with the origin, and
- * a caption has no scale to read without the unit point.
+ * Every coordinate system the document holds, the marked one first: Sketchpad lets
+ * a sketch carry several and puts each new measure or plot onto the marked one.
+ * A frame whose unit point has gone is not in the list at all — JSXGraph's cascade
+ * takes the axes away with the origin, and a caption has no scale without the unit.
+ */
+export function coordsysList(elements: HeyGeoElement[]): Coordsys[] {
+  const frames = elements
+    .map((el) => frameOf(el, elements))
+    .filter((s): s is Coordsys & { marked: boolean } => s !== null);
+  const ordered = [...frames.filter((f) => f.marked), ...frames.filter((f) => !f.marked)];
+  return ordered.map(({ origin, unit, grid, showGrid, snap }) => ({ origin, unit, grid, showGrid, snap }));
+}
+
+/**
+ * The marked frame, or null when the document has none. With one system there is
+ * nothing to mark, so the first of them is the one everything reads.
  */
 export function coordsysOf(elements: HeyGeoElement[]): Coordsys | null {
-  for (const el of elements) {
-    const spec = el.attrs?.coordsys as CoordsysSpec | undefined;
-    if (!isCoordsysSpec(spec) || spec.unit === el.id) continue;
-    if (!elements.some((e) => e.id === spec.unit)) continue;
-    return {
-      origin: el.id,
-      unit: spec.unit,
-      grid: gridFormOf(spec.grid, 'square'),
-      showGrid: spec.showGrid === true,
-      snap: spec.snap === true,
-    };
+  return coordsysList(elements)[0] ?? null;
+}
+
+/** True when the designer already has a frame. */
+export function hasCoordsys(elements: HeyGeoElement[]): boolean {
+  return coordsysOf(elements) !== null;
+}
+
+/**
+ * The frame an object belongs to, by the origin it was drawn from: the mark sits on
+ * the origin, and its unit point, its y-direction point and its two axes are named
+ * after it. Graph | Mark Coordinate System is chosen from any of them.
+ */
+export function frameOwner(elements: HeyGeoElement[], id: string): string | null {
+  for (const sys of coordsysList(elements)) {
+    if (id === sys.origin || id === sys.unit
+      || id === `${sys.origin}_v` || id === `${sys.origin}_x` || id === `${sys.origin}_y`) {
+      return sys.origin;
+    }
   }
   return null;
 }
 
-/** True when the designer already has a frame; Sketchpad marks only one. */
-export function hasCoordsys(elements: HeyGeoElement[]): boolean {
-  return coordsysOf(elements) !== null;
+/**
+ * The document with exactly one frame carrying the mark. A sketch with a single
+ * system needs no flag on it at all, so the mark only appears once there is a
+ * choice to record — which keeps an ordinary document byte-for-byte what it was.
+ */
+export function withMarkOnly(elements: HeyGeoElement[], originId: string): HeyGeoElement[] {
+  const several = coordsysList(elements).length > 1;
+  return elements.map((el) => {
+    const spec = el.attrs?.coordsys;
+    if (!isCoordsysSpec(spec)) return el;
+    const marked = several && el.id === originId;
+    if ((spec.marked === true) === marked) return el;
+    const next: CoordsysSpec = { ...spec };
+    if (marked) next.marked = true;
+    else delete next.marked;
+    return { ...el, attrs: { ...el.attrs, coordsys: next } };
+  });
+}
+
+/**
+ * Graph | Mark Coordinate System: the frame the picked object belongs to becomes
+ * the one measures and plots are read against. Nothing changes when the pick is not
+ * part of a frame, or is already the marked one.
+ */
+export function withMark(elements: HeyGeoElement[], id: string): HeyGeoElement[] | null {
+  const owner = frameOwner(elements, id);
+  if (!owner || coordsysOf(elements)?.origin === owner) return null;
+  return withMarkOnly(elements, owner);
 }
 
 /**
@@ -104,9 +170,9 @@ export function framePoints(elements: HeyGeoElement[]): [string, string, string]
 const FRAME_POINT_TYPES = ['point', 'glider', 'midpoint', 'circumcenter', 'intersection'];
 
 /**
- * The points Graph | Define Coordinate System… would mark, in the order they
- * were picked: the first is the origin, the second says how long a unit is. A
- * selection of anything but one or two points defines nothing.
+ * The points Graph | Define Coordinate System would mark, in the order they were
+ * picked: the first is the origin, the second says how long a unit is. A selection
+ * of anything but one or two points defines nothing.
  */
 export function frameSelection(elements: HeyGeoElement[], selection: string[]): string[] {
   const picked = selection
@@ -116,26 +182,56 @@ export function frameSelection(elements: HeyGeoElement[], selection: string[]): 
   return enough && picked.length === selection.length ? picked.map((e) => e.id) : [];
 }
 
-/** What the Graph menu can do with this document and this selection. */
+/**
+ * What the first Graph row does with this selection. Sketchpad names the command
+ * after the objects it finds picked — one point gives an origin, anything else
+ * falls back to the default system — so the row says what it is about to do.
+ */
+export type DefineKind = 'system' | 'origin' | 'unit';
+
+export interface DefinePlan {
+  kind: DefineKind;
+  /** The row's label, in Sketchpad's own words. */
+  label: string;
+  /** The points the frame stands on, empty when the default origin is used. */
+  points: string[];
+}
+
+export function definePlan(elements: HeyGeoElement[], selection: string[]): DefinePlan {
+  const picked = frameSelection(elements, selection);
+  if (picked.length === 1) return { kind: 'origin', label: 'Define Origin', points: picked };
+  if (picked.length === 2) return { kind: 'unit', label: 'Define Coordinate System', points: picked };
+  return { kind: 'system', label: 'Define Coordinate System', points: [] };
+}
+
+/**
+ * What the Graph menu can do with this document and this selection. Only the mark
+ * row has a rule that can fail: Sketchpad's other rows make a default system for
+ * themselves rather than going grey.
+ */
 export interface GraphRows {
-  canNew: boolean;
-  canDefine: boolean;
-  /** The desktop greys the whole grid group out until a frame is marked. */
-  canGrid: boolean;
+  /** 'Define Coordinate System' or 'Define Origin', per what is picked. */
+  defineLabel: string;
+  /** Marking needs a second system to mark and a pick that says which one it is. */
+  canMark: boolean;
   grid: GridForm;
   showGrid: boolean;
   snap: boolean;
 }
 
 export function graphRows(elements: HeyGeoElement[], selection: string[]): GraphRows {
-  const sys = coordsysOf(elements);
+  const frames = coordsysList(elements);
+  const marked = frames[0] ?? null;
+  const picked = new Set(selection
+    .map((id) => frameOwner(elements, id))
+    .filter((o): o is string => o !== null));
+  const only = picked.size === 1 ? [...picked][0] : null;
   return {
-    canNew: sys === null,
-    canDefine: sys === null && frameSelection(elements, selection).length > 0,
-    canGrid: sys !== null,
-    grid: sys?.grid ?? 'square',
-    showGrid: sys?.showGrid ?? false,
-    snap: sys?.snap ?? false,
+    defineLabel: definePlan(elements, selection).label,
+    canMark: frames.length > 1 && only !== null && only !== marked?.origin,
+    grid: marked?.grid ?? 'square',
+    showGrid: marked?.showGrid ?? false,
+    snap: marked?.snap ?? false,
   };
 }
 
@@ -317,7 +413,10 @@ export function withGrid(
   const verticalId = `${sys.origin}_v`;
   return elements.map((el) => {
     if (el.id === sys.origin) {
-      return { ...el, attrs: { ...el.attrs, coordsys: { unit: sys.unit, ...settings } } };
+      // Which of several systems is marked is the designer's answer, not the grid's,
+      // so the flag rides along when a grid row rewrites the rest of the mark.
+      const spec = (el.attrs.coordsys ?? {}) as CoordsysSpec;
+      return { ...el, attrs: { ...el.attrs, coordsys: { ...spec, unit: sys.unit, ...settings } } };
     }
     if (el.id === verticalId) {
       return verticalElement(

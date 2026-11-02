@@ -16,7 +16,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { applyScene, coordParents, gatherSelectionPoints, syncPositions, takeScene } from './sceneModel';
-import { coordsysOf, verticalElement } from './coordsysModel';
+import { coordsysOf, defaultFrame, frameElements, verticalElement } from './coordsysModel';
 import { arrowDragMap } from './transforms';
 import { functionPlot, parametricPlot, PLOT_SAMPLES } from './plotModel';
 import { withSliderValue } from './animationModel';
@@ -297,6 +297,30 @@ describe('a saved document rebuilds the same drawing', () => {
     expect(again.objects.O_v.Y()).toBeCloseTo(2, 6);
     // JSXGraph never sees the mark: it is stripped like a measurement descriptor
     expect(again.objects.O.visProp?.coordsys).toBeUndefined();
+  });
+
+  it('keeps both systems when a sketch carries two, and which one is marked', () => {
+    // Graph | Define makes a frame without taking the previous one away, and marks
+    // the one it just made: the document holds both, the menu works on the marked.
+    const second = frameElements(defaultFrame('P', 'Q', 'P', 'Q'), []).map((e) => (e.id === 'P'
+      ? { ...e, attrs: { ...e.attrs, coordsys: { unit: 'Q', marked: true } } }
+      : e));
+    const b = newBoard();
+    const saved = load(b, [...kitchenSink(), ...second]).elements;
+    b.update();
+    // both are drawn, each from its own points
+    expect(b.objects.O_x).toBeTruthy();
+    expect(b.objects.P_x).toBeTruthy();
+    expect(b.objects.P_v.Y()).toBeCloseTo(1, 6);
+    // and the mark decides which one the rest of the app reads
+    expect(coordsysOf(saved)!.origin).toBe('P');
+
+    const again = newBoard();
+    const reloaded = load(again, JSON.parse(JSON.stringify(saved))).elements;
+    again.update();
+    expect(coordsysOf(reloaded)).toMatchObject({ origin: 'P', unit: 'Q' });
+    // the flag is the app's own, so JSXGraph never receives it
+    expect(again.objects.P.visProp?.coordsys).toBeUndefined();
   });
 
   it('keeps the grid the designer chose for that frame', () => {

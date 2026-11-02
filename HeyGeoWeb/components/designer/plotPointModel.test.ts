@@ -188,11 +188,29 @@ describe('what the Plot as (x, y)… row answers to', () => {
     expect(picked([]).canPlotPair).toBe(false);
   });
 
-  it('opens its dialog for anything else the page can be measured on', () => {
-    expect(picked([]).canOpen).toBe(true);
-    expect(picked(['A']).canOpen).toBe(true);
-    expect(plotPointRows(PAGE, ['m1', 'sl']))
-      .toEqual({ canPlotPair: false, canPlotValue: false, canOpen: false });
+  it('names the row after the pick and the system it will be measured on', () => {
+    expect(picked(['m1', 'sl']).label).toBe('Plot as (x, y)…');
+    expect(picked(['m1']).label).toBe('Plot Points…');
+    expect(picked([]).label).toBe('Plot Points…');
+    // a polar system takes the very same two numbers as a radius and a turn
+    const polar = [
+      el({ id: 'P', attrs: { name: 'P', coordsys: { unit: 'Q', grid: 'polar' } } }),
+      point('Q', 1, 0), ...PAGE,
+    ];
+    expect(plotPointRows(polar, ['m1', 'sl']).label).toBe('Plot as (r, θ)…');
+    expect(plotPair([{ id: 'm1', label: 'AB' }, { id: 'sl', label: 'a' }], ['m1', 'sl'], 'polar'))
+      .toEqual(spec({ shape: 'polar', x: '#0', y: '#1', args: ['m1', 'sl'] }));
+  });
+
+  it('is live before the sketch has a system at all: Sketchpad makes one', () => {
+    expect(plotPointRows(PAGE, []).label).toBe('Plot Points…');
+    expect(plotPointRows(PAGE, ['m1', 'sl']).canPlotPair).toBe(true);
+  });
+
+  it('opens its dialog on the tab of the marked system', () => {
+    const sources = [{ id: 'sl', label: 'a' }, { id: 'm1', label: 'AB' }];
+    expect(plotPointSeed(sources, ['m1'], 'polar'))
+      .toEqual(spec({ shape: 'polar', x: '#0', y: '', args: ['m1'] }));
   });
 
   it('starts the dialog with the number that was picked', () => {
@@ -233,7 +251,8 @@ describe('what the Plot Value On Axis… row answers to', () => {
     expect(rows(['A']).canPlotValue).toBe(false);
     // a coordinate pair is not a number
     expect(rows(['mCo']).canPlotValue).toBe(false);
-    // and a number with no frame has no axis to land on
-    expect(plotPointRows(PAGE, ['m1']).canPlotValue).toBe(false);
+    // a number with no frame still has a row: the point it plots makes the
+    // default system it needs, the way Sketchpad's plotting commands do
+    expect(plotPointRows(PAGE, ['m1']).canPlotValue).toBe(true);
   });
 });

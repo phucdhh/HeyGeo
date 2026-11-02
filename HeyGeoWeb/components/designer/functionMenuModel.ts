@@ -12,7 +12,6 @@
  * caption says, which row of the left margin the next one takes, and which of the
  * two rows the current selection answers to.
  */
-import { hasCoordsys } from './coordsysModel';
 import type { PlotSpec, PlotVariable } from './plotModel';
 import type { HeyGeoElement } from './designTypes';
 
@@ -97,27 +96,30 @@ export function functionPlace(elements: HeyGeoElement[]): [number, number] {
 // ─── The two rows ─────────────────────────────────────────────────────────────
 
 export interface FunctionRows {
-  /** Graph | New Function… — the desktop's canGraphNewFunction: always live. */
-  canNew: boolean;
-  /** Graph | Plot Function… — needs a definition picked and a frame to plot on. */
+  /** 'Plot Function…' needs a definition picked and a frame to plot it on. */
   canPlot: boolean;
   /** The definition Plot Function would draw, or null when it has none. */
   target: string | null;
+  /** The one row Sketchpad shows: 'Plot Function…' over a pick, 'Plot New Function…' otherwise. */
+  label: string;
 }
 
 /**
- * The one definition Graph | Plot Function… would draw: exactly one picked, and a
- * frame for it to be measured against. Half of either and the row is dead, which
- * is the desktop's canGraphPlotFunction read as data instead of as a menu rule.
+ * The one definition Graph | Plot Function… would draw: exactly one picked. A
+ * sketch without a system still gets its curve — Sketchpad supplies the default
+ * system rather than leaving the row dead — so the frame is not part of the rule.
  */
 export function plotTarget(elements: HeyGeoElement[], selection: string[]): string | null {
   if (selection.length !== 1) return null;
   const el = elements.find((e) => e.id === selection[0]);
-  if (!el || functionOf(el) === null) return null;
-  return hasCoordsys(elements) ? el.id : null;
+  return el && functionOf(el) !== null ? el.id : null;
 }
 
 export function functionRows(elements: HeyGeoElement[], selection: string[]): FunctionRows {
   const target = plotTarget(elements, selection);
-  return { canNew: true, canPlot: target !== null, target };
+  return {
+    canPlot: target !== null,
+    target,
+    label: target === null ? 'Plot New Function…' : 'Plot Function…',
+  };
 }

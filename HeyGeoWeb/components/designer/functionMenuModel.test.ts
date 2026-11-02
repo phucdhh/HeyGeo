@@ -76,25 +76,29 @@ describe('where a new definition goes', () => {
 describe('which function row the selection answers to', () => {
   const page = framed(fn('f1', 'x^2-2'), { type: 'point', id: 'A', parents: [1, 1], attrs: {} });
 
-  it('is live for exactly one definition picked on a page with a frame', () => {
+  it('is the plot row for exactly one definition picked', () => {
     expect(plotTarget(page, ['f1'])).toBe('f1');
-    expect(functionRows(page, ['f1'])).toEqual({ canNew: true, canPlot: true, target: 'f1' });
+    expect(functionRows(page, ['f1']))
+      .toEqual({ canPlot: true, target: 'f1', label: 'Plot Function…' });
   });
 
-  it('is dead for anything else: no pick, two picks, or a shape', () => {
-    expect(plotTarget(page, [])).toBeNull();
+  it('is dead for anything else: two picks, or a shape', () => {
     expect(plotTarget(page, ['f1', 'A'])).toBeNull();
     expect(plotTarget(page, ['A'])).toBeNull();
     expect(plotTarget(page, ['ghost'])).toBeNull();
   });
 
-  it('is dead until Graph has marked a frame to measure the curve on', () => {
+  it('still plots on a page with no frame: the row makes the system it needs', () => {
     const noFrame: HeyGeoElement[] = [fn('f1', 'x'), { type: 'point', id: 'A', parents: [1, 1], attrs: {} }];
-    expect(plotTarget(noFrame, ['f1'])).toBeNull();
-    expect(functionRows(noFrame, ['f1'])).toEqual({ canNew: true, canPlot: false, target: null });
+    expect(plotTarget(noFrame, ['f1'])).toBe('f1');
+    expect(functionRows(noFrame, ['f1']))
+      .toEqual({ canPlot: true, target: 'f1', label: 'Plot Function…' });
   });
 
-  it('leaves New Function live on an empty page', () => {
-    expect(functionRows([], [])).toEqual({ canNew: true, canPlot: false, target: null });
+  it('is the New Function row on an empty page, whatever else is picked', () => {
+    expect(functionRows([], [])).toEqual({
+      canPlot: false, target: null, label: 'Plot New Function…',
+    });
+    expect(functionRows(page, []).label).toBe('Plot New Function…');
   });
 });

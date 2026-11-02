@@ -49,14 +49,15 @@ import {
 } from './parameterModel';
 import {
   coordsysOf,
+  definePlan,
   defaultFrame,
   frameElements,
   framePoints,
-  frameSelection,
   graphRows,
-  hasCoordsys,
   originCarriesUnit,
   withGrid,
+  withMark,
+  withMarkOnly,
   type Coordsys,
   type FramePoints,
   type GridForm,
@@ -175,13 +176,17 @@ let _ptIdx = 0;
 let _elIdx = 0;
 function resetCounters() { _ptIdx = 0; _elIdx = 0; }
 /**
- * Continue the id counter past every `_n` the loaded document already uses, so
- * the first element made after a reload cannot take an id the file holds.
+ * Continue the id and name counters past everything the loaded document already
+ * uses, so the first element made after a reload cannot take an id the file
+ * holds — or the letter a displayed point is already called by.
  */
 function seedCounters(elements: HeyGeoElement[]) {
   for (const el of elements) {
     const m = /_(\d+)$/.exec(el.id);
     if (m) _elIdx = Math.max(_elIdx, Number(m[1]));
+    const label = typeof el.attrs?.name === 'string' ? el.attrs.name : '';
+    const n = /^([A-Z])(\d*)$/.exec(label);
+    if (n) _ptIdx = Math.max(_ptIdx, ALPHA.indexOf(n[1]) + 26 * (n[2] ? Number(n[2]) : 0) + 1);
   }
 }
 function nextPointName() {
@@ -1566,6 +1571,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       if (at >= 0) elementsRef.current[at] = el;
       else elementsRef.current.push(el);
     }
+    // the frame just made is the one measures and plots go onto, the way
+    // Sketchpad marks the system it has just defined
+    elementsRef.current = withMarkOnly(elementsRef.current, points.origin.id);
     board.update();
     onDirty();
     return true;
@@ -1579,26 +1587,32 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       : [0, 0];
   }
 
-  /** Graph | New Coordinate System: an origin mid-page with its unit one away. */
+  /**
+   * The default frame: an origin in the middle of the page with its unit point one
+   * board unit to the right. Sketchpad makes one for any Graph row that needs a
+   * system and finds the sketch without one, so this is called from the rows that
+   * plot as much as from Graph | Define Coordinate System.
+   */
   function newCoordsys(): boolean {
     const board = boardRef.current;
-    if (!board || hasCoordsys(elementsRef.current)) return false;
+    if (!board) return false;
     return addFrame(board, defaultFrame(
       nextElId('pt'), nextElId('pt'), nextPointName(), nextPointName(),
     ));
   }
 
   /**
-   * Graph | Define Coordinate System…: the frame the picked points describe. One
-   * point becomes the origin and keeps its unit point to itself; two give the
-   * origin and the length of a unit, in the order they were clicked.
+   * Graph | Define Coordinate System, which is the row Sketchpad names after what
+   * is picked: one point becomes the origin of a system with the default unit, two
+   * give the origin and the length of a unit in the order they were clicked, and
+   * anything else — a lone segment or nothing at all — takes the default system.
    */
   function defineCoordsys(): boolean {
     const board = boardRef.current;
     if (!board) return false;
-    const picked = frameSelection(elementsRef.current, selectedRef.current.map((o) => o.id));
-    if (picked.length === 0 || hasCoordsys(elementsRef.current)) return false;
-    const [originId, unitId] = picked;
+    const plan = definePlan(elementsRef.current, selectedRef.current.map((o) => o.id));
+    if (plan.kind === 'system') return newCoordsys();
+    const [originId, unitId] = plan.points;
     const origin = liveCoords(originId);
     const nameOf = (id: string) => String(
       elementsRef.current.find((e) => e.id === id)?.attrs?.name ?? id);
@@ -1608,6 +1622,23 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         ? { id: unitId, name: nameOf(unitId), coords: liveCoords(unitId) }
         : { id: nextElId('pt'), name: nextPointName(), coords: [origin[0] + 1, origin[1]] },
     });
+  }
+
+  /**
+   * Graph | Mark Coordinate System: the frame the picked object belongs to is the
+   * one the rest of the menu reads. The mark is document-only, so the board is told
+   * to redraw its grid without the construction being rebuilt.
+   */
+  function markCoordsys(): boolean {
+    const board = boardRef.current;
+    if (!board) return false;
+    const picked = selectedRef.current.map((o) => o.id);
+    const updated = picked.reduce<HeyGeoElement[] | null>(
+      (acc, id) => acc ?? withMark(elementsRef.current, id), null);
+    if (!updated) return false;
+    saveSnapshot();
+    restoreScene({ ...currentScene(), elements: updated });
+    return true;
   }
 
   // ─── Functions, their plots and plotted points ──────────────────────────────
@@ -1670,12 +1701,18 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function plotFunction(): boolean {
     const board = boardRef.current;
     if (!board) return false;
-    const elements = elementsRef.current;
-    const target = plotTarget(elements, selectedRef.current.map((o) => o.id));
-    const frame = framePoints(elements);
-    const spec = target ? functionOf(elements.find((e) => e.id === target)!) : null;
-    if (!frame || !spec) {
-      onNotifyRef.current?.('Cần một hàm số được chọn và một hệ trục tọa độ.');
+    const target = plotTarget(elementsRef.current, selectedRef.current.map((o) => o.id));
+    const spec = target ? functionOf(elementsRef.current.find((e) => e.id === target)!) : null;
+    if (!spec) {
+      onNotifyRef.current?.('Cần một hàm số được chọn để vẽ.');
+      return false;
+    }
+    // a curve has to be measured on something, and Sketchpad supplies the default
+    // system rather than refusing the row
+    if (!framePoints(elementsRef.current)) newCoordsys();
+    const frame = framePoints(elementsRef.current);
+    if (!frame) {
+      onNotifyRef.current?.('Cần một hệ trục tọa độ để vẽ hàm số.');
       return false;
     }
     return addObject({
@@ -1721,6 +1758,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
    * while the figure moves under them.
    */
   function addPlotPoint(spec: PlotPointSpec): boolean {
+    // a point has to be measured on something, and Sketchpad supplies the default
+    // system rather than refusing the row
+    if (!framePoints(elementsRef.current)) newCoordsys();
     const frame = framePoints(elementsRef.current);
     if (!frame) {
       onNotifyRef.current?.('Cần một hệ trục tọa độ để vẽ điểm.');
@@ -1745,7 +1785,10 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
   /** Graph | Plot as (x, y)… with the two numbers the designer picked. */
   function plotPickedPair(): boolean {
-    const pair = plotPair(numberSources(elementsRef.current), selectedRef.current.map((o) => o.id));
+    // on a polar system the same two numbers are a radius and a turn
+    const shape = coordsysOf(elementsRef.current)?.grid === 'polar' ? 'polar' : 'rectangular';
+    const pair = plotPair(
+      numberSources(elementsRef.current), selectedRef.current.map((o) => o.id), shape);
     return pair === null ? false : addPlotPoint(pair);
   }
 
@@ -2268,6 +2311,16 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   }
 
   /**
+   * The frame a grid row is about to change. Sketchpad makes a default system when
+   * a grid command finds the sketch without one, so the row is never dead — it just
+   * costs the designer one more undo step than a sketch that already has a frame.
+   */
+  function frameForGrid(): Coordsys | null {
+    if (!coordsysOf(elementsRef.current)) newCoordsys();
+    return coordsysOf(elementsRef.current);
+  }
+
+  /**
    * The grid settings live on the frame's mark, and a rectangular frame keeps its
    * own y-direction point, so changing the form rebuilds those two. The key of a
    * construction covers the mark, so the scene planner tears down and rebuilds the
@@ -2277,6 +2330,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function changeGrid(next: Partial<Pick<Coordsys, 'grid' | 'showGrid' | 'snap'>>): boolean {
     const board = boardRef.current;
     if (!board) return false;
+    // A grid belongs to a system, so a grid command on a sketch without one gets
+    // the default system first — which is what Sketchpad does.
+    if (!coordsysOf(elementsRef.current) && !newCoordsys()) return false;
     const updated = withGrid(
       elementsRef.current,
       next,
@@ -2299,13 +2355,13 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
   /** Graph | Hide Show Grid, for the frame's own grid — not the page's. */
   function toggleFrameGrid(): boolean {
-    const sys = coordsysOf(elementsRef.current);
+    const sys = frameForGrid();
     return sys ? changeGrid({ showGrid: !sys.showGrid }) : false;
   }
 
   /** Graph | Snap Points. */
   function toggleSnap(): boolean {
-    const sys = coordsysOf(elementsRef.current);
+    const sys = frameForGrid();
     return sys ? changeGrid({ snap: !sys.snap }) : false;
   }
 
@@ -3607,7 +3663,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     if (snap) return snap;
 
     const name = namePt ? nextPointName() : '';
-    const id   = `pt_${_elIdx++}`;
+    const id   = nextElId('pt');
     const ptAttrs = { id, name, ...pointStyle() };
 
     // Priority 2: snap to a nearby curve → create a glider (point constrained to curve)
@@ -3796,7 +3852,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       if (snapC) {
         saveSnapshot();
         const name = nextPointName();
-        const id   = `pt_${_elIdx++}`;
+        const id   = nextElId('pt');
         board.create('glider', [x, y, snapC.obj], { id, name, ...pointStyle() });
         elementsRef.current.push({
           type: 'glider', id,
@@ -4681,7 +4737,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       if (!curve) return;
       saveSnapshot();
       const name = nextPointName();
-      const id   = `pt_${_elIdx++}`;
+      const id   = nextElId('pt');
       // Default position: midpoint of segment/line, or angle=0 for circle/arc
       let defaultX = 0, defaultY = 0;
       try {
@@ -4983,8 +5039,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     graphRows: (): GraphRows => (
       graphRows(elementsRef.current, selectedRef.current.map((o) => o.id))
     ),
-    newCoordsys,
     defineCoordsys,
+    markCoordsys,
     functionRows: (): FunctionRows => (
       functionRows(elementsRef.current, selectedRef.current.map((o) => o.id))
     ),

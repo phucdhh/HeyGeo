@@ -30,15 +30,17 @@ interface MenuDef {
 
 /** The Graph menu before the canvas has anything to say about a frame. */
 const NO_FRAME_ROWS: GraphRows = {
-  canNew: false, canDefine: false, canGrid: false,
+  defineLabel: 'Define Coordinate System', canMark: false,
   grid: 'square', showGrid: false, snap: false,
 };
 
 /** A definition can always be typed; nothing is picked to plot yet. */
-const NO_FUNCTION_ROWS: FunctionRows = { canNew: true, canPlot: false, target: null };
+const NO_FUNCTION_ROWS: FunctionRows = { canPlot: false, target: null, label: 'Plot New Function…' };
 
-/** No frame is marked, so no point has anything to be measured on. */
-const NO_PLOT_POINT_ROWS: PlotPointRows = { canPlotPair: false, canPlotValue: false, canOpen: false };
+/** Nothing is picked, so the plot row asks for the coordinates instead. */
+const NO_PLOT_POINT_ROWS: PlotPointRows = {
+  canPlotPair: false, canPlotValue: false, label: 'Plot Points…',
+};
 
 /** Nothing is picked, so there is nothing to make a button out of. */
 const NO_ACTION_BUTTON_ROWS: ActionButtonRows = {
@@ -99,8 +101,10 @@ interface Props {
   onAddSlider: () => void;
   /** Number | Calculate… — the studio opens the Calculator. */
   onOpenCalculate: () => void;
-  /** Graph | New Function… — the studio opens the function dialog. */
+  /** Number | New Function… — the studio opens the function dialog. */
   onOpenNewFunction: () => void;
+  /** Graph | Plot New Function… / Plot Function… — whichever of the two the pick answers to. */
+  onPlotFunction: () => void;
   /** Graph | Plot as (x, y)… — the studio plots the picked numbers or opens its dialog. */
   onPlotAsXy: () => void;
   /** Graph | Plot Value On Axis… — the studio puts the picked number on the x axis. */
@@ -270,6 +274,7 @@ export default function DesignMenuBar({
   onAddSlider,
   onOpenCalculate,
   onOpenNewFunction,
+  onPlotFunction,
   onPlotAsXy,
   onPlotValueOnAxis,
   onPlotCurve,
@@ -703,70 +708,56 @@ export default function DesignMenuBar({
     {
       label: 'Graph',
       items: [
-        // Sketchpad marks one coordinate system at a time, either its own default
-        // or the one the picked points describe, so the second item waits for a
-        // point to be selected and both go grey once a frame is marked.
+        // Sketchpad names the first row after what is picked: one point gives an
+        // origin, two give the length of a unit, anything else takes the default
+        // system. The row is live whatever the state of the sketch.
         {
-          label: 'New Coordinate System',
-          disabled: !frames.canNew,
-          action: () => canvasRef.current?.newCoordsys(),
-        },
-        {
-          label: 'Define Coordinate System',
-          disabled: !frames.canDefine,
+          label: frames.defineLabel,
           action: () => canvasRef.current?.defineCoordsys(),
         },
-        { separator: true },
-        // two numbers picked go straight onto the frame; anything else opens the
-        // dialog over it, and both need a frame to be measured on first
+        // the system the picked object belongs to is the one measures and plots use
         {
-          label: 'Plot As (x, y)…',
-          disabled: !plotted.canOpen,
-          action: onPlotAsXy,
+          label: 'Mark Coordinate System',
+          disabled: !frames.canMark,
+          action: () => canvasRef.current?.markCoordsys(),
         },
-        // the desktop's canGraphPlotValueOnAxis: one number picked, and a frame
-        {
-          label: 'Plot Value On Axis…',
-          disabled: !plotted.canPlotValue,
-          action: onPlotValueOnAxis,
-        },
-        { label: 'New Function…',                 action: onOpenNewFunction },
-        // the desktop's canGraphPlotFunction: one definition picked, and a frame
-        // marked for it to be measured against
-        {
-          label: 'Plot Function…',
-          disabled: !functions.canPlot,
-          action: () => canvasRef.current?.plotFunction(),
-        },
-        { label: 'Plot Curve…',                   action: onPlotCurve },
-        { label: 'Plot Table Data…',              action: onUnderDevelopment },
-        { separator: true },
         {
           label: 'Grid Form',
-          // A grid belongs to a frame, so the whole group waits for one to be marked.
-          disabled: !frames.canGrid,
           submenu: GRID_FORMS.map((form) => ({
             label: GRID_FORM_LABELS[form],
             checked: frames.grid === form,
             action: () => canvasRef.current?.setGridForm(form),
           })),
         },
+        { separator: true },
         // The frame's grid, not the page's: a rectangular frame drags its own y
         // spacing, a polar one counts rings, and the graph paper behind everything
         // else stays where Display | Grid puts it.
         {
           label: frames.showGrid ? 'Hide Grid' : 'Show Grid',
-          disabled: !frames.canGrid,
           action: () => canvasRef.current?.toggleFrameGrid(),
         },
         {
           label: 'Snap Points',
           checked: frames.snap,
-          disabled: !frames.canGrid,
           action: () => canvasRef.current?.toggleSnap(),
         },
         { separator: true },
-        { label: 'Derivative…',                   action: onUnderDevelopment },
+        // the desktop's canGraphPlotValueOnAxis: one number picked to put on the axis
+        {
+          label: 'Plot Value on Axis…',
+          disabled: !plotted.canPlotValue,
+          action: onPlotValueOnAxis,
+        },
+        // two numbers picked go straight onto the frame; anything else opens the
+        // dialog over it, and a polar system asks for a radius and a turn instead
+        { label: plotted.label,                     action: onPlotAsXy },
+        { label: 'Plot Table Data…',                action: onUnderDevelopment },
+        { separator: true },
+        // one row, two names: a picked definition is drawn, nothing picked is the
+        // Calculator asking for a formula to plot
+        { label: functions.label, shortcut: 'Ctrl+G', action: onPlotFunction },
+        { label: 'Plot Parametric Curve…',          action: onPlotCurve },
       ],
     },
 

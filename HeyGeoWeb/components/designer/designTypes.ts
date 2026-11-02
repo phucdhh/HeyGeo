@@ -383,16 +383,16 @@ export interface CanvasHandle {
    * one frame at a time, and keeps its grid with that frame.
    */
   graphRows: () => GraphRows;
-  /** Graph | New Coordinate System: an origin and its unit point, drawn as axes. */
-  newCoordsys: () => boolean;
-  /** Graph | Define Coordinate System…: the frame the picked points describe. */
+  /** Graph | Define Coordinate System: the frame the picked points describe. */
   defineCoordsys: () => boolean;
+  /** Graph | Mark Coordinate System: the picked object's frame becomes the active one. */
+  markCoordsys: () => boolean;
   /**
    * Which of the two function rows the page answers to: a definition is always
    * available, a plot needs one picked and a frame marked to be measured on.
    */
   functionRows: () => FunctionRows;
-  /** Graph | New Function…: the typed definition, shown on the page as text. */
+  /** Number | New Function…: the typed definition, shown on the page as text. */
   newFunction: (expr: string, domain: [number, number]) => boolean;
   /** Graph | Plot Function…: the picked definition drawn through the marked frame. */
   plotFunction: () => boolean;

@@ -178,8 +178,20 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
   // Transform dialog (opened from Transform → Translate / Rotate / Dilate…)
   const [transformMode, setTransformMode] = useState<TransformMode | null>(null);
 
-  /** Graph | New Function… — open whenever the menu row is used; it needs nothing picked. */
+  /** Number | New Function… — open whenever the menu row is used; it needs nothing picked. */
   const [newFunctionOpen, setNewFunctionOpen] = useState(false);
+
+  /**
+   * The Graph menu's function row and its Ctrl+G: a picked definition is drawn
+   * through the marked system, and with nothing picked Sketchpad asks for the
+   * formula before it draws anything.
+   */
+  function handlePlotFunction() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (canvas.functionRows().canPlot) { canvas.plotFunction(); return; }
+    setNewFunctionOpen(true);
+  }
 
   /** Graph | Plot Curve… — the parametric pair is always typed; it needs nothing picked. */
   const [plotCurveOpen, setPlotCurveOpen] = useState(false);
@@ -271,7 +283,9 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
       return;
     }
     const values = canvas.numberValues();
-    setPlotPoint({ values, initial: plotPointSeed(values, selected.map((s) => s.id)) });
+    // the dialog opens on the tab the marked system is drawn in
+    const shape = canvas.graphRows().grid === 'polar' ? 'polar' : 'rectangular';
+    setPlotPoint({ values, initial: plotPointSeed(values, selected.map((s) => s.id), shape) });
   }
 
   // Locus dialog (opened from Construct → Locus…)
@@ -424,6 +438,8 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         if (e.key === '0') { e.preventDefault(); canvasRef.current?.zoomFit(); return; }
         if (e.key === '1') { e.preventDefault(); canvasRef.current?.zoomReset?.(); return; }
         if (e.key === 'b') { e.preventDefault(); canvasRef.current?.toggleSelectedBold?.(); return; }
+        // Sketchpad's shortcut for the Graph menu's function row
+        if (e.key === 'g') { e.preventDefault(); handlePlotFunction(); return; }
         return;
       }
       // Shift+arrow is the GSP toolbox keyboard: Left/Right changes the
@@ -739,6 +755,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onAddSlider={() => canvasRef.current?.addSlider()}
         onOpenCalculate={handleOpenCalculate}
         onOpenNewFunction={() => setNewFunctionOpen(true)}
+        onPlotFunction={handlePlotFunction}
         onPlotAsXy={handlePlotAsXy}
         onPlotValueOnAxis={() => canvasRef.current?.plotValueOnAxis()}
         onPlotCurve={() => setPlotCurveOpen(true)}

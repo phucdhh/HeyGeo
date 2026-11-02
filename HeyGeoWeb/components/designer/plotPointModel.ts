@@ -22,7 +22,7 @@ import { evalExpression, expressionRefs, expressionVariables } from './expressio
 import { isMeasurable } from './gridModel';
 import { numberSources, type NumberSource } from './numberMenuModel';
 import { frameOfPoints, frameToBoard } from './plotModel';
-import { framePoints } from './coordsysModel';
+import { coordsysOf } from './coordsysModel';
 import type { HeyGeoElement } from './designTypes';
 
 /** The two ways Sketchpad writes a point's place: as axes, or as a radius and a turn. */
@@ -151,12 +151,17 @@ export function plotPointParents(
 /**
  * The point the two numbers the designer picked make: Sketchpad plots them
  * straight onto the frame, the way the desktop's graphPlotAsXY reads
- * selectedRefs[0] as x and selectedRefs[1] as y.
+ * selectedRefs[0] as x and selectedRefs[1] as y. On a polar system the same two
+ * numbers are a radius and a turn, which is why that row reads (r, θ).
  */
-export function plotPair(sources: NumberSource[], selection: string[]): PlotPointSpec | null {
+export function plotPair(
+  sources: NumberSource[],
+  selection: string[],
+  shape: PlotShape = 'rectangular',
+): PlotPointSpec | null {
   if (selection.length !== 2) return null;
   if (!selection.every((id) => sources.some((s) => s.id === id))) return null;
-  return { shape: 'rectangular', x: '#0', y: '#1', args: [...selection] };
+  return { shape, x: '#0', y: '#1', args: [...selection] };
 }
 
 /**
@@ -175,12 +180,17 @@ export function plotOnAxis(sources: NumberSource[], selection: string[]): PlotPo
 /**
  * What the Plot Point dialog opens with. A number picked before asking is the
  * first field's reading, so picking a length and plotting it puts the point on
- * the x axis rather than leaving the designer to type the operand in.
+ * the x axis rather than leaving the designer to type the operand in. The tab it
+ * opens is the marked system's own: a polar frame is asked for a radius and a turn.
  */
-export function plotPointSeed(sources: NumberSource[], selection: string[]): PlotPointSpec {
+export function plotPointSeed(
+  sources: NumberSource[],
+  selection: string[],
+  shape: PlotShape = 'rectangular',
+): PlotPointSpec {
   const picked = selection.filter((id) => sources.some((s) => s.id === id));
   return {
-    shape: 'rectangular',
+    shape,
     x: picked.length > 0 ? '#0' : '',
     y: picked.length > 1 ? '#1' : '',
     args: picked.slice(0, 2),
@@ -188,20 +198,22 @@ export function plotPointSeed(sources: NumberSource[], selection: string[]): Plo
 }
 
 export interface PlotPointRows {
-  /** The desktop's canGraphPlotAsXY: two numbers picked, and a frame to place them on. */
+  /** Two numbers picked: the row plots them at once instead of asking for them. */
   canPlotPair: boolean;
-  /** The desktop's canGraphPlotValueOnAxis: one number picked, and a frame. */
+  /** The desktop's canGraphPlotValueOnAxis: one number picked. */
   canPlotValue: boolean;
-  /** The row is live whenever there is a frame for a typed point to be measured on. */
-  canOpen: boolean;
+  /** 'Plot as (x, y)…', 'Plot as (r, θ)…' or 'Plot Points…', per what is picked. */
+  label: string;
 }
 
 export function plotPointRows(elements: HeyGeoElement[], selection: string[]): PlotPointRows {
-  const canOpen = framePoints(elements) !== null;
   const sources = numberSources(elements);
+  const canPlotPair = plotPair(sources, selection) !== null;
   return {
-    canPlotPair: canOpen && plotPair(sources, selection) !== null,
-    canPlotValue: canOpen && plotOnAxis(sources, selection) !== null,
-    canOpen,
+    canPlotPair,
+    canPlotValue: plotOnAxis(sources, selection) !== null,
+    label: !canPlotPair
+      ? 'Plot Points…'
+      : coordsysOf(elements)?.grid === 'polar' ? 'Plot as (r, θ)…' : 'Plot as (x, y)…',
   };
 }

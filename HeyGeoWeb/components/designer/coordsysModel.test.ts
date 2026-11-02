@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  coordsysList,
   coordsysOf,
+  definePlan,
   defaultFrame,
   frameElements,
+  frameOwner,
   framePoints,
   frameSelection,
   graphRows,
@@ -11,6 +14,8 @@ import {
   originCarriesUnit,
   verticalElement,
   withGrid,
+  withMark,
+  withMarkOnly,
 } from './coordsysModel';
 import type { HeyGeoElement } from './designTypes';
 
@@ -50,14 +55,19 @@ describe('a frame marked on its origin', () => {
     expect(coordsysOf([point('O', 0, 0, { coordsys: { unit: 'O' } })])).toBeNull();
   });
 
-  it('takes the first frame when a document somehow holds two', () => {
+  it('reads the marked frame first when a document holds several', () => {
     const two = [
       point('O', 0, 0, { coordsys: { unit: 'U' } }), point('U', 1, 0),
-      point('P', 2, 2, { coordsys: { unit: 'Q' } }), point('Q', 3, 2),
+      point('P', 2, 2, { coordsys: { unit: 'Q', marked: true } }), point('Q', 3, 2),
     ];
     expect(coordsysOf(two)).toEqual({
-      origin: 'O', unit: 'U', grid: 'square', showGrid: false, snap: false,
+      origin: 'P', unit: 'Q', grid: 'square', showGrid: false, snap: false,
     });
+    // and with nothing marked the first of them is the one everything reads, which
+    // is what a sketch with a single system has always done
+    expect(coordsysList(two).map((s) => s.origin)).toEqual(['P', 'O']);
+    expect(coordsysList([point('O', 0, 0, { coordsys: { unit: 'U' } }), point('U', 1, 0)])
+      .map((s) => s.origin)).toEqual(['O']);
   });
 
   it('reads the grid settings the document states, and the defaults it leaves out', () => {
@@ -143,29 +153,88 @@ describe('the Graph menu over a selection', () => {
     expect(frameSelection(PLAIN, ['s'])).toEqual([]);
   });
 
-  it('offers both items while no frame is marked and the points are picked', () => {
-    expect(graphRows(PLAIN, ['A', 'B'])).toEqual({
-      canNew: true, canDefine: true, canGrid: false, grid: 'square', showGrid: false, snap: false,
+  it('names the define row after the points it finds picked', () => {
+    // one point is an origin, two give the length of a unit, anything else is the
+    // default system Sketchpad makes rather than refusing the row
+    expect(definePlan(PLAIN, ['A'])).toEqual({ kind: 'origin', label: 'Define Origin', points: ['A'] });
+    expect(definePlan(PLAIN, ['A', 'B'])).toEqual({
+      kind: 'unit', label: 'Define Coordinate System', points: ['A', 'B'],
     });
-    expect(graphRows(PLAIN, ['A']).canDefine).toBe(true);
-    expect(graphRows(PLAIN, []).canDefine).toBe(false);
-    expect(graphRows(PLAIN, ['k']).canDefine).toBe(false);
-    // the desktop greys the grid group out with the same gate: a grid is a frame's
-    expect(graphRows(PLAIN, []).canGrid).toBe(false);
+    expect(definePlan(PLAIN, []).label).toBe('Define Coordinate System');
+    expect(definePlan(PLAIN, ['k'])).toEqual({
+      kind: 'system', label: 'Define Coordinate System', points: [],
+    });
+    expect(definePlan(PLAIN, ['A', 'B', 'k']).kind).toBe('system');
   });
 
-  it('offers neither once a frame is marked: one system at a time, as in Sketchpad', () => {
-    // to redefine it the designer drags its points, or deletes the frame first
-    const rows = graphRows(FRAME, ['A', 'B']);
-    expect(rows).toMatchObject({ canNew: false, canDefine: false, canGrid: true });
-    expect(rows.grid).toBe('square');
+  it('keeps every row live but the mark, which needs a second system', () => {
+    expect(graphRows(PLAIN, ['A', 'B'])).toEqual({
+      defineLabel: 'Define Coordinate System', canMark: false,
+      grid: 'square', showGrid: false, snap: false,
+    });
+    // a grid, a plot and a point all make the default system for themselves
+    expect(graphRows(PLAIN, []).canMark).toBe(false);
+    expect(graphRows(FRAME, []).defineLabel).toBe('Define Coordinate System');
   });
 
   it('shows the grid the frame already has, for the checkmarks', () => {
     const framed = withGrid(FRAME, { grid: 'trig', showGrid: true }, () => [0, 1])!;
-    expect(graphRows(framed, [])).toMatchObject({
-      canGrid: true, grid: 'trig', showGrid: true, snap: false,
-    });
+    expect(graphRows(framed, [])).toMatchObject({ grid: 'trig', showGrid: true, snap: false });
+  });
+});
+
+describe('Graph | Mark Coordinate System', () => {
+  const SECOND = frameElements(defaultFrame('P', 'Q', 'P', 'Q'), []);
+  const TWO = [...FRAME, ...SECOND];
+
+  it('knows every object of a frame by the origin it was drawn from', () => {
+    for (const id of ['O', 'U', 'O_v', 'O_x', 'O_y']) {
+      expect(frameOwner(TWO, id)).toBe('O');
+    }
+    expect(frameOwner(TWO, 'P')).toBe('P');
+    expect(frameOwner(TWO, 'nothing here')).toBeNull();
+  });
+
+  it('moves the mark to the picked object’s system and takes it off the other', () => {
+    // with neither flagged, the first of them is the system everything reads
+    expect(coordsysOf(TWO)!.origin).toBe('O');
+    const marked = withMark(TWO, 'P')!;
+    expect(marked.find((e) => e.id === 'O')!.attrs.coordsys).not.toHaveProperty('marked');
+    expect(marked.find((e) => e.id === 'P')!.attrs.coordsys)
+      .toMatchObject({ unit: 'Q', marked: true });
+    expect(coordsysOf(marked)!.origin).toBe('P');
+    // picking the system that is already active, or an object of no system, is not
+    // a change the menu should offer
+    expect(withMark(TWO, 'O_x')).toBeNull();
+    expect(withMark(marked, 'nothing here')).toBeNull();
+  });
+
+  it('writes no flag at all while the sketch has only one system', () => {
+    expect(withMarkOnly(FRAME, 'O')).toEqual(FRAME);
+    const one = FRAME.map((e) => (e.id === 'O'
+      ? { ...e, attrs: { ...e.attrs, coordsys: { unit: 'U', marked: true } } }
+      : e));
+    expect(withMarkOnly(one, 'O').find((e) => e.id === 'O')!.attrs.coordsys)
+      .not.toHaveProperty('marked');
+  });
+
+  it('greys the row until there is a second system and one pick that names it', () => {
+    expect(graphRows(FRAME, ['O_x']).canMark).toBe(false);
+    expect(graphRows(TWO, ['O_x']).canMark).toBe(false);
+    expect(graphRows(TWO, ['P']).canMark).toBe(true);
+    // two systems picked says nothing about which one the designer means
+    expect(graphRows(TWO, ['P', 'O_x']).canMark).toBe(false);
+  });
+
+  it('survives a grid row rewriting the mark it stands on', () => {
+    // the grid is drawn on whichever system is marked, and writing its settings out
+    // in full must not quietly hand the sketch back to the first frame
+    const marked = withMark(TWO, 'P')!;
+    const gridded = withGrid(marked, { grid: 'polar', showGrid: true }, () => [0, 1])!;
+    expect(gridded.find((e) => e.id === 'P')!.attrs.coordsys)
+      .toEqual({ unit: 'Q', grid: 'polar', showGrid: true, snap: false, marked: true });
+    expect(gridded.find((e) => e.id === 'O')!.attrs.coordsys).not.toHaveProperty('marked');
+    expect(coordsysOf(gridded)!.origin).toBe('P');
   });
 });
 
