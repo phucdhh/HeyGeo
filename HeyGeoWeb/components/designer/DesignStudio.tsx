@@ -178,19 +178,22 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
   // Transform dialog (opened from Transform → Translate / Rotate / Dilate…)
   const [transformMode, setTransformMode] = useState<TransformMode | null>(null);
 
-  /** Number | New Function… — open whenever the menu row is used; it needs nothing picked. */
-  const [newFunctionOpen, setNewFunctionOpen] = useState(false);
+  /**
+   * Number | New Function… writes a definition; Graph | Plot New Function… writes
+   * one and draws it, which is what makes the two menu rows different.
+   */
+  const [newFunctionOpen, setNewFunctionOpen] = useState<'define' | 'plot' | null>(null);
 
   /**
    * The Graph menu's function row and its Ctrl+G: a picked definition is drawn
    * through the marked system, and with nothing picked Sketchpad asks for the
-   * formula before it draws anything.
+   * formula and plots what it made in one step.
    */
   function handlePlotFunction() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     if (canvas.functionRows().canPlot) { canvas.plotFunction(); return; }
-    setNewFunctionOpen(true);
+    setNewFunctionOpen('plot');
   }
 
   /** Graph | Plot Curve… — the parametric pair is always typed; it needs nothing picked. */
@@ -754,7 +757,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onNewParameter={handleNewParameter}
         onAddSlider={() => canvasRef.current?.addSlider()}
         onOpenCalculate={handleOpenCalculate}
-        onOpenNewFunction={() => setNewFunctionOpen(true)}
+        onOpenNewFunction={() => setNewFunctionOpen('define')}
         onPlotFunction={handlePlotFunction}
         onPlotAsXy={handlePlotAsXy}
         onPlotValueOnAxis={() => canvasRef.current?.plotValueOnAxis()}
@@ -898,24 +901,22 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
       {/* ── Graph | New Function… dialog ── */}
       {newFunctionOpen && (
         <NewFunctionDialog
+          plot={newFunctionOpen === 'plot'}
           onConfirm={(expr, domain) => {
-            canvasRef.current?.newFunction(expr, domain);
-            setNewFunctionOpen(false);
+            canvasRef.current?.newFunction(expr, domain, newFunctionOpen === 'plot');
+            setNewFunctionOpen(null);
           }}
-          onCancel={() => setNewFunctionOpen(false)}
+          onCancel={() => setNewFunctionOpen(null)}
         />
       )}
 
-      {/* ── Graph | Plot as (x, y)… dialog ── */}
+      {/* ── Graph | Plot Points… dialog ── */}
       {plotPoint && (
         <PlotPointDialog
           values={plotPoint.values}
           initial={plotPoint.initial}
-          onConfirm={(spec) => {
-            canvasRef.current?.plotPoint(spec);
-            setPlotPoint(null);
-          }}
-          onCancel={() => setPlotPoint(null)}
+          onPlot={(spec) => canvasRef.current?.plotPoint(spec) ?? false}
+          onDone={() => setPlotPoint(null)}
         />
       )}
 

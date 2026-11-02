@@ -15,8 +15,9 @@ interface Props {
   values: NumberValue[];
   /** What the dialog opens with: the numbers that were picked, or nothing. */
   initial: PlotPointSpec;
-  onConfirm: (spec: PlotPointSpec) => void;
-  onCancel: () => void;
+  /** Plot the pair the fields hold; the dialog stays open for the next one. */
+  onPlot: (spec: PlotPointSpec) => boolean;
+  onDone: () => void;
 }
 
 /**
@@ -52,20 +53,22 @@ const FUNCTIONS = [
 ];
 
 /**
- * Graph | Plot as (x, y)… — Sketchpad's Plot Point dialog.
+ * Graph | Plot Points… — Sketchpad's Plot Point dialog.
  *
  * The point is stored as the two expressions that were typed, over the ids of the
  * numbers they read, so a document keeps a description of a place and the page
- * never compiles what it read from storage.
+ * never compiles what it read from storage. Sketchpad plots one pair without
+ * closing the dialog, ready for the next, and Done closes it.
  */
-export default function PlotPointDialog({ values, initial, onConfirm, onCancel }: Props) {
-  useDialogDismiss(onCancel);
+export default function PlotPointDialog({ values, initial, onPlot, onDone }: Props) {
+  useDialogDismiss(onDone);
   const [shape, setShape] = useState<PlotShape>(initial.shape);
   const [x, setX] = useState(initial.x);
   const [y, setY] = useState(initial.y);
   const [args, setArgs] = useState<string[]>(initial.args);
   const [active, setActive] = useState<'x' | 'y'>('x');
   const [caret, setCaret] = useState(initial.x.length);
+  const [plotted, setPlotted] = useState(0);
   const xField = useRef<HTMLInputElement>(null);
   const yField = useRef<HTMLInputElement>(null);
 
@@ -107,6 +110,18 @@ export default function PlotPointDialog({ values, initial, onConfirm, onCancel }
     insert(`#${slot < 0 ? args.length : slot}`);
   }
 
+  /** Plot what the fields hold and clear them for the next pair. */
+  function plot() {
+    if (!ready) return;
+    if (!onPlot(spec)) return;
+    setPlotted(plotted + 1);
+    setX('');
+    setY('');
+    setCaret(0);
+    setActive('x');
+    xField.current?.focus();
+  }
+
   /** The active field, with the label of whichever tab is open. */
   const field = (which: 'x' | 'y', label: string) => (
     <div className="flex items-center gap-2">
@@ -129,7 +144,7 @@ export default function PlotPointDialog({ values, initial, onConfirm, onCancel }
           setActive(which);
           setCaret(e.currentTarget.selectionStart ?? 0);
         }}
-        onKeyDown={(e) => { if (e.key === 'Enter' && ready) onConfirm(spec); }}
+        onKeyDown={(e) => { if (e.key === 'Enter') plot(); }}
       />
     </div>
   );
@@ -137,7 +152,7 @@ export default function PlotPointDialog({ values, initial, onConfirm, onCancel }
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={onCancel}
+      onClick={onDone}
     >
       <div
         className="bg-white rounded-xl shadow-2xl p-6 w-[28rem] max-h-[92vh] overflow-y-auto"
@@ -221,19 +236,21 @@ export default function PlotPointDialog({ values, initial, onConfirm, onCancel }
         </div>
 
         <p className="mt-2 h-5 text-xs text-gray-500">
-          {!ready && (x.trim() !== '' || y.trim() !== '') ? problem : ''}
+          {!ready && (x.trim() !== '' || y.trim() !== '')
+            ? problem
+            : plotted > 0 ? `Đã vẽ ${plotted} điểm.` : ''}
         </p>
 
         <div className="flex gap-3 mt-2">
           <button
-            onClick={onCancel}
+            onClick={onDone}
             className="flex-1 text-sm text-gray-600 border border-gray-300 rounded-lg py-1.5 hover:bg-gray-50 transition-colors"
           >
-            Hủy
+            Xong
           </button>
           <button
             disabled={!ready}
-            onClick={() => onConfirm(spec)}
+            onClick={plot}
             className={[
               'flex-1 text-sm rounded-lg py-1.5 transition-colors',
               !ready

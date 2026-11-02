@@ -1686,19 +1686,25 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
    * What is stored is the formula as infix text plus its variable and domain, so
    * the caption reads back what was typed and Plot Function has something to draw
    * without the page ever compiling it.
+   *
+   * Graph | Plot New Function… is the same definition asked for as a curve: the
+   * desktop plots it as soon as the Calculator closes, so `draw` goes on to draw
+   * the definition the row was used to make.
    */
-  function newFunction(expr: string, domain: [number, number]): boolean {
+  function newFunction(expr: string, domain: [number, number], draw = false): boolean {
     const board = boardRef.current;
     if (!board) return false;
     const spec: FunctionSpec = { expr, variable: 'x', from: domain[0], to: domain[1] };
     const elements = elementsRef.current;
     const [x, y] = functionPlace(elements);
-    return addObject({
+    const made = addObject({
       type: 'text',
       id: nextElId('fn'),
       parents: [x, y, functionCaption(nextFunctionName(elements), spec)],
       attrs: { ...FUNCTION_STYLE, func: spec },
     });
+    // addObject leaves the new definition picked, which is what Plot Function reads
+    return made && draw ? plotFunction() : made;
   }
 
   /**

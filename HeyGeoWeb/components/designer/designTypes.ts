@@ -393,7 +393,7 @@ export interface CanvasHandle {
    */
   functionRows: () => FunctionRows;
   /** Number | New Function…: the typed definition, shown on the page as text. */
-  newFunction: (expr: string, domain: [number, number]) => boolean;
+  newFunction: (expr: string, domain: [number, number], draw?: boolean) => boolean;
   /** Graph | Plot Function…: the picked definition drawn through the marked frame. */
   plotFunction: () => boolean;
   /** Graph | Plot Curve…: the parametric pair drawn through the marked frame. */

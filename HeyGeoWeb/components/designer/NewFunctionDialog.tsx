@@ -6,6 +6,8 @@ import { DEFAULT_DOMAIN, functionPlot, plotProblem } from './plotModel';
 import { useDialogDismiss } from './useDialogDismiss';
 
 interface Props {
+  /** Graph | Plot New Function… draws the definition as soon as it is made. */
+  plot?: boolean;
   onConfirm: (expr: string, domain: [number, number]) => void;
   onCancel: () => void;
 }
@@ -49,13 +51,15 @@ function at(expr: string, x: number): number | null {
 }
 
 /**
- * Graph | New Function… — the desktop's New Function dialog.
+ * Number | New Function… and Graph | Plot New Function… — the desktop's Calculator.
+ * The two rows ask the same question; the second also draws the answer, so only
+ * its word for the action changes.
  *
  * The formula stays the text that was typed: what reaches the document is an
  * infix expression, its variable and its domain, which the plot reads back
  * through the marked frame. Nothing here is ever compiled.
  */
-export default function NewFunctionDialog({ onConfirm, onCancel }: Props) {
+export default function NewFunctionDialog({ plot = false, onConfirm, onCancel }: Props) {
   useDialogDismiss(onCancel);
   const [expr, setExpr] = useState('');
   const [from, setFrom] = useState(DEFAULT_DOMAIN[0]);
@@ -93,7 +97,7 @@ export default function NewFunctionDialog({ onConfirm, onCancel }: Props) {
         className="bg-white rounded-xl shadow-2xl p-6 w-[30rem] max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-base font-semibold text-gray-800 mb-4">Hàm số mới</h2>
+        <h2 className="text-base font-semibold text-gray-800 mb-4">{plot ? 'Vẽ hàm số' : 'Hàm số mới'}</h2>
 
         <div className="flex items-center gap-2">
           <span className="text-sm font-mono italic text-gray-700">f(x) =</span>
@@ -205,7 +209,7 @@ export default function NewFunctionDialog({ onConfirm, onCancel }: Props) {
                 : 'text-white bg-brand-600 hover:bg-brand-700',
             ].join(' ')}
           >
-            Tạo hàm số
+            {plot ? 'Vẽ hàm số' : 'Tạo hàm số'}
           </button>
         </div>
       </div>
