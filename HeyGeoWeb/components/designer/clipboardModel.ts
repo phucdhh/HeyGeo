@@ -75,6 +75,7 @@ const DESCRIPTOR_IDS: [string, 'args' | 'of'][] = [
   ['anchor', 'of'],
   ['image', 'of'],
   ['plotAt', 'args'],
+  ['plotValue', 'args'],
 ];
 
 function renameAttrs(source: Descriptor, map: Map<string, string>): Descriptor {
@@ -88,6 +89,14 @@ function renameAttrs(source: Descriptor, map: Map<string, string>): Descriptor {
   const button = out.button;
   if (button && typeof button === 'object' && Array.isArray((button as Descriptor).targets)) {
     out.button = { ...(button as Descriptor), targets: renameIds((button as Descriptor).targets, map) };
+  }
+  // a plotted value names its path beside the numbers it reads
+  const value = out.plotValue;
+  if (value && typeof value === 'object') {
+    const path = (value as Descriptor).path;
+    if (typeof path === 'string' && map.has(path)) {
+      out.plotValue = { ...(value as Descriptor), path: map.get(path) };
+    }
   }
   // a frame's unit point is named in its mark, not in its parents
   const coordsys = out.coordsys;

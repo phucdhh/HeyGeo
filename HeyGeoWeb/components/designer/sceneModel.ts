@@ -19,6 +19,7 @@ import {
 } from './elementRegistry';
 import { measureDeps } from './measurement';
 import { plotPointDeps } from './plotPointModel';
+import { plotValueDeps } from './plotValueModel';
 import { buttonDeps } from './actionButtonModel';
 import { imageDeps } from './transforms';
 import type { HeyGeoElement, ToolMode } from './designTypes';
@@ -73,7 +74,7 @@ export function parentIds(el: HeyGeoElement): string[] {
   for (let i = 0; i < el.parents.length; i++) {
     if (isReferenceParent(el, i)) out.push(String(el.parents[i]));
   }
-  for (const id of [...measureDeps(el), ...imageDeps(el), ...plotPointDeps(el), ...buttonDeps(el)]) {
+  for (const id of [...measureDeps(el), ...imageDeps(el), ...plotPointDeps(el), ...plotValueDeps(el), ...buttonDeps(el)]) {
     if (!out.includes(id)) out.push(id);
   }
   return out;
@@ -168,7 +169,7 @@ export function coordParents(el: HeyGeoElement): number[] | null {
 }
 
 /** Descriptors this app reads; JSXGraph never sees them, so they are not style. */
-const APP_ATTRS = new Set(['measure', 'anchor', 'image', 'coordsys', 'plot', 'func', 'plotAt', 'button']);
+const APP_ATTRS = new Set(['measure', 'anchor', 'image', 'coordsys', 'plot', 'func', 'plotAt', 'plotValue', 'button']);
 
 export function attrsDiffer(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
   const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);

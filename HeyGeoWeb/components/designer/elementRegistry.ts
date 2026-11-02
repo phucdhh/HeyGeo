@@ -29,6 +29,7 @@ import { migrateLegacyMeasure } from './legacyMeasure';
 import { migrateLegacyTransform } from './legacyTransform';
 import { isPlotSpec, PLOT_SAMPLES, plotParents, plotProblem } from './plotModel';
 import { plotPointOf, plotPointParents, plotPointProblem } from './plotPointModel';
+import { isPlotValueSpec, plotValueNumber, plotValueOf, valueGlide } from './plotValueModel';
 import { buttonOf, buttonProblem } from './actionButtonModel';
 import { imageClosures, isImageSpec, type ImageSpec } from './transforms';
 import { isParameterSpec, parameterCaption } from './parameterModel';
@@ -289,6 +290,38 @@ export function glideStart(spec: GlideSpec, path: Any): [number, number] | null 
   return [a.X() + (dx * spec.distance) / len, a.Y() + (dy * spec.distance) / len];
 }
 
+/**
+ * Graph | Plot Value on Path: put each plotted point where its number now says.
+ * `placed` remembers the reading each point was last moved to, so a point the
+ * designer drags stays where it was put until the number under it changes —
+ * which is the moment the document says it is no longer the designer's to hold.
+ * The engine does not see a function inside an attribute as a dependency, so
+ * this is done on the canvas's own clock rather than by JSXGraph.
+ */
+export function syncPlotValues(
+  board: Any,
+  elements: { id: string; attrs?: Record<string, unknown> | null }[],
+  placed: Map<string, number>,
+  numberAt: (id: string) => number | null,
+): boolean {
+  let moved = false;
+  for (const el of elements) {
+    const spec = plotValueOf(el);
+    if (!spec) continue;
+    const value = plotValueNumber(spec, numberAt);
+    if (value === null) continue;
+    const before = placed.get(el.id);
+    placed.set(el.id, value);
+    if (before === undefined || Math.abs(before - value) < 1e-12) continue;
+    const obj = board.objects[el.id];
+    const glide = valueGlide(spec.kind, value);
+    const at = glide === null ? null : glideStart(glide, board.objects[spec.path]);
+    if (!at || typeof obj?.moveTo !== 'function') continue;
+    try { obj.moveTo(at); moved = true; } catch { /* the path went away */ }
+  }
+  return moved;
+}
+
 function checkArity(entry: RegistryEntry, el: ElementSpec): string | undefined {
   // An image point is placed by its descriptor, so its only parent is the point
   // it copies.
@@ -332,6 +365,16 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
   const attrs = el.attrs ?? {};
   const image = imageOf(el);
   if (image) return imageClosures(board, String(el.parents[0]), image);
+  if (el.type === 'glider' && isPlotValueSpec(attrs.plotValue)) {
+    // Graph | Plot Value on Path: the glider starts where the reading falls, and
+    // the canvas moves it on when the number under the reading changes.
+    const spec = attrs.plotValue;
+    const path = elMap[spec.path];
+    const value = plotValueNumber(spec, (id) => numberValueOf(board, id));
+    const glide = value === null ? null : valueGlide(spec.kind, value);
+    const start = glide === null ? null : glideStart(glide, path);
+    if (start) return [start[0], start[1], path];
+  }
   if (el.type === 'glider' && isGlideSpec(attrs.glide)) {
     const path = elMap[String(el.parents[2])];
     const start = glideStart(attrs.glide, path);
@@ -404,7 +447,7 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
 }
 
 /** Attributes that describe the element to this app, not to JSXGraph. */
-const APP_ATTRS = ['measure', 'anchor', 'image', 'glide', 'coordsys', 'plot', 'func', 'plotAt', 'button', 'parameter'];
+const APP_ATTRS = ['measure', 'anchor', 'image', 'glide', 'coordsys', 'plot', 'func', 'plotAt', 'plotValue', 'button', 'parameter'];
 
 /**
  * Construct | Arc Segment Interior: the filled region bounded by an arc and

@@ -8,6 +8,7 @@ import { type FunctionRows } from './functionMenuModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { canCalculate } from './numberMenuModel';
 import { type PlotPointRows } from './plotPointModel';
+import { type PlotValueRows } from './plotValueModel';
 import { type ActionButtonRows } from './actionButtonModel';
 import { type AnimationRows } from './animationModel';
 import { FONT_FAMILIES, FONT_SIZES } from './fontModel';
@@ -40,6 +41,11 @@ const NO_FUNCTION_ROWS: FunctionRows = { canPlot: false, target: null, label: 'P
 /** Nothing is picked, so the plot row asks for the coordinates instead. */
 const NO_PLOT_POINT_ROWS: PlotPointRows = {
   canPlotPair: false, canPlotValue: false, label: 'Plot Points…',
+};
+
+/** Nothing is picked: the row asks for a value and a path in its dialog. */
+const NO_PLOT_VALUE_ROWS: PlotValueRows = {
+  immediate: false, label: 'Plot Value on Axis…', values: [], paths: [],
 };
 
 /** Nothing is picked, so there is nothing to make a button out of. */
@@ -107,8 +113,8 @@ interface Props {
   onPlotFunction: () => void;
   /** Graph | Plot as (x, y)… — the studio plots the picked numbers or opens its dialog. */
   onPlotAsXy: () => void;
-  /** Graph | Plot Value On Axis… — the studio puts the picked number on the x axis. */
-  onPlotValueOnAxis: () => void;
+  /** Graph | Plot Value on Axis/Path… — the studio plots the picks or opens its dialog. */
+  onPlotValue: () => void;
   /** Graph | Plot Curve… — the studio opens the parametric curve dialog. */
   onPlotCurve: () => void;
   /** Display | Animate Objects… — the studio opens the animation dialog. */
@@ -276,7 +282,7 @@ export default function DesignMenuBar({
   onOpenNewFunction,
   onPlotFunction,
   onPlotAsXy,
-  onPlotValueOnAxis,
+  onPlotValue,
   onPlotCurve,
   onAnimateObjects,
   onLabelObject,
@@ -368,6 +374,14 @@ export default function DesignMenuBar({
     return canvasRef.current?.plotPointRows() ?? NO_PLOT_POINT_ROWS;
   }
 
+  /**
+   * What Graph | Plot Value on Axis/Path… would do with the picks: a number and a
+   * path plot at once, a lone path opens its dialog.
+   */
+  function valueRows(): PlotValueRows {
+    return canvasRef.current?.plotValueRows() ?? NO_PLOT_VALUE_ROWS;
+  }
+
   /** Whether the Edit menu's Action Buttons row has a selection to work from. */
   function actionButtonRow(): ActionButtonRows {
     return canvasRef.current?.actionButtonRows() ?? NO_ACTION_BUTTON_ROWS;
@@ -386,6 +400,7 @@ export default function DesignMenuBar({
   const frames = frameRows();
   const functions = functionRows();
   const plotted = plotPointRows();
+  const valueRowsNow = valueRows();
   const actionButtons = actionButtonRow();
   const animation = animationRow();
   // Display | Label Object… asks for the current text only when it may relabel.
@@ -771,11 +786,11 @@ export default function DesignMenuBar({
           action: () => canvasRef.current?.toggleSnap(),
         },
         { separator: true },
-        // the desktop's canGraphPlotValueOnAxis: one number picked to put on the axis
+        // the desktop's canGraphPlotValueOnAxis: the row names the path the picks
+        // name — a value on a path, a value on several paths, or its dialog
         {
-          label: 'Plot Value on Axis…',
-          disabled: !plotted.canPlotValue,
-          action: onPlotValueOnAxis,
+          label: valueRowsNow.label,
+          action: onPlotValue,
         },
         // two numbers picked go straight onto the frame; anything else opens the
         // dialog over it, and a polar system asks for a radius and a turn instead

@@ -38,6 +38,7 @@ import {
 } from './toolboxModel';
 import { calculateSpec, seedCalculate } from './numberMenuModel';
 import { plotPointSeed, type PlotPointSpec } from './plotPointModel';
+import type { PlotValueChoice, ValuePath } from './plotValueModel';
 import { parseGsp } from '@/lib/gsp/gspBinary';
 import { gspToHeyGeo } from '@/lib/gsp/gspToHeyGeo';
 
@@ -53,6 +54,7 @@ import NewParameterDialog from './NewParameterDialog';
 import CalculateDialog from './CalculateDialog';
 import NewFunctionDialog from './NewFunctionDialog';
 import PlotPointDialog from './PlotPointDialog';
+import PlotValueDialog from './PlotValueDialog';
 import PlotCurveDialog from './PlotCurveDialog';
 import AnimateDialog from './AnimateDialog';
 import { MovementDialog, PresentDialog } from './ActionButtonDialogs';
@@ -289,6 +291,36 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
     // the dialog opens on the tab the marked system is drawn in
     const shape = canvas.graphRows().grid === 'polar' ? 'polar' : 'rectangular';
     setPlotPoint({ values, initial: plotPointSeed(values, selected.map((s) => s.id), shape) });
+  }
+
+  /**
+   * Graph | Plot Value on Axis/Path… — a picked value and a picked path plot at
+   * once; anything else is typed in the dialog over what the board shows.
+   */
+  const [plotValue, setPlotValue] = useState<{
+    values: NumberValue[];
+    paths: ValuePath[];
+    initial: PlotValueChoice;
+  } | null>(null);
+
+  function handlePlotValue() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rows = canvas.plotValueRows();
+    if (rows.immediate) {
+      canvas.plotPickedValues();
+      return;
+    }
+    // the dialog opens on the picked number and path, when there is one
+    setPlotValue({
+      values: canvas.numberValues(),
+      paths: canvas.valuePaths(),
+      initial: {
+        value: rows.values.length > 0 ? '#0' : '',
+        args: rows.values.slice(0, 1),
+        path: rows.paths[0] ?? null,
+      },
+    });
   }
 
   // Locus dialog (opened from Construct → Locus…)
@@ -760,7 +792,7 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onOpenNewFunction={() => setNewFunctionOpen('define')}
         onPlotFunction={handlePlotFunction}
         onPlotAsXy={handlePlotAsXy}
-        onPlotValueOnAxis={() => canvasRef.current?.plotValueOnAxis()}
+        onPlotValue={handlePlotValue}
         onPlotCurve={() => setPlotCurveOpen(true)}
         onAnimateObjects={() => setAnimateMode('run')}
         onLabelObject={handleLabelObject}
@@ -895,6 +927,17 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setCalculate(null);
           }}
           onCancel={() => setCalculate(null)}
+        />
+      )}
+
+      {/* ── Graph | Plot Value on Path… dialog ── */}
+      {plotValue && (
+        <PlotValueDialog
+          values={plotValue.values}
+          paths={plotValue.paths}
+          initial={plotValue.initial}
+          onPlot={(choice) => canvasRef.current?.plotValue(choice) ?? false}
+          onDone={() => setPlotValue(null)}
         />
       )}
 

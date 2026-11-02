@@ -12,6 +12,7 @@ import type { MeasureItem } from './measureMenuModel';
 import type { MeasureSpec } from './measurement';
 import type { NumberSource } from './numberMenuModel';
 import type { PlotPointRows, PlotPointSpec } from './plotPointModel';
+import type { PlotValueChoice, PlotValueRows, ValuePath } from './plotValueModel';
 import type { PlotSpec } from './plotModel';
 
 export type ToolMode =
@@ -405,8 +406,14 @@ export interface CanvasHandle {
   plotPointRows: () => PlotPointRows;
   /** Graph | Plot as (x, y)… with the two numbers the designer picked. */
   plotPickedPair: () => boolean;
-  /** Graph | Plot Value On Axis… with the one number the designer picked. */
-  plotValueOnAxis: () => boolean;
+  /** What Graph | Plot Value on Axis/Path… would do with the page and this selection. */
+  plotValueRows: () => PlotValueRows;
+  /** The paths a value may be plotted along, for the dialog's list. */
+  valuePaths: () => ValuePath[];
+  /** Graph | Plot Value on Path… over the value and path the dialog names. */
+  plotValue: (choice: PlotValueChoice) => boolean;
+  /** Graph | Plot Value on Path(s) with what the designer picked. */
+  plotPickedValues: () => boolean;
   /** Edit | Action Buttons | Hide/Show, Show or Hide: a button over what is selected. */
   createActionButton: (action?: ActionButtonAction) => boolean;
   /** Edit | Action Buttons | Animation…: a button that runs what it was made from. */

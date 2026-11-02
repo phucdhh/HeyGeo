@@ -30,13 +30,13 @@ import {
   type ContextItem,
   type ContextRow,
 } from './contextMenuModel';
-import { createElement } from './elementRegistry';
+import { createElement, syncPlotValues } from './elementRegistry';
 import {
   LINE_LOCUS_TYPE, LOCUS_SAMPLES, locusSamples, refreshLineLocuses,
 } from './lineLocusModel';
 import {
   anchorClosures, captionAnchor, isAnchorSpec, isMeasureSpec, lengthValueOf, measureValue,
-  type MeasureSpec,
+  numberValueOf, type MeasureSpec,
 } from './measurement';
 import { circleByRadiusPicks } from './circleByRadiusModel';
 import { arcOnCirclePicks, isPointKind, type ArcOnCircle } from './arcOnCircleModel';
@@ -86,7 +86,6 @@ import {
 } from './gridModel';
 import type { PlotSpec } from './plotModel';
 import {
-  plotOnAxis,
   plotPair,
   plotPointProblem,
   plotPointRows,
@@ -94,6 +93,13 @@ import {
   type PlotPointRows,
   type PlotPointSpec,
 } from './plotPointModel';
+import {
+  isValuePath,
+  plotValueRows,
+  valuePaths,
+  type PlotValueChoice,
+  type PlotValueRows,
+} from './plotValueModel';
 import {
   actionButtonRows,
   buttonCaption,
@@ -885,6 +891,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   const gridPartsRef = useRef<GridParts | null>(null);
   // Pen tool tick marks on straight elements: segmentId -> count (1..3)
   const tickMarksRef = useRef<Map<string, number>>(new Map());
+  // The reading each value plotted on a path was last moved to, so a point the
+  // designer drags is left alone until the number under it changes.
+  const plotValuesRef = useRef<Map<string, number>>(new Map());
   const [tickDecorations, setTickDecorations] = useState<TickMarkDecoration[]>([]);
 
   // Keep toolRef in sync with prop
@@ -1868,19 +1877,54 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   }
 
   /**
-   * Graph | Plot Value On Axis… with the one number the designer picked.
-   *
-   * The desktop's graphPlotValueOnAxis translates a free point to the frame's
-   * `mathToScreen(value, 0)`, so the point lands on the x axis; here it names the
-   * number instead, which keeps it on the axis when the frame is moved.
+   * Graph | Plot Value on Path… — the value the dialog names, on the path it
+   * names. A path makes the point a glider placed by the reading (a ratio along a
+   * segment, a distance along a line, a whole turn round a circle), and the
+   * document keeps the reading, so a parameter under it moves the point.
    */
-  function plotValueOnAxis(): boolean {
-    const spec = plotOnAxis(numberSources(elementsRef.current), selectedRef.current.map((o) => o.id));
-    if (spec === null) {
-      onNotifyRef.current?.('Cần một số được chọn để vẽ lên trục.');
+  function plotValue(choice: PlotValueChoice): boolean {
+    if (choice.path === null) {
+      return addPlotPoint({ shape: 'rectangular', x: choice.value, y: '0', args: choice.args });
+    }
+    const path = elementsRef.current.find((e) => e.id === choice.path);
+    if (!path || !isValuePath(path)) {
+      onNotifyRef.current?.('Cần một đường để vẽ giá trị lên.');
       return false;
     }
-    return addPlotPoint(spec);
+    return addObject({
+      type: 'glider',
+      id: nextElId('pt'),
+      // a glider names its path third; the first two are where it starts, which
+      // the registry works out from the reading instead
+      parents: [0, 0, path.id],
+      attrs: {
+        name: nextPointName(), ...pointStyle(),
+        plotValue: {
+          value: choice.value, args: choice.args,
+          path: path.id, kind: path.type,
+        },
+      },
+    });
+  }
+
+  /**
+   * Graph | Plot Value on Path with what the designer picked: one value on one or
+   * more paths, or several values on one path — Sketchpad plots the whole set.
+   */
+  function plotPickedValues(): boolean {
+    const rows = plotValueRows(elementsRef.current, selectedRef.current.map((o) => o.id));
+    if (!rows.immediate) return false;
+    let made = false;
+    if (rows.paths.length === 1) {
+      for (const id of rows.values) {
+        made = plotValue({ value: '#0', args: [id], path: rows.paths[0] }) || made;
+      }
+      return made;
+    }
+    for (const path of rows.paths) {
+      made = plotValue({ value: '#0', args: [rows.values[0]], path }) || made;
+    }
+    return made;
   }
 
   /**
@@ -2507,6 +2551,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     attachBoardEvents(newBoard); // must be before loadDataToBoard so events attach to all elements
     const { loaded, errors } = loadDataToBoard(newBoard, { ...emptyData(), elements: els });
     elementsRef.current = loaded;
+    plotValuesRef.current.clear();
     seedCounters(loaded);
     reportLoadErrors(errors);
     setSceneChrome(newBoard, meta);
@@ -2931,6 +2976,12 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       if (next?.key !== centerMarkRef.current?.key) {
         centerMarkRef.current = next;
         setCenterMark(next);
+      }
+      // A value plotted on a path follows the number under it, which the engine
+      // has no reason to know is a dependency of the point.
+      if (syncPlotValues(board, elementsRef.current, plotValuesRef.current,
+        (id) => numberValueOf(board, id))) {
+        board.update();
       }
       refreshFrameGrid(board);
     }, 16);
@@ -5160,11 +5211,16 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     newFunction,
     plotFunction,
     plotCurve,
+    plotValueRows: (): PlotValueRows => (
+      plotValueRows(elementsRef.current, selectedRef.current.map((o) => o.id))
+    ),
+    valuePaths: () => valuePaths(elementsRef.current),
     plotPointRows: (): PlotPointRows => (
       plotPointRows(elementsRef.current, selectedRef.current.map((o) => o.id))
     ),
     plotPickedPair,
-    plotValueOnAxis,
+    plotValue,
+    plotPickedValues,
     createActionButton,
     createAnimationButton,
     createMovementButton,
