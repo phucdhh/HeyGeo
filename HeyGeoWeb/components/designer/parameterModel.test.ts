@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PARAMETER_DEFAULTS,
+  decimalsForStep,
   isParameterSpec,
   parameterCaption,
   parameterProblem,
@@ -42,5 +43,13 @@ describe('a parameter', () => {
     expect(isParameterSpec({ value: 'x', min: 0, max: 1 })).toBe(false);
     expect(isParameterSpec(null)).toBe(false);
     expect(isParameterSpec({ value: 1 })).toBe(false);
+  });
+
+  it('takes the decimals a step needs', () => {
+    expect(decimalsForStep(1)).toBe(0);
+    expect(decimalsForStep(0.1)).toBe(1);
+    expect(decimalsForStep(0.01)).toBe(2);
+    expect(decimalsForStep(0.001)).toBe(3);
+    expect(decimalsForStep(0)).toBe(2);
   });
 });

@@ -1070,10 +1070,55 @@ describe('a parameter the Number menu wrote', () => {
     b.update();
     expect(String(b.objects.p1.plaintext)).toBe('t = 2.50');
 
+    // the place is a holder, so a drag can move the label without a rebuild
+    const holder = (loaded[0] as unknown as { parameterPos?: { x: number; y: number } }).parameterPos;
+    expect(holder).toBeTruthy();
+    holder!.x = -6;
+    holder!.y = 5;
+    b.update();
+    expect(b.objects.p1.coords.usrCoords[1]).toBeCloseTo(-6, 6);
+    expect(b.objects.p1.coords.usrCoords[2]).toBeCloseTo(5, 6);
+
     // the descriptor, not the caption, is what the document keeps
     const reloaded = newBoard();
     load(reloaded, JSON.parse(JSON.stringify(loaded)));
     reloaded.update();
     expect(String(reloaded.objects.p1.plaintext)).toBe('t = 2.50');
+  });
+});
+
+// Add Slider writes two elements: the control and the caption Sketchpad lets
+// the designer place on its own. The caption is a parameter bound to the
+// slider's live value, so moving the handle moves the number it shows.
+describe('a slider with its own value caption', () => {
+  const DOC = (): HeyGeoElement[] => [
+    el({
+      type: 'slider', id: 'sl1', parents: [[-7, 6.5], [-3.5, 6.5], [0, 5, 10]],
+      attrs: { name: 'a', snapWidth: 0.1, withLabel: false },
+    }),
+    el({
+      type: 'parameter', id: 'par1', parents: [-3, 6.5, 'a = 5.0'],
+      attrs: { name: 'a', parameter: { value: 5, min: 0, max: 10, precision: 1, of: 'sl1' } },
+    }),
+  ];
+
+  it('shows the slider’s value and keeps the caption a text of its own', () => {
+    const b = newBoard();
+    const loaded = load(b, DOC()).elements;
+    b.update();
+    expect(loaded.map((e) => e.type)).toEqual(['slider', 'parameter']);
+    expect(String(b.objects.par1.plaintext)).toBe('a = 5.0');
+
+    b.objects.sl1.setValue(7.5);
+    b.update();
+    expect(String(b.objects.par1.plaintext)).toBe('a = 7.5');
+
+    // the caption's place is its own document data, not the slider's
+    expect(loaded[1].parents[0]).toBe(-3);
+
+    const reloaded = newBoard();
+    load(reloaded, JSON.parse(JSON.stringify(loaded)));
+    reloaded.update();
+    expect(String(reloaded.objects.par1.plaintext)).toBe('a = 5.0');
   });
 });

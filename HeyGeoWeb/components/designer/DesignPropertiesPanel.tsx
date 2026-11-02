@@ -143,7 +143,7 @@ export default function DesignPropertiesPanel({ selected, canvasRef }: Props) {
       )}
 
       {/* ── Number | New Parameter… ── */}
-      {!multi && el.type === 'parameter' && el.parameter && (
+      {!multi && el.type === 'parameter' && el.parameter && !el.parameter.of && (
         <Section title="Tham số">
           <Row label="Giá trị">
             <input
@@ -174,6 +174,15 @@ export default function DesignPropertiesPanel({ selected, canvasRef }: Props) {
               onBlur={commitParameter}
               onKeyDown={e => { if (e.key === 'Enter') commitParameter(); }}
             />
+          </Row>
+          <Row label="Độ lẻ">
+            <select
+              className={paramInput}
+              value={el.parameter.precision}
+              onChange={e => canvasRef.current?.setSelectedParameterPrecision(Number(e.target.value))}
+            >
+              {[0, 1, 2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
           </Row>
         </Section>
       )}

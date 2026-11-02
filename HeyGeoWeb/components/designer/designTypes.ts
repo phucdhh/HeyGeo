@@ -188,7 +188,7 @@ export interface SelectedElementInfo {
   fixed: boolean;
   coords?: [number, number]; // for points
   /** Number | New Parameter… — the value the properties dialog lets the designer edit. */
-  parameter?: { value: number; min: number; max: number; precision: number };
+  parameter?: { value: number; min: number; max: number; precision: number; of?: string };
 }
 
 // ─── Locus result (returned by createLocus) ──────────────────────────────────
@@ -368,6 +368,10 @@ export interface CanvasHandle {
   createParameter: (cfg: ParameterConfig) => boolean;
   /** The properties dialog writes a parameter's value and range back here. */
   updateSelectedParameter: (value: number, min: number, max: number, precision?: number) => void;
+  /** Change how many decimals a picked parameter shows (and its +/- step). */
+  setSelectedParameterPrecision: (precision: number) => void;
+  /** '+' / '−' on a picked parameter: one unit of its least significant digit. */
+  stepSelectedParameter: (direction: 1 | -1) => boolean;
   /** Number | Add Slider — the slider object itself, at its default place and range. */
   addSlider: () => boolean;
   /** The numbers the board shows, for Number | Calculate… to read. */

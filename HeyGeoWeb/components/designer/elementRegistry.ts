@@ -128,7 +128,16 @@ export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
   // saved before that was decided should behave like one written after it.
   polygon:        { jxg: 'polygon',        parents: atLeast(3), attrs: { hasInnerPoints: true } },
   // parents are [[x1,y1],[x2,y2],[min,value,max]] — three coordinate arrays
-  slider:         { jxg: 'slider',         parents: 3 },
+  // A slider is moved by dragging its baseline or either end point, which is
+  // how JSXGraph documents a draggable slider; the handle still sets the value.
+  slider: {
+    jxg: 'slider', parents: 3,
+    attrs: {
+      point1: { fixed: false },
+      point2: { fixed: false },
+      baseline: { fixed: false, needsRegularUpdate: true },
+    },
+  },
   // parents are [x, y, caption] — only the anchor pair may reference elements.
   text:           { jxg: 'text',           parents: 3, refParents: [0, 1] },
   // Number | New Parameter… — a value drawn as `name = number`. Its caption is
@@ -332,14 +341,27 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
   if (parameter) {
     // The caption reads the element's own attrs, which is the object the
     // properties dialog mutates, so an edited value redraws without a rebuild.
+    // The place is a holder the canvas can move: a text whose parents are plain
+    // numbers recomputes its coords from them every update, so dragging it has
+    // to move the holder rather than its coords.
     const live = el.attrs ?? {};
+    const pos = ((el as Any).parameterPos ??= {
+      x: Number(el.parents[0]) || 0,
+      y: Number(el.parents[1]) || 0,
+    });
     return [
-      () => Number(el.parents[0]) || 0,
-      () => Number(el.parents[1]) || 0,
-      () => parameterCaption(
-        String(live.name ?? ''),
-        isParameterSpec(live.parameter) ? live.parameter : parameter,
-      ),
+      () => pos.x,
+      () => pos.y,
+      () => {
+        const spec = isParameterSpec(live.parameter) ? live.parameter : parameter;
+        // A label bound to a slider shows that slider's live value.
+        if (spec.of) {
+          const slider = board?.objects?.[spec.of];
+          const v = Number(slider?.Value?.());
+          return parameterCaption(String(live.name ?? ''), { ...spec, value: Number.isFinite(v) ? v : spec.value });
+        }
+        return parameterCaption(String(live.name ?? ''), spec);
+      },
     ];
   }
   const measure = isMeasureSpec(attrs.measure) ? attrs.measure : null;

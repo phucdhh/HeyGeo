@@ -43,7 +43,10 @@ import { arcSectorPicks, type ArcSector } from './arcSectorModel';
 import { centreOf, endpointIds } from './pointConstructModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { defaultSlider, numberSources, parameterPlace } from './numberMenuModel';
-import { isParameterSpec, parameterCaption, type ParameterConfig, type ParameterSpec } from './parameterModel';
+import {
+  decimalsForStep, isParameterSpec, parameterCaption, precisionOf,
+  type ParameterConfig, type ParameterSpec,
+} from './parameterModel';
 import {
   coordsysOf,
   defaultFrame,
@@ -630,7 +633,7 @@ function curvePath(obj: any): string {
 function toSelectedInfo(obj: any): SelectedElementInfo {
   const vp = obj.visProp ?? {};
   const parameter = obj.parameterSpec as
-    { value: number; min: number; max: number; precision?: number } | undefined;
+    { value: number; min: number; max: number; precision?: number; of?: string } | undefined;
   return {
     id:          obj.id,
     // a parameter is a text to the engine but a number to the designer
@@ -647,7 +650,8 @@ function toSelectedInfo(obj: any): SelectedElementInfo {
       ? [obj.X?.() ?? 0, obj.Y?.() ?? 0]
       : undefined,
     parameter:   parameter
-      ? { value: parameter.value, min: parameter.min, max: parameter.max, precision: parameter.precision ?? 2 }
+      ? { value: parameter.value, min: parameter.min, max: parameter.max,
+          precision: parameter.precision ?? 2, of: parameter.of }
       : undefined,
   };
 }
@@ -702,6 +706,17 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   // Snap indicator: screen position of snap target (null = none)
   // type: 'point' = snapping to existing point (red), 'curve' = snapping to curve (orange)
   const [snapPos, setSnapPos] = useState<{ sx: number; sy: number; type: 'point' | 'curve' } | null>(null);
+
+  /** Slider values as they stood when the pointer went down: moving the
+   *  control translates its range, it does not change the number it selects. */
+  const sliderValuesRef = useRef<Record<string, number>>({});
+
+  /** A parameter label being dragged: the document holds where it lands. */
+  const paramDragRef = useRef<{ id: string; start: [number, number]; from: [number, number]; started: boolean } | null>(null);
+  /** The inline value editor a double-click opens over a parameter label. */
+  const [paramEdit, setParamEdit] = useState<{
+    id: string; text: string; left: number; top: number; width: number;
+  } | null>(null);
 
   // Rubber-band rectangle selection state
   const [rubberBand, setRubberBand] = useState<{
@@ -1307,6 +1322,124 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   }
 
   /**
+   * Add Slider's control and its caption as one step.
+   *
+   * Sketchpad's slider carries its number as a label the designer can place on
+   * its own; JSXGraph's label is glued to the handle instead. So the control is
+   * drawn without that label, and the caption is a parameter bound to the
+   * slider's live value — draggable by itself, while the handle still sets the
+   * number and the baseline moves the whole slider.
+   */
+  function makeSlider(pos: SliderPos, cfg: SliderConfig, extra: Record<string, unknown> = {}): boolean {
+    const board = boardRef.current;
+    if (!board) return false;
+    saveSnapshot();
+    const id = nextElId('sl');
+    const attrs: Record<string, unknown> = {
+      name: cfg.name,
+      snapWidth: cfg.step,
+      withTicks: true,
+      withLabel: false,
+      strokeColor: ink(),
+      fillColor: ink(),
+      // The ends and the baseline answer the pointer, so the whole control can
+      // be moved; the handle still sets the value.
+      point1: { fixed: false },
+      point2: { fixed: false },
+      baseline: { fixed: false, needsRegularUpdate: true },
+      ...extra,
+    };
+    board.create('slider',
+      [[pos.x1, pos.y1], [pos.x2, pos.y2], [cfg.min, cfg.init, cfg.max]],
+      { id, ...attrs });
+    elementsRef.current.push({
+      type: 'slider', id,
+      parents: [
+        [pos.x1, pos.y1] as (number | null)[],
+        [pos.x2, pos.y2] as (number | null)[],
+        [cfg.min, cfg.init, cfg.max] as (number | null)[],
+      ],
+      attrs: { ...attrs },
+    });
+
+    const labelId = nextElId('par');
+    const spec: ParameterSpec = {
+      value: cfg.init, min: cfg.min, max: cfg.max,
+      precision: decimalsForStep(cfg.step), of: id,
+    };
+    const label: HeyGeoElement = {
+      type: 'parameter', id: labelId,
+      parents: [Number((pos.x2 + 0.25).toFixed(4)), pos.y2, parameterCaption(cfg.name, spec)],
+      attrs: { name: cfg.name, fontSize: 14, strokeColor: ink(), parameter: spec },
+    };
+    const made = createElement(board, label, { ...board.objects });
+    if (made.obj) elementsRef.current.push(label);
+
+    board.update();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const slider = board.objects[id] as any;
+    if (slider) {
+      selectedRef.current = [slider];
+      setSelDecorations(computeDecorations(selectedRef.current, board));
+      onSelectionChange(selectedRef.current.map(toSelectedInfo));
+    }
+    onDirty();
+    return true;
+  }
+
+  /**
+   * Write what a pointer did to a slider back into the document: the ends it
+   * was dragged by and the value the handle settled on. Both live only on the
+   * board object until this runs.
+   */
+  function flushSliderChanges(): boolean {
+    const board = boardRef.current;
+    if (!board) return false;
+    let changed = false;
+    const round = (v: number) => Number(v.toFixed(4));
+    for (const el of elementsRef.current) {
+      if (el.type !== 'slider') continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const slider = board.objects[el.id] as any;
+      if (!slider?.point1 || !slider?.point2) continue;
+      const p1 = [round(slider.point1.X()), round(slider.point1.Y())];
+      const p2 = [round(slider.point2.X()), round(slider.point2.Y())];
+      const range = el.parents[2] as number[];
+      const endsMoved = JSON.stringify(el.parents[0]) !== JSON.stringify(p1)
+        || JSON.stringify(el.parents[1]) !== JSON.stringify(p2);
+      // Moving the control must not change its number: JSXGraph re-projects the
+      // handle as the baseline travels, and that projection is not the intent.
+      const held = sliderValuesRef.current[el.id];
+      const value = round(endsMoved && held !== undefined
+        ? held
+        : Number(slider.Value?.() ?? range[1]));
+      if (endsMoved || Number(range[1]) !== value) {
+        el.parents[0] = p1;
+        el.parents[1] = p2;
+        el.parents[2] = [Number(range[0]), value, Number(range[2])];
+        // Put the handle back at the same fraction of the range: the glider
+        // keeps that fraction across updates, whereas its raw coords do not.
+        // The engine finishes its own pointer-up work after this listener, so
+        // the correction lands on the next tick.
+        if (endsMoved && held !== undefined) {
+          const span = Number(range[2]) - Number(range[0]);
+          const phase = span > 0 ? (held - Number(range[0])) / span : 0.5;
+          setTimeout(() => {
+            slider.highline?.point2?.setGliderPosition?.(phase);
+            slider.setValue?.(value);
+            board.update();
+          }, 0);
+        } else {
+          slider.setValue?.(value);
+        }
+        changed = true;
+      }
+    }
+    if (changed) onDirty();
+    return changed;
+  }
+
+  /**
    * Number | New Parameter… — a value, not a control.
    *
    * Sketchpad keeps the two apart: a parameter is a number you type, drawn as
@@ -1348,6 +1481,30 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     el.attrs.parameter = { ...spec, value, min, max, precision: nextPrecision };
     obj.parameterSpec = el.attrs.parameter;
     board.update();
+    onSelectionChange(selectedRef.current.map(toSelectedInfo));
+    onDirty();
+  }
+
+  /** Close the inline editor, keeping or dropping what was typed. */
+  function commitParamEdit(commit: boolean) {
+    const pe = paramEdit;
+    setParamEdit(null);
+    if (!pe || !commit) return;
+    const board = boardRef.current;
+    const el = elementsRef.current.find((e) => e.id === pe.id);
+    const spec = el?.attrs?.parameter;
+    if (!board || !el || !isParameterSpec(spec) || spec.of) return;
+    const value = Number(pe.text.replace(',', '.'));
+    if (!Number.isFinite(value)) return;
+    const clamped = Math.min(spec.max, Math.max(spec.min, value));
+    const precision = precisionOf(pe.text);
+    if (clamped === spec.value && precision === spec.precision) return;
+    saveSnapshot();
+    el.attrs.parameter = { ...spec, value: clamped, precision };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (board.objects[pe.id] as any).parameterSpec = el.attrs.parameter;
+    board.update();
+    onSelectionChange(selectedRef.current.map(toSelectedInfo));
     onDirty();
   }
 
@@ -1360,24 +1517,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   function addSlider(): boolean {
     const place = parameterPlace(elementsRef.current);
     const cfg = defaultSlider(elementsRef.current);
-    return addObject({
-      type: 'slider',
-      id: nextElId('sl'),
-      parents: [
-        [place.x1, place.y1],
-        [place.x2, place.y2],
-        [cfg.min, cfg.init, cfg.max],
-      ],
-      attrs: {
-        name: cfg.name,
-        snapWidth: cfg.step,
-        withTicks: true,
-        withLabel: true,
-        strokeColor: ink(),
-        fillColor: ink(),
-        label: { fontSize: 14, strokeColor: ink() },
-      },
-    });
+    return makeSlider(place, cfg);
   }
 
   /** The numbers the board shows, with what each one is worth right now. */
@@ -2257,6 +2397,26 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     }
 
     function onMouseMove(evt: MouseEvent) {
+      // A parameter label follows the pointer while it is dragged.
+      const pd = paramDragRef.current;
+      if (pd) {
+        const board = boardRef.current;
+        const el = elementsRef.current.find((e) => e.id === pd.id);
+        const holder = el ? (el as unknown as { parameterPos?: { x: number; y: number } }).parameterPos : null;
+        if (!board || !holder) return;
+        const at = board.getUsrCoordsOfMouse(evt);
+        const nx = pd.from[0] + (at[0] - pd.start[0]);
+        const ny = pd.from[1] + (at[1] - pd.start[1]);
+        if (!pd.started && Math.hypot(nx - pd.from[0], ny - pd.from[1]) > 0.01) {
+          saveSnapshot();
+          pd.started = true;
+        }
+        holder.x = nx;
+        holder.y = ny;
+        board.update();
+        return;
+      }
+
       // Middle-mouse pan move
       if (panActive && panBB) {
         const board = boardRef.current;
@@ -2284,6 +2444,27 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     }
 
     function onMouseUp(evt: MouseEvent) {
+      // A parameter label that was dragged lands in the document.
+      const pd = paramDragRef.current;
+      if (pd) {
+        paramDragRef.current = null;
+        const board = boardRef.current;
+        const el = elementsRef.current.find((e) => e.id === pd.id);
+        const holder = el ? (el as unknown as { parameterPos?: { x: number; y: number } }).parameterPos : null;
+        if (board && el && holder) {
+          const nx = Number(holder.x.toFixed(4));
+          const ny = Number(holder.y.toFixed(4));
+          holder.x = nx;
+          holder.y = ny;
+          if (pd.started && (el.parents[0] !== nx || el.parents[1] !== ny)) {
+            el.parents[0] = nx;
+            el.parents[1] = ny;
+            onDirty();
+          }
+        }
+        return;
+      }
+
       // Middle-mouse pan end
       if (evt.button === 1 && panActive) {
         panActive = false;
@@ -2442,7 +2623,85 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       finishRubberBand();
     }
 
+    /**
+     * A parameter's caption is an HTML label, and JSXGraph's labels are not
+     * draggable; this press starts the drag, and stops the engine from treating
+     * it as the start of a rubber band or a value change.
+     */
+    function labelElement(evt: Event): { div: HTMLElement; el: HeyGeoElement } | null {
+      const div = (evt.target as Element | null)?.closest?.('.JXGtext') as HTMLElement | null;
+      if (!div || !div.id.startsWith(`${BOARD_ID}_`)) return null;
+      const id = div.id.slice(BOARD_ID.length + 1);
+      const el = elementsRef.current.find((e) => e.id === id);
+      return el ? { div, el } : null;
+    }
+
+    /** Open the in-place value editor over a parameter's caption. */
+    function openParameterEditor(div: HTMLElement, el: HeyGeoElement) {
+      const spec = el.attrs?.parameter;
+      // A caption bound to a slider shows the slider's number; edit that there.
+      if (!isParameterSpec(spec) || spec.of) return;
+      const rect = div.getBoundingClientRect();
+      const frame = container!.getBoundingClientRect();
+      setParamEdit({
+        id: el.id,
+        text: String(spec.value),
+        left: rect.left - frame.left,
+        top: rect.bottom - frame.top + 2,
+        width: Math.max(64, rect.width),
+      });
+    }
+
+    function onParameterLabelDown(evt: MouseEvent) {
+      if (toolRef.current !== 'selection' || evt.button !== 0) return;
+      const hit = labelElement(evt);
+      if (!hit || hit.el.type !== 'parameter') return;
+      // JSXGraph's own pointerdown already ran and, seeing a picked object, armed
+      // a toggle that would deselect on release. Taking the press over cancels it.
+      toggleOnUpRef.current = null;
+      justAddedRef.current = null;
+      // The second press of a double-click edits the value. Detecting it from
+      // the press itself is what works here: the engine's mousedown handlers
+      // are kept out, and with them the browser's own dblclick synthesis.
+      if (evt.detail >= 2) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        openParameterEditor(hit.div, hit.el);
+        return;
+      }
+      const board = boardRef.current;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const obj = board?.objects[hit.el.id] as any;
+      if (!board || !obj) return;
+      evt.preventDefault();
+      evt.stopPropagation();
+      if (!selectedRef.current.includes(obj)) handleObjectClick(obj, true);
+      // The text's place lives in a holder the registry builds from the
+      // document's parent numbers; make sure it exists before the drag.
+      const el = hit.el as unknown as { parameterPos?: { x: number; y: number } };
+      if (!el.parameterPos) {
+        el.parameterPos = {
+          x: Number(obj.coords?.usrCoords?.[1] ?? 0),
+          y: Number(obj.coords?.usrCoords?.[2] ?? 0),
+        };
+      }
+      const at = board.getUsrCoordsOfMouse(evt);
+      const from: [number, number] = [el.parameterPos.x, el.parameterPos.y];
+      paramDragRef.current = { id: hit.el.id, start: [at[0], at[1]], from, started: false };
+      objectClickedRef.current = true;
+    }
+
+    function onParameterLabelDblClick(evt: MouseEvent) {
+      const hit = labelElement(evt);
+      if (!hit || hit.el.type !== 'parameter') return;
+      evt.preventDefault();
+      evt.stopPropagation();
+      openParameterEditor(hit.div, hit.el);
+    }
+
     container.addEventListener('mousedown', onMouseDown);
+    container.addEventListener('mousedown', onParameterLabelDown, true);
+    container.addEventListener('dblclick', onParameterLabelDblClick, true);
     container.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
     container.addEventListener('touchstart', onTouchStart, { passive: false });
     window.addEventListener('mousemove', onMouseMove);
@@ -2451,6 +2710,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     window.addEventListener('touchend',  onTouchEnd);
     return () => {
       container.removeEventListener('mousedown', onMouseDown);
+      container.removeEventListener('mousedown', onParameterLabelDown, true);
+      container.removeEventListener('dblclick', onParameterLabelDblClick, true);
       container.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup',   onMouseUp);
@@ -2883,6 +3144,15 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     // Using findObjectsAt here is more reliable than per-element obj.on('down') for thin
     // elements like segments whose JSXGraph hit area may be too small.
     board.on('down', (evt: MouseEvent) => {
+      // A press on a slider may move the control; remember what it was worth so
+      // a move of the whole control can put the handle back where it rode.
+      sliderValuesRef.current = {};
+      for (const el of elementsRef.current) {
+        if (el.type !== 'slider') continue;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const v = Number((board.objects[el.id] as any)?.Value?.());
+        if (Number.isFinite(v)) sliderValuesRef.current[el.id] = v;
+      }
       if (toolRef.current !== 'selection') return;
       if (typeof evt.button === 'number' && evt.button !== 0) return;
       const rect = (board.containerObj as HTMLElement).getBoundingClientRect();
@@ -2949,8 +3219,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       }
     });
 
-    // A dragged label has to land back in the document.
-    board.on('up', () => { flushLabelDrags(); });
+    // A dragged label has to land back in the document; so must a moved slider.
+    board.on('up', () => {
+      flushLabelDrags();
+      if (flushSliderChanges()) sliderValuesRef.current = {};
+    });
 
     // Board-level double-click → open Properties dialog for element under cursor
     board.containerObj?.addEventListener('dblclick', (evt: MouseEvent) => {
@@ -4326,34 +4599,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       if (!board) return;
       const pos = sliderPosRef.current;
       if (!pos) return;
-      saveSnapshot();
-      const id = nextElId('sl');
-      const attrs: Record<string, unknown> = {
-        name: cfg.name,
-        snapWidth: cfg.step,
-        withTicks: true,
-        withLabel: true,
-        strokeColor: ink(),
-        fillColor: ink(),
-        label: { fontSize: 14, strokeColor: ink() },
-      };
-      board.create('slider',
-        [[pos.x1, pos.y1], [pos.x2, pos.y2], [cfg.min, cfg.init, cfg.max]],
-        { id, ...attrs }
-      );
-      elementsRef.current.push({
-        type: 'slider', id,
-        parents: [
-          [pos.x1, pos.y1] as (number | null)[],
-          [pos.x2, pos.y2] as (number | null)[],
-          [cfg.min, cfg.init, cfg.max] as (number | null)[],
-        ],
-        attrs: { ...attrs },
-      });
+      makeSlider(pos, cfg);
       sliderPosRef.current = null;
       pendingRef.current = { phase: 'idle' };
-      board.update();
-      onDirty();
     },
 
     createLocus: (): import('./designTypes').LocusResult => {
@@ -4692,6 +4940,43 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     createMeasure,
     createParameter,
     updateSelectedParameter,
+    setSelectedParameterPrecision: (precision) => {
+      const board = boardRef.current;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const obj: any = selectedRef.current[0];
+      const el = obj ? elementsRef.current.find((e) => e.id === obj.id) : null;
+      const spec = el?.attrs?.parameter;
+      if (!board || !obj || !el || !isParameterSpec(spec) || spec.of) return;
+      const decimals = Math.min(6, Math.max(0, Math.round(precision)));
+      if (decimals === spec.precision) return;
+      saveSnapshot();
+      el.attrs.parameter = { ...spec, precision: decimals };
+      obj.parameterSpec = el.attrs.parameter;
+      board.update();
+      onSelectionChange(selectedRef.current.map(toSelectedInfo));
+      onDirty();
+    },
+    stepSelectedParameter: (direction) => {
+      const board = boardRef.current;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const obj: any = selectedRef.current[0];
+      const el = obj ? elementsRef.current.find((e) => e.id === obj.id) : null;
+      const spec = el?.attrs?.parameter;
+      if (!board || !obj || !isParameterSpec(spec) || spec.of) return false;
+      // GSP's keyboard adjustment is the least significant digit shown.
+      const decimals = Math.max(0, Math.min(6, spec.precision));
+      const step = Math.pow(10, -decimals);
+      const next = Math.min(spec.max, Math.max(spec.min,
+        Number((spec.value + direction * step).toFixed(decimals))));
+      if (next === spec.value) return true;
+      saveSnapshot();
+      el!.attrs.parameter = { ...spec, value: next };
+      obj.parameterSpec = el!.attrs.parameter;
+      board.update();
+      onSelectionChange(selectedRef.current.map(toSelectedInfo));
+      onDirty();
+      return true;
+    },
     addSlider,
     numberValues,
 
@@ -5176,6 +5461,27 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
             zIndex: 5,
           }}
         />
+
+        {/* Double-click on a parameter's caption edits its value in place. */}
+        {paramEdit && (
+          <input
+            autoFocus
+            value={paramEdit.text}
+            onChange={(e) => setParamEdit({ ...paramEdit, text: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitParamEdit(true);
+              if (e.key === 'Escape') commitParamEdit(false);
+            }}
+            onBlur={() => commitParamEdit(true)}
+            style={{
+              position: 'absolute',
+              left: paramEdit.left, top: paramEdit.top, width: paramEdit.width,
+              zIndex: 9,
+            }}
+            className="rounded border border-brand-400 bg-white px-1 py-0.5 text-sm
+                       text-gray-800 shadow focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+        )}
 
         {/* GSP-style selection decorations (purple outlines around selected objects) */}
         {selDecorations.length > 0 && (

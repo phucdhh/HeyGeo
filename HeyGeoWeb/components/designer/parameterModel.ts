@@ -19,6 +19,12 @@ export interface ParameterSpec {
   max: number;
   /** Decimals shown; the dialog takes it from the digits typed. */
   precision: number;
+  /**
+   * A label bound to a slider reads that slider's live value instead of the
+   * stored one. Add Slider writes the control and this separate caption, so
+   * the two can be dragged independently the way Sketchpad's can.
+   */
+  of?: string;
 }
 
 /** What the New Parameter dialog opens on, the desktop's own defaults. */
@@ -42,6 +48,12 @@ export function isParameterSpec(value: unknown): value is ParameterSpec {
 export function precisionOf(typed: string): number {
   const m = /^\s*-?\d*\.(\d+)\s*$/.exec(typed);
   return m ? Math.min(MAX_PRECISION, m[1].length) : 0;
+}
+
+/** The decimals a slider's step implies: 0.1 shows one, 0.01 shows two. */
+export function decimalsForStep(step: number): number {
+  if (!Number.isFinite(step) || step <= 0) return 2;
+  return Math.min(3, Math.max(0, Math.ceil(-Math.log10(step))));
 }
 
 /** What the caption says: `name = value`, to the stated precision. */

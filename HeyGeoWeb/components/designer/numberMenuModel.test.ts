@@ -31,6 +31,14 @@ const BOARD = [
 ];
 
 describe('the numbers a calculation may read', () => {
+  it('leaves a caption bound to a slider out, since the slider is the number', () => {
+    const sources = numberSources([
+      el('slider', 's1', { name: 'a' }),
+      el('parameter', 'p1', { name: 'a', parameter: { value: 5, min: 0, max: 10, precision: 1, of: 's1' } }),
+    ]);
+    expect(sources).toEqual([{ id: 's1', label: 'a' }]);
+  });
+
   it('lists a parameter beside the measurements and sliders', () => {
     const sources = numberSources([
       el('parameter', 'p1', { name: 'n', parameter: { value: 3, min: 0, max: 10, precision: 0 } }),

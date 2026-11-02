@@ -33,6 +33,9 @@ export function numberSources(elements: HeyGeoElement[]): NumberSource[] {
   const out: NumberSource[] = [];
   for (const el of elements) {
     if (el.type === 'slider' || el.type === 'parameter') {
+      // a caption bound to a slider is that slider's value, not a second number
+      const spec = el.attrs?.parameter as { of?: string } | undefined;
+      if (spec?.of) continue;
       out.push({ id: el.id, label: (el.attrs?.name as string | undefined) || el.id });
       continue;
     }

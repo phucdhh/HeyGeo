@@ -439,6 +439,15 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         }
         return;
       }
+      // GSP's keyboard adjustment for a picked parameter: +/- move it by one
+      // unit of the least significant digit it shows.
+      if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_') {
+        const direction = (e.key === '-' || e.key === '_') ? -1 : 1;
+        if (canvasRef.current?.stepSelectedParameter?.(direction)) {
+          e.preventDefault();
+          return;
+        }
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         canvasRef.current?.deleteSelected();
         refreshUndoState();
