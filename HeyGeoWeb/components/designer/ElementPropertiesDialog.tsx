@@ -24,6 +24,7 @@ const TYPE_LABELS: Record<string, string> = {
   text:          'Văn bản / Nhãn',
   angle:         'Góc',
   functiongraph: 'Đồ thị hàm số',
+  parameter:     'Tham số',
   slider:        'Trượt (Slider)',
   parallel:      'Đường song song',
   perpendicular: 'Đường vuông góc',
@@ -38,6 +39,9 @@ export default function ElementPropertiesDialog({ info, canvasRef, onClose }: Pr
   const [strokeWidth, setStrokeWidth] = useState(info.strokeWidth);
   const [coordX,      setCoordX]      = useState(info.coords?.[0]?.toFixed(4) ?? '');
   const [coordY,      setCoordY]      = useState(info.coords?.[1]?.toFixed(4) ?? '');
+  const [paramValue,  setParamValue]  = useState(String(info.parameter?.value ?? 0));
+  const [paramMin,    setParamMin]    = useState(String(info.parameter?.min ?? 0));
+  const [paramMax,    setParamMax]    = useState(String(info.parameter?.max ?? 10));
   const nameRef = useRef<HTMLInputElement>(null);
 
   const typeLabel  = TYPE_LABELS[info.type] ?? info.type;
@@ -58,6 +62,12 @@ export default function ElementPropertiesDialog({ info, canvasRef, onClose }: Pr
       canvas.updateSelectedColor(strokeColor);
     if (strokeWidth !== info.strokeWidth)
       canvas.updateSelectedStrokeWidth(strokeWidth);
+    if (info.parameter) {
+      const value = Number(paramValue), min = Number(paramMin), max = Number(paramMax);
+      if ([value, min, max].every(Number.isFinite)) {
+        canvas.updateSelectedParameter(value, min, max);
+      }
+    }
     if (isFreePoint && info.coords) {
       const nx = parseFloat(coordX), ny = parseFloat(coordY);
       if (!isNaN(nx) && !isNaN(ny) && (nx !== info.coords[0] || ny !== info.coords[1])) {
@@ -77,7 +87,7 @@ export default function ElementPropertiesDialog({ info, canvasRef, onClose }: Pr
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, strokeColor, strokeWidth, coordX, coordY]);
+  }, [name, strokeColor, strokeWidth, coordX, coordY, paramValue, paramMin, paramMax]);
 
   return (
     <div

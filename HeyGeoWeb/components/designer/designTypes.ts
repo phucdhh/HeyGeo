@@ -126,6 +126,7 @@ export const ELEMENT_KIND_LABELS: Record<string, string> = {
   polygon: 'Đa giác', angle: 'Góc', text: 'Văn bản', midpoint: 'Trung điểm',
   intersection: 'Giao điểm', perpendicular: 'Vuông góc',
   parallel: 'Song song', bisector: 'Phân giác', slider: 'Thanh trượt',
+  parameter: 'Tham số',
   functiongraph: 'Đồ thị hàm số',
   curve: 'Quỹ tích', tracecurve: 'Quỹ tích', linelocus: 'Quỹ tích',
 };
@@ -172,6 +173,8 @@ export interface NumberValue extends NumberSource {
 }
 
 // ─── Selected element info surfaced to Properties Panel ───────────────────────
+import type { ParameterConfig } from './parameterModel';
+
 export interface SelectedElementInfo {
   id: string;
   type: string;
@@ -184,6 +187,8 @@ export interface SelectedElementInfo {
   visible: boolean;
   fixed: boolean;
   coords?: [number, number]; // for points
+  /** Number | New Parameter… — the value the properties dialog lets the designer edit. */
+  parameter?: { value: number; min: number; max: number; precision: number };
 }
 
 // ─── Locus result (returned by createLocus) ──────────────────────────────────
@@ -359,11 +364,10 @@ export interface CanvasHandle {
   /** Write the captions one Measure item offers, as a single undo step. */
   createMeasure: (measures: MeasureSpec[]) => boolean;
   // Number menu
-  /**
-   * Reserve the place Number | New Parameter… draws its slider, the way the
-   * Slider tool's two clicks would, and open the same dialog over it.
-   */
-  beginParameter: () => SliderPos;
+  /** Number | New Parameter… — the value object, drawn as `name = number`. */
+  createParameter: (cfg: ParameterConfig) => boolean;
+  /** The properties dialog writes a parameter's value and range back here. */
+  updateSelectedParameter: (value: number, min: number, max: number, precision?: number) => void;
   /** Number | Add Slider — the slider object itself, at its default place and range. */
   addSlider: () => boolean;
   /** The numbers the board shows, for Number | Calculate… to read. */

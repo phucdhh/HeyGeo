@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { elementKindLabel } from './designTypes';
 import type { CanvasHandle, SelectedElementInfo } from './designTypes';
 import { ANIMATION_SPEED } from './animationModel';
+import { precisionOf } from './parameterModel';
 
 const STROKE_COLORS = [
   '#000000', '#808080', '#d32f2f', '#388e3c',
@@ -60,6 +61,26 @@ export default function DesignPropertiesPanel({ selected, canvasRef }: Props) {
   const multi = selected.length > 1;
   const [editName, setEditName] = useState('');
   const [nameEditing, setNameEditing] = useState(false);
+  // Number | New Parameter…: the value and the range it may sweep.
+  const [paramValue, setParamValue] = useState('');
+  const [paramMin, setParamMin] = useState('');
+  const [paramMax, setParamMax] = useState('');
+
+  useEffect(() => {
+    setParamValue(String(el?.parameter?.value ?? ''));
+    setParamMin(String(el?.parameter?.min ?? ''));
+    setParamMax(String(el?.parameter?.max ?? ''));
+  }, [el?.id, el?.parameter?.value, el?.parameter?.min, el?.parameter?.max]);
+
+  function commitParameter() {
+    const value = Number(paramValue), min = Number(paramMin), max = Number(paramMax);
+    if ([value, min, max].every(Number.isFinite)) {
+      // the decimals just typed decide the displayed precision, as in GSP
+      canvasRef.current?.updateSelectedParameter(value, min, max, precisionOf(paramValue));
+    }
+  }
+
+  const paramInput = 'w-full text-xs border border-gray-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-brand-400 font-mono';
 
   const hasFill = el ? FILL_TYPES.includes(el.type) : false;
   const isPoint = el ? ['point', 'glider', 'midpoint', 'circumcenter', 'intersection'].includes(el.type) : false;
@@ -117,6 +138,42 @@ export default function DesignPropertiesPanel({ selected, canvasRef }: Props) {
                 {el.name || <span className="text-gray-400 italic">Trống</span>}
               </button>
             )}
+          </Row>
+        </Section>
+      )}
+
+      {/* ── Number | New Parameter… ── */}
+      {!multi && el.type === 'parameter' && el.parameter && (
+        <Section title="Tham số">
+          <Row label="Giá trị">
+            <input
+              className={paramInput}
+              inputMode="decimal"
+              value={paramValue}
+              onChange={e => setParamValue(e.target.value)}
+              onBlur={commitParameter}
+              onKeyDown={e => { if (e.key === 'Enter') commitParameter(); }}
+            />
+          </Row>
+          <Row label="Nhỏ nhất">
+            <input
+              className={paramInput}
+              inputMode="decimal"
+              value={paramMin}
+              onChange={e => setParamMin(e.target.value)}
+              onBlur={commitParameter}
+              onKeyDown={e => { if (e.key === 'Enter') commitParameter(); }}
+            />
+          </Row>
+          <Row label="Lớn nhất">
+            <input
+              className={paramInput}
+              inputMode="decimal"
+              value={paramMax}
+              onChange={e => setParamMax(e.target.value)}
+              onBlur={commitParameter}
+              onKeyDown={e => { if (e.key === 'Enter') commitParameter(); }}
+            />
           </Row>
         </Section>
       )}

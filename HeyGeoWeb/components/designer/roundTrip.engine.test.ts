@@ -1043,3 +1043,37 @@ describe('a dilation taken from a marked ratio', () => {
     expect(drawing(reloaded)).toEqual(after);
   });
 });
+
+// Number | New Parameter… writes a value, not a slider: a text the engine draws
+// as `name = number`, whose caption is computed from the stored descriptor so
+// an edited value redraws without rebuilding the element.
+describe('a parameter the Number menu wrote', () => {
+  const DOC = (): HeyGeoElement[] => [
+    el({
+      type: 'parameter', id: 'p1', parents: [-7, 6.5, 'n = 1.00'],
+      attrs: { name: 'n', parameter: { value: 1, min: 0, max: 10, precision: 2 } },
+    }),
+  ];
+
+  it('draws name = value and follows an edited value and name', () => {
+    const b = newBoard();
+    const loaded = load(b, DOC()).elements;
+    b.update();
+    expect(String(b.objects.p1.plaintext)).toBe('n = 1.00');
+
+    const spec = loaded[0].attrs!.parameter as { value: number; precision: number };
+    spec.value = 2.5;
+    b.update();
+    expect(String(b.objects.p1.plaintext)).toBe('n = 2.50');
+
+    loaded[0].attrs!.name = 't';
+    b.update();
+    expect(String(b.objects.p1.plaintext)).toBe('t = 2.50');
+
+    // the descriptor, not the caption, is what the document keeps
+    const reloaded = newBoard();
+    load(reloaded, JSON.parse(JSON.stringify(loaded)));
+    reloaded.update();
+    expect(String(reloaded.objects.p1.plaintext)).toBe('t = 2.50');
+  });
+});

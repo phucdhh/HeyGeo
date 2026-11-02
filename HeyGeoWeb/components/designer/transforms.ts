@@ -219,6 +219,8 @@ export function imageClosures(board: Any, srcId: string, spec: ImageSpec): [() =
       }
       const o = read(id);
       if (o?.point1 && o?.point2) return span(o);
+      // a parameter is a value object: its live spec rides on the board object
+      if (o?.parameterSpec) return Number(o.parameterSpec.value);
       return Number(o?.Value?.());
     }
     const v = measureValue(board, (mark as { measure: MeasureSpec }).measure);

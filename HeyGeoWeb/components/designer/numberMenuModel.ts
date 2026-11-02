@@ -32,7 +32,7 @@ const TEXT_SHAPED: MeasureOp[] = [
 export function numberSources(elements: HeyGeoElement[]): NumberSource[] {
   const out: NumberSource[] = [];
   for (const el of elements) {
-    if (el.type === 'slider') {
+    if (el.type === 'slider' || el.type === 'parameter') {
       out.push({ id: el.id, label: (el.attrs?.name as string | undefined) || el.id });
       continue;
     }

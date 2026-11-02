@@ -43,6 +43,7 @@ import { arcSectorPicks, type ArcSector } from './arcSectorModel';
 import { centreOf, endpointIds } from './pointConstructModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
 import { defaultSlider, numberSources, parameterPlace } from './numberMenuModel';
+import { isParameterSpec, parameterCaption, type ParameterConfig, type ParameterSpec } from './parameterModel';
 import {
   coordsysOf,
   defaultFrame,
@@ -628,9 +629,12 @@ function curvePath(obj: any): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toSelectedInfo(obj: any): SelectedElementInfo {
   const vp = obj.visProp ?? {};
+  const parameter = obj.parameterSpec as
+    { value: number; min: number; max: number; precision?: number } | undefined;
   return {
     id:          obj.id,
-    type:        obj.elType ?? 'unknown',
+    // a parameter is a text to the engine but a number to the designer
+    type:        parameter ? 'parameter' : (obj.elType ?? 'unknown'),
     name:        obj.name ?? '',
     strokeColor: SOLID_POINTS.includes(obj.elType) ? (vp.fillcolor ?? '#000000') : (vp.strokecolor ?? '#000000'),
     fillColor:   vp.fillcolor    ?? 'none',
@@ -641,6 +645,9 @@ function toSelectedInfo(obj: any): SelectedElementInfo {
     fixed:       obj.isDraggable === false,
     coords:      obj.elType === 'point'
       ? [obj.X?.() ?? 0, obj.Y?.() ?? 0]
+      : undefined,
+    parameter:   parameter
+      ? { value: parameter.value, min: parameter.min, max: parameter.max, precision: parameter.precision ?? 2 }
       : undefined,
   };
 }
@@ -1300,14 +1307,48 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   }
 
   /**
-   * Number | New Parameter… needs a slider's place without the two clicks the
-   * Slider tool asks for. The dialog that follows is the tool's own, so its OK
-   * still arrives at confirmSlider with the position remembered here.
+   * Number | New Parameter… — a value, not a control.
+   *
+   * Sketchpad keeps the two apart: a parameter is a number you type, drawn as
+   * `name = value`, that a calculation or a marked map can read; a slider is the
+   * JSXGraph handle Add Slider drops. The element stores the number and its
+   * range, and the registry draws the caption from that descriptor.
    */
-  function beginParameter(): SliderPos {
-    const place = parameterPlace(elementsRef.current);
-    sliderPosRef.current = place;
-    return place;
+  function createParameter(cfg: ParameterConfig): boolean {
+    const [x, y] = functionPlace(elementsRef.current);
+    const spec: ParameterSpec = { value: cfg.value, min: cfg.min, max: cfg.max, precision: cfg.precision };
+    return addObject({
+      type: 'parameter',
+      id: nextElId('par'),
+      parents: [x, y, parameterCaption(cfg.name, spec)],
+      attrs: {
+        name: cfg.name,
+        fontSize: 14,
+        strokeColor: ink(),
+        parameter: spec,
+      },
+    });
+  }
+
+  /** The properties dialog writes a parameter's number and range back. */
+  function updateSelectedParameter(value: number, min: number, max: number, precision?: number): void {
+    const board = boardRef.current;
+    if (!board) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const obj: any = selectedRef.current[0];
+    const el = obj ? elementsRef.current.find((e) => e.id === obj.id) : null;
+    const spec = el?.attrs?.parameter;
+    if (!el || !isParameterSpec(spec)) return;
+    saveSnapshot();
+    // Keep the attrs object itself: the caption closure captured it, and reads
+    // `attrs.parameter` on every update.
+    const nextPrecision = precision !== undefined && Number.isFinite(precision)
+      ? Math.min(6, Math.max(0, Math.round(precision)))
+      : spec.precision;
+    el.attrs.parameter = { ...spec, value, min, max, precision: nextPrecision };
+    obj.parameterSpec = el.attrs.parameter;
+    board.update();
+    onDirty();
   }
 
   /**
@@ -1345,8 +1386,12 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     return numberSources(elementsRef.current).map((s) => {
       const measure = elementsRef.current
         .find((e) => e.id === s.id)?.attrs?.measure as MeasureSpec | undefined;
+      const parameter = elementsRef.current
+        .find((e) => e.id === s.id)?.attrs?.parameter;
       const slider = board?.objects[s.id] as { Value?: () => number } | undefined;
-      const raw = measure ? measureValue(board, measure) : slider?.Value?.();
+      const raw = measure ? measureValue(board, measure)
+        : isParameterSpec(parameter) ? parameter.value
+        : slider?.Value?.();
       return { ...s, value: typeof raw === 'number' && Number.isFinite(raw) ? raw : null };
     });
   }
@@ -2876,7 +2921,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         objectClickedRef.current = true;
         return;
       }
-      const hits = findObjectsAt(board, sx, sy, SELECTABLE_KINDS, 12);
+      // Text is selectable only when it is part of the document: the frame's
+      // tick labels are texts too, and they are furniture, not objects.
+      const known = new Set(elementsRef.current.map((e) => e.id));
+      const hits = findObjectsAt(board, sx, sy, [...SELECTABLE_KINDS, 'text'], 12)
+        .filter((o: { id: string }) => known.has(o.id));
       // Prioritise point-like elements: if any point is within 12px, pick the
       // closest one instead of whatever came first in board.objects iteration.
       const ptHits  = hits.filter(o => POINT_ELTS.includes(o.elType));
@@ -2912,7 +2961,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const DBLCLICK_TYPES = [...POINT_ELTS,
                               'line', 'segment', 'ray', 'parallel', 'perpendicular', 'bisector',
                               'circle', 'arc', 'text', 'polygon'];
-      const hits = findObjectsAt(board, sx, sy, DBLCLICK_TYPES, 15);
+      const known = new Set(elementsRef.current.map((e) => e.id));
+      const hits = findObjectsAt(board, sx, sy, DBLCLICK_TYPES, 15)
+        .filter((o: { id: string }) => known.has(o.id));
       const ptHits = hits.filter(o => POINT_ELTS.includes(o.elType));
       const best = ptHits.length > 0 ? ptHits[0] : hits[0];
       if (best) {
@@ -4639,7 +4690,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     measureRows,
     createMeasure,
-    beginParameter,
+    createParameter,
+    updateSelectedParameter,
     addSlider,
     numberValues,
 
@@ -4763,8 +4815,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         const id = picked[0].id;
         const el = elementsRef.current.find((e) => e.id === id);
         const measure = el?.attrs?.measure as MeasureSpec | undefined;
+        const parameter = el?.attrs?.parameter;
         const slider = board?.objects[id] as { Value?: () => number } | undefined;
-        const raw = measure ? measureValue(board, measure) : slider?.Value?.();
+        const raw = measure ? measureValue(board, measure)
+          : isParameterSpec(parameter) ? parameter.value
+          : slider?.Value?.();
         if (typeof raw === 'number' && Number.isFinite(raw)) {
           const label = measure?.label || (el?.attrs?.name as string | undefined) || id;
           marksRef.current.ratio = { valueId: id, label, value: raw };
@@ -4903,6 +4958,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
             const el = elementsRef.current.find((e) => e.id === mark.valueId);
             const measure = el?.attrs?.measure;
             if (isMeasureSpec(measure)) return { measure };
+            // a parameter reads through the element variant, like a slider
+            if (isParameterSpec(el?.attrs?.parameter)) return { element: mark.valueId! };
             return mark.valueId ? { slider: mark.valueId } as RatioMark : null;
           })();
         if (!ratioMark) return false;

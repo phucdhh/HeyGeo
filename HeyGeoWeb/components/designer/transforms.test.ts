@@ -177,6 +177,18 @@ describe('dilating by a marked ratio', () => {
     expect(pos(b, 'A', image)).toEqual([3, 1]);
   });
 
+  it('reads a parameter as the factor, live', () => {
+    const world = {
+      A: point(2, 1), O: point(1, 1),
+      p: { parameterSpec: { value: 3, min: 0, max: 10 } },
+    };
+    const b = board(world);
+    const image: ImageSpec = { op: 'dilate', of: ['O'], ratioMark: { element: 'p' } };
+    expect(pos(b, 'A', image)).toEqual([4, 1]);
+    world.p.parameterSpec.value = -1;
+    expect(pos(b, 'A', image)).toEqual([0, 1]);
+  });
+
   it('takes a parameter or a measurement as the factor itself', () => {
     const world = { A: point(2, 1), O: point(1, 1), k: { Value: () => 3 }, s: segment(point(0, 0), point(0, 4)) };
     const b = board(world);

@@ -81,7 +81,7 @@ const COLUMN_ROW = 1.5;
 
 /** How many rows the margin already holds, counting from the top. */
 export function columnRows(elements: HeyGeoElement[]): number {
-  return elements.filter((e) => e.type === 'slider' || functionOf(e) !== null).length;
+  return elements.filter((e) => e.type === 'slider' || e.type === 'parameter' || functionOf(e) !== null).length;
 }
 
 /** Where the next number or definition lands: one row under everything placed. */

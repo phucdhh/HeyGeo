@@ -49,6 +49,7 @@ import DesignStatusBar       from './DesignStatusBar';
 import SaveModelDialog       from './SaveModelDialog';
 import ElementPropertiesDialog from './ElementPropertiesDialog';
 import SliderConfigDialog from './SliderConfigDialog';
+import NewParameterDialog from './NewParameterDialog';
 import CalculateDialog from './CalculateDialog';
 import NewFunctionDialog from './NewFunctionDialog';
 import PlotPointDialog from './PlotPointDialog';
@@ -162,9 +163,11 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
     initial: { expr: string; args: string[] };
   } | null>(null);
 
+  /** Number | New Parameter… — GSP's dialog: a name, a value and its range. */
+  const [newParameterOpen, setNewParameterOpen] = useState(false);
+
   function handleNewParameter() {
-    const place = canvasRef.current?.beginParameter();
-    if (place) setSliderPos(place);
+    setNewParameterOpen(true);
   }
 
   function handleOpenCalculate() {
@@ -963,6 +966,17 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         <ExportImageDialog
           onConfirm={handleExportImage}
           onCancel={() => setImageExportOpen(false)}
+        />
+      )}
+
+      {/* ── Number | New Parameter… ── */}
+      {newParameterOpen && (
+        <NewParameterDialog
+          onConfirm={(cfg) => {
+            canvasRef.current?.createParameter(cfg);
+            setNewParameterOpen(false);
+          }}
+          onCancel={() => setNewParameterOpen(false)}
         />
       )}
 

@@ -31,6 +31,13 @@ const BOARD = [
 ];
 
 describe('the numbers a calculation may read', () => {
+  it('lists a parameter beside the measurements and sliders', () => {
+    const sources = numberSources([
+      el('parameter', 'p1', { name: 'n', parameter: { value: 3, min: 0, max: 10, precision: 0 } }),
+    ]);
+    expect(sources).toEqual([{ id: 'p1', label: 'n' }]);
+  });
+
   it('lists the measurements that show a number and the sliders', () => {
     expect(numberSources(BOARD)).toEqual([
       { id: 'mAB', label: 'AB' },

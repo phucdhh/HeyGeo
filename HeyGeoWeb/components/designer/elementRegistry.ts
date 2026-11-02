@@ -31,6 +31,7 @@ import { isPlotSpec, PLOT_SAMPLES, plotParents, plotProblem } from './plotModel'
 import { plotPointOf, plotPointParents, plotPointProblem } from './plotPointModel';
 import { buttonOf, buttonProblem } from './actionButtonModel';
 import { imageClosures, isImageSpec, type ImageSpec } from './transforms';
+import { isParameterSpec, parameterCaption } from './parameterModel';
 import { withFontFamily } from './fontModel';
 import {
   LINE_LOCUS_TYPE,
@@ -130,6 +131,9 @@ export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
   slider:         { jxg: 'slider',         parents: 3 },
   // parents are [x, y, caption] — only the anchor pair may reference elements.
   text:           { jxg: 'text',           parents: 3, refParents: [0, 1] },
+  // Number | New Parameter… — a value drawn as `name = number`. Its caption is
+  // a closure over the descriptor, so changing the value re-draws it.
+  parameter:      { jxg: 'text',           parents: 3, refParents: [0, 1] },
   // A Sketchpad action button: a caption that hides or shows the elements its
   // `attrs.button` names. It is drawn as a boxed text where the designer put it,
   // and pressing it is a change to those elements, not to the button.
@@ -324,6 +328,20 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
     const start = glideStart(attrs.glide, path);
     if (start) return [start[0], start[1], path];
   }
+  const parameter = isParameterSpec(attrs.parameter) ? attrs.parameter : null;
+  if (parameter) {
+    // The caption reads the element's own attrs, which is the object the
+    // properties dialog mutates, so an edited value redraws without a rebuild.
+    const live = el.attrs ?? {};
+    return [
+      () => Number(el.parents[0]) || 0,
+      () => Number(el.parents[1]) || 0,
+      () => parameterCaption(
+        String(live.name ?? ''),
+        isParameterSpec(live.parameter) ? live.parameter : parameter,
+      ),
+    ];
+  }
   const measure = isMeasureSpec(attrs.measure) ? attrs.measure : null;
   const anchor = isAnchorSpec(attrs.anchor) ? attrs.anchor : null;
   if (measure || anchor) {
@@ -364,7 +382,7 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
 }
 
 /** Attributes that describe the element to this app, not to JSXGraph. */
-const APP_ATTRS = ['measure', 'anchor', 'image', 'glide', 'coordsys', 'plot', 'func', 'plotAt', 'button'];
+const APP_ATTRS = ['measure', 'anchor', 'image', 'glide', 'coordsys', 'plot', 'func', 'plotAt', 'button', 'parameter'];
 
 /**
  * Construct | Arc Segment Interior: the filled region bounded by an arc and
@@ -539,6 +557,8 @@ export function createElement(
     // A calculation reads the numbers its operands measure, so the descriptor
     // has to stay with the board that is drawing it.
     if (el.id && isMeasureSpec(el.attrs?.measure)) registerMeasure(board, el.id, el.attrs!.measure as MeasureSpec);
+    // Transform | Mark Ratio reads a parameter's live value off the board object.
+    if (isParameterSpec(el.attrs?.parameter)) (obj as Any).parameterSpec = el.attrs!.parameter;
     return { obj };
   } catch (e) {
     return { obj: null, error: `${el.type}: ${(e as Error).message}` };
