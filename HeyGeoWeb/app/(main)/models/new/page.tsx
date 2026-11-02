@@ -5,13 +5,15 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { detectIs3D } from '@/components/GeoGebraViewer';
+import { parseGsp } from '@/lib/gsp/gspBinary';
+import { gspToHeyGeo } from '@/lib/gsp/gspToHeyGeo';
 import '@/lib/i18n';
 
 type ModelType = 'heygeo' | 'sketchpad' | 'wsp' | 'geogebra' | 'gx';
 
 const FILE_TYPES: { value: ModelType; accept: string; icon: string }[] = [
-  { value: 'heygeo',    accept: '.json,application/json',     icon: '📐' },
-  { value: 'sketchpad', accept: '.json,application/json',     icon: '📏' },
+  { value: 'heygeo',    accept: '.json,application/json',         icon: '📐' },
+  { value: 'sketchpad', accept: '.json,.gsp,application/json',    icon: '📏' },
   { value: 'wsp',       accept: '.js,application/javascript', icon: '🌐' },
   { value: 'geogebra',  accept: '.ggb',                       icon: '🔷' },
   { value: 'gx',        accept: '.html,text/html',            icon: '📊' },
@@ -40,6 +42,7 @@ export default function NewModelPage() {
   const [thumbnailSvg, setThumbnailSvg] = useState<string | null>(null);
   const [fileName, setFileName]   = useState('');
   const [error, setError]         = useState('');
+  const [notes, setNotes]         = useState<string[]>([]);
   const [loading, setLoading]     = useState(false);
 
   const currentType = FILE_TYPES.find((ft) => ft.value === modelType)!;
@@ -52,12 +55,14 @@ export default function NewModelPage() {
     setThumbnailSvg(null);
     setFileName('');
     setError('');
+    setNotes([]);
     if (fileRef.current) fileRef.current.value = '';
   };
 
   const processFile = (file: File) => {
     setFileName(file.name);
     setError('');
+    setNotes([]);
 
     if (modelType === 'gx') {
       const reader = new FileReader();
@@ -89,6 +94,31 @@ export default function NewModelPage() {
         setThumbnailSvg(is3d ? GEOGEBRA_3D_THUMB_SVG : GEOGEBRA_2D_THUMB_SVG);
       };
       reader.readAsDataURL(file);
+      return;
+    }
+
+    if (modelType === 'sketchpad' && file.name.toLowerCase().endsWith('.gsp')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const buf = new Uint8Array(ev.target?.result as ArrayBuffer);
+          const sketch = parseGsp(buf);
+          const title = file.name.replace(/\.gsp$/i, '');
+          const { data, warnings } = gspToHeyGeo(sketch, title);
+          if (data.elements.length === 0) {
+            setError(t('upload.error_bad_gsp'));
+            setJsonData(null);
+            return;
+          }
+          setJsonData({ __type: 'gsp', ...data });
+          setNotes(warnings);
+          if (!form.title) setForm((f) => ({ ...f, title }));
+        } catch (e) {
+          setError(t('upload.error_read', { msg: (e as Error).message }));
+          setJsonData(null);
+        }
+      };
+      reader.readAsArrayBuffer(file);
       return;
     }
 
@@ -236,6 +266,11 @@ export default function NewModelPage() {
               </div>
             )}
           </div>
+          {notes.length > 0 && (
+            <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800 space-y-1">
+              {notes.map((n, i) => <p key={i}>{n}</p>)}
+            </div>
+          )}
         </div>
 
         {/* Title */}

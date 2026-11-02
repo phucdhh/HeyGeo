@@ -387,7 +387,6 @@ export default function DesignToolbar({ tool, arrow, onToolChange, onUnderDevelo
 
   function choose(v: ToolVariation) {
     onToolChange(v.tool, v.arrow);
-    if (v.tool === 'pen') onUnderDevelopment?.();
     setOpenFamily(null);
   }
 

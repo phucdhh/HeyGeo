@@ -13,7 +13,7 @@
 import { expressionRefs } from './expression';
 import { COLUMN_X, marginRow } from './functionMenuModel';
 import type { MeasureOp, MeasureSpec } from './measurement';
-import type { HeyGeoElement, SliderPos } from './designTypes';
+import type { HeyGeoElement, SliderConfig, SliderPos } from './designTypes';
 
 /** A number a calculation can read: a measurement that shows one, or a slider. */
 export interface NumberSource {
@@ -127,4 +127,33 @@ const PARAM_WIDTH = 3.5;
 export function parameterPlace(elements: HeyGeoElement[]): SliderPos {
   const y = marginRow(elements);
   return { x1: COLUMN_X, y1: y, x2: COLUMN_X + PARAM_WIDTH, y2: y };
+}
+
+/** The range and step Number | New Parameter… opens on. */
+export const SLIDER_DEFAULTS = { min: 0, max: 10, init: 5, step: 0.1 } as const;
+
+/**
+ * The name a new slider takes: the first letter no slider on the page uses,
+ * then s1, s2 … once the alphabet is spent. GSP names parameters a, b, c, and a
+ * calculation's caption reads this name as its operand.
+ */
+export function nextParameterName(elements: HeyGeoElement[]): string {
+  const used = new Set(
+    elements
+      .filter((el) => el.type === 'slider')
+      .map((el) => String(el.attrs?.name ?? '')),
+  );
+  for (let i = 0; i < 26; i++) {
+    const name = String.fromCharCode(97 + i);
+    if (!used.has(name)) return name;
+  }
+  for (let i = 1; ; i++) {
+    const name = `s${i}`;
+    if (!used.has(name)) return name;
+  }
+}
+
+/** What Number | Add Slider writes: the dialog's defaults under a free name. */
+export function defaultSlider(elements: HeyGeoElement[]): SliderConfig {
+  return { name: nextParameterName(elements), ...SLIDER_DEFAULTS };
 }

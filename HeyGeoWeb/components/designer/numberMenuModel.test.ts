@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  SLIDER_DEFAULTS,
   calculateSpec,
   canCalculate,
+  defaultSlider,
+  nextParameterName,
   expandOperands,
   numberSources,
   parameterPlace,
@@ -115,5 +118,29 @@ describe('Number | New Parameter…', () => {
     const two = [el('slider', 's1'), el('slider', 's2')];
     expect(parameterPlace(two).y1).toBeCloseTo(6.5 - 2 * 1.5, 6);
     expect(parameterPlace(two).x1).toBe(-7);
+  });
+});
+
+describe('Number | Add Slider', () => {
+  it('drops a slider on the dialog’s defaults', () => {
+    expect(SLIDER_DEFAULTS).toEqual({ min: 0, max: 10, init: 5, step: 0.1 });
+    expect(defaultSlider([])).toEqual({ name: 'a', min: 0, max: 10, init: 5, step: 0.1 });
+  });
+
+  it('names it the first letter no slider uses', () => {
+    expect(nextParameterName([el('slider', 'sl1', { name: 'a' })])).toBe('b');
+    expect(nextParameterName([
+      el('slider', 'sl1', { name: 'a' }),
+      el('slider', 'sl2', { name: 'c' }),
+    ])).toBe('b');
+    // a point called A is not a number and does not take the name
+    expect(nextParameterName([el('point', 'A', { name: 'a' })])).toBe('a');
+  });
+
+  it('moves on to s1 once the alphabet is spent', () => {
+    const all = Array.from({ length: 26 }, (_, i) =>
+      el('slider', `sl${i}`, { name: String.fromCharCode(97 + i) }));
+    expect(nextParameterName(all)).toBe('s1');
+    expect(nextParameterName([...all, el('slider', 'slx', { name: 's1' })])).toBe('s2');
   });
 });

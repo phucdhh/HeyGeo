@@ -3,6 +3,7 @@ import {
   applyScene,
   constructionKey,
   dependentsOf,
+  findObjectsAt,
   parentIds,
   planScene,
   pushCapped,
@@ -508,5 +509,65 @@ describe('transformed points in the scene model', () => {
     const out = applyScene(board, scene(image, ...points));
     expect(out.errors).toEqual([]);
     expect(out.createdIds).toEqual(['A', 'V1', 'V2', 'A2']);
+  });
+});
+
+describe('picking a locus', () => {
+  /** A locus of a line: two far points per stroke, a gap between the strokes. */
+  const locus = {
+    id: 'fam',
+    elType: 'curve',
+    visProp: { visible: true },
+    points: [
+      { scrCoords: [1, 100, 100] }, { scrCoords: [1, 300, 300] }, { scrCoords: [1, NaN, NaN] },
+      { scrCoords: [1, 100, 200] }, { scrCoords: [1, 300, 400] }, { scrCoords: [1, NaN, NaN] },
+    ],
+  };
+  const board = { objects: { fam: locus } };
+
+  it('is picked anywhere along a stroke, not only at its sampled ends', () => {
+    expect(findObjectsAt(board, 200, 200, ['curve'], 12)).toHaveLength(1);
+    expect(findObjectsAt(board, 300, 400, ['curve'], 12)).toHaveLength(1);
+  });
+
+  it('is not picked in the gap between two strokes', () => {
+    expect(findObjectsAt(board, 100, 250, ['curve'], 12)).toHaveLength(0);
+    expect(findObjectsAt(board, 400, 100, ['curve'], 12)).toHaveLength(0);
+  });
+});
+
+describe('picking a text', () => {
+  /** An action button measured on the live board: the anchor is its left edge. */
+  const button = (visible = true): Live => ({
+    id: 'e7',
+    elType: 'text',
+    visProp: { visible: true },
+    visPropCalc: { visible },
+    coords: { scrCoords: [1, 10.8, 133] },
+    hasPoint: (x: number, y: number) => x >= 10.8 && x <= 93.4 && y >= 119.5 && y <= 146.5,
+  });
+  const board = (...objects: Live[]) => ({
+    objects: Object.fromEntries(objects.map((o) => [o.id, o])),
+  });
+
+  it('is picked across the whole caption, not only beside its anchor', () => {
+    expect(findObjectsAt(board(button()), 52.1, 133, ['text'], 10)).toHaveLength(1);
+    expect(findObjectsAt(board(button()), 10.8, 133, ['text'], 10)).toHaveLength(1);
+  });
+
+  it('is not picked outside the glyphs', () => {
+    expect(findObjectsAt(board(button()), 120, 133, ['text'], 10)).toHaveLength(0);
+  });
+
+  it('leaves an invisible one alone even where the engine says it is there', () => {
+    // a tick label: zero-size node, yet hasPoint still answers at its anchor
+    expect(findObjectsAt(board(button(false)), 52.1, 133, ['text'], 10)).toHaveLength(0);
+    expect(findObjectsAt(board(button(false)), 10.8, 133, ['text'], 10)).toHaveLength(0);
+  });
+
+  it('falls back to the anchor when the engine gives no box to hit', () => {
+    const bare = { ...button(), hasPoint: undefined };
+    expect(findObjectsAt(board(bare), 10.8, 133, ['text'], 10)).toHaveLength(1);
+    expect(findObjectsAt(board(bare), 52.1, 133, ['text'], 10)).toHaveLength(0);
   });
 });

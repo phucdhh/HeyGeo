@@ -17,12 +17,12 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
 
-import { measureValue, type MeasureSpec } from './measurement';
+import { measureValue, descriptorOf, type MeasureSpec } from './measurement';
 
 export type ImageOp = 'translate' | 'rotate' | 'dilate' | 'reflect';
 
 /**
- * A dilation factor taken from the sketch instead of typed.
+ * A number taken from the sketch instead of typed.
  *
  * Sketchpad lets the designer mark a ratio — two segments, or one measured
  * number — and then dilate by it. The factor is read at draw time, so a copy
@@ -31,12 +31,25 @@ export type ImageOp = 'translate' | 'rotate' | 'dilate' | 'reflect';
  *
  * `segments` is in the order the two were picked and reads second over first,
  * which is the ratio the desktop computes (`parent(3) / parent(2)`).
+ * `element` names one element of the page whose number is the mark: a slider,
+ * or a measurement caption.
  */
 export type RatioMark =
   | { segments: [string, string] }
   | { slider: string }
+  | { element: string }
   | { measure: MeasureSpec };
 
+/**
+ * How a transformed image point is placed.
+ *
+ * Translate, Rotate, Dilate and Reflect all put a copy somewhere defined by
+ * other elements, so the document says how. The two numbers a map may read off
+ * the page rather than the keyboard — the angle a rotate turns through, the
+ * length a translate travels — are `angleMark` and `distMark`, which is what
+ * lets an imported Sketchpad keep moving when its teacher drags the parameter
+ * the map was taken from.
+ */
 export interface ImageSpec {
   op: ImageOp;
   /**
@@ -54,6 +67,14 @@ export interface ImageSpec {
   k?: number;
   /** dilate by a marked ratio rather than a typed factor. */
   ratioMark?: RatioMark;
+  /** rotate by an angle the page shows, in degrees; a parameter counts as degrees. */
+  angleMark?: RatioMark;
+  /**
+   * translate by a length the page shows, laid along `angle` (degrees). The
+   * length is read in board units, so a caption scaled to centimetres still
+   * moves the point by the pixels the sketch was drawn in.
+   */
+  distMark?: RatioMark;
 }
 
 export function isImageSpec(value: unknown): value is ImageSpec {
@@ -62,15 +83,36 @@ export function isImageSpec(value: unknown): value is ImageSpec {
   return typeof v.op === 'string' && Array.isArray(v.of);
 }
 
+/**
+ * The point a map cannot move. Rotating or dilating about a centre leaves the
+ * centre itself where it is, so a segment picked with its centre for an end
+ * gets its image anchored to that end instead of gaining a second point on top
+ * of it. Translate and reflect fix nothing; `null` means every point moves.
+ */
+export function imageFixedPoint(image: ImageSpec): string | null {
+  if (image.op !== 'rotate' && image.op !== 'dilate') return null;
+  return image.of[0] ?? null;
+}
+
+/**
+ * Of `ids`, the sources that need a new image point. The fixed centre is left
+ * out because the image reuses the point already on the board.
+ */
+export function imagePointIds(ids: string[], image: ImageSpec): string[] {
+  const fixed = imageFixedPoint(image);
+  return ids.filter((id) => id !== fixed);
+}
+
 /** The ids an image point hangs off, for the dependency graph. */
 export function imageDeps(el: { attrs?: Record<string, unknown> }): string[] {
   const image = el.attrs?.image as ImageSpec | undefined;
   if (!image) return [];
   const ids = [...image.of];
-  const mark = image.ratioMark;
-  if (mark) {
+  for (const mark of [image.ratioMark, image.angleMark, image.distMark]) {
+    if (!mark) continue;
     if ('segments' in mark) ids.push(...mark.segments);
     else if ('slider' in mark) ids.push(mark.slider);
+    else if ('element' in mark) ids.push(mark.element);
   }
   return ids;
 }
@@ -157,14 +199,64 @@ export function imageClosures(board: Any, srcId: string, spec: ImageSpec): [() =
   const sourceX = () => live(board, srcId)?.X() ?? 0;
   const sourceY = () => live(board, srcId)?.Y() ?? 0;
 
+  // ─── Numbers the page supplies ────────────────────────────────────────────
+  // A mark is the angle a rotate turns through, the ratio a dilate scales by or
+  // the length a translate travels, read every frame so the copy keeps following
+  // the parameter the sketch was built around.
+  const span = (o: Any): number => {
+    const a = o?.point1, b = o?.point2;
+    return a && b ? Math.hypot(b.X() - a.X(), b.Y() - a.Y()) : 0;
+  };
+  const markNumber = (mark: RatioMark): number => {
+    if ('segments' in mark) return span(read(mark.segments[1])) / span(read(mark.segments[0]));
+    if ('slider' in mark) return Number(read(mark.slider)?.Value?.());
+    const id = 'element' in mark ? mark.element : null;
+    if (id !== null) {
+      const spec = descriptorOf(board, id);
+      if (spec) {
+        const v = measureValue(board, spec);
+        return v === null ? Number.NaN : v;
+      }
+      const o = read(id);
+      if (o?.point1 && o?.point2) return span(o);
+      return Number(o?.Value?.());
+    }
+    const v = measureValue(board, (mark as { measure: MeasureSpec }).measure);
+    return v === null ? Number.NaN : v;
+  };
+  // A translate moves the point by the drawing's own length, not by the number
+  // its caption shows: a reading scaled to centimetres has to be turned back
+  // into the units the board is measured in.
+  const markLength = (mark: RatioMark): number => {
+    if ('element' in mark) {
+      const spec = descriptorOf(board, mark.element);
+      if (spec) {
+        const v = measureValue(board, spec);
+        return v === null ? Number.NaN : v / (spec.scale ?? 1);
+      }
+    }
+    return markNumber(mark);
+  };
+  const degreesOf = (typed: number | undefined, mark: RatioMark | undefined): number =>
+    mark ? markNumber(mark) : (typed ?? 0);
+
   switch (spec.op) {
-    case 'translate':
+    case 'translate': {
+      const shift = (): [number, number] => {
+        if (spec.distMark) {
+          const d = markLength(spec.distMark);
+          const r = (degreesOf(spec.angle, undefined) * Math.PI) / 180;
+          return [d * Math.cos(r), d * Math.sin(r)];
+        }
+        return offset();
+      };
       return [
-        number(() => src().X() + offset()[0], sourceX),
-        number(() => src().Y() + offset()[1], sourceY),
+        number(() => src().X() + shift()[0], sourceX),
+        number(() => src().Y() + shift()[1], sourceY),
       ];
+    }
     case 'rotate': {
-      const rad = ((spec.angle ?? 0) * Math.PI) / 180;
+      const rad = (degreesOf(spec.angle, spec.angleMark) * Math.PI) / 180;
       const cos = Math.cos(rad);
       const sin = Math.sin(rad);
       return [
@@ -181,20 +273,8 @@ export function imageClosures(board: Any, srcId: string, spec: ImageSpec): [() =
     case 'dilate': {
       // A ratio that cannot be read leaves the copy on its source, the same
       // way a missing centre does, rather than folding it onto the centre.
-      const markedFactor = (): number => {
-        const mark = spec.ratioMark;
-        if (!mark) return spec.k ?? 1;
-        if ('segments' in mark) {
-          const span = (o: Any): number => {
-            const a = o?.point1, b = o?.point2;
-            return a && b ? Math.hypot(b.X() - a.X(), b.Y() - a.Y()) : 0;
-          };
-          return span(read(mark.segments[1])) / span(read(mark.segments[0]));
-        }
-        if ('slider' in mark) return Number(read(mark.slider)?.Value?.());
-        const v = measureValue(board, mark.measure);
-        return v === null ? Number.NaN : v;
-      };
+      const markedFactor = (): number =>
+        spec.ratioMark ? markNumber(spec.ratioMark) : (spec.k ?? 1);
       return [
         number(() => {
           const k = markedFactor();

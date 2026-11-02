@@ -81,7 +81,10 @@ export function toolCategoryFromJson(jsonData: unknown): string | null {
     return rec.codeMode === true ? 'JSXGraph' : 'HeyGeo';
   }
   switch (type) {
-    case 'heygeo':    return 'HeyGeo';
+    case 'heygeo':
+    // a sketch drawn in HeyGeo Web Design is still a HeyGeo model, and shares
+    // the Gallery category with the desktop's export
+    case 'heygeoweb': return 'HeyGeo';
     case 'jsxgraph':  return 'JSXGraph';
     case 'sketchpad':
     case 'gsp':       return 'Sketchpad';

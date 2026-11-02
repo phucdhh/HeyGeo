@@ -22,6 +22,7 @@ import { plotPointDeps } from './plotPointModel';
 import { buttonDeps } from './actionButtonModel';
 import { imageDeps } from './transforms';
 import type { HeyGeoElement, ToolMode } from './designTypes';
+import { LINE_INK, LINE_WIDTH } from './designStyle';
 
 export const UNDO_LIMIT = 100;
 
@@ -367,7 +368,7 @@ export function polygonElements(
       id: baseId,
       parents: [...vertexIds],
       attrs: {
-        strokeColor: '#1e3c96', strokeWidth: 2, fillColor: '#1e3c9622',
+        strokeColor: LINE_INK, strokeWidth: LINE_WIDTH, fillColor: '#00008022',
         withLabel: false,
         borders: { withLabel: false, visible: mode === 'polygon' },
       },
@@ -379,7 +380,7 @@ export function polygonElements(
         type: 'segment',
         id: `${baseId}_s${i}`,
         parents: [vertexIds[i], vertexIds[(i + 1) % vertexIds.length]],
-        attrs: { strokeColor: '#1e3c96', strokeWidth: 2, withLabel: false },
+        attrs: { strokeColor: LINE_INK, strokeWidth: LINE_WIDTH, withLabel: false },
       });
     });
   }
@@ -460,16 +461,54 @@ export function findObjectsAt(
       // answers for the whole interior because the registry gives a polygon
       // hasInnerPoints — which is how Sketchpad lets a click inside select it.
       if (obj.hasPoint?.(sx, sy)) result.push(obj);
+    } else if (obj.elType === 'curve' || obj.elType === 'tracecurve'
+      || obj.elType === 'functiongraph') {
+      // The engine measures to the nearest sample, but a locus of a line is two
+      // far points per stroke, so the click has to be measured to the stroke.
+      if (curveHits(obj, sx, sy, tolerance)) result.push(obj);
     } else if (obj.elType === 'text') {
+      // A text is hit where its glyphs are, which is the box the engine renders
+      // into, not the anchor: the anchor is the left edge, so the middle of a
+      // long caption — an action button is one — would otherwise be unclickable.
+      // A tick label answers true at its anchor while invisible, so it is out.
+      if (obj.visPropCalc?.visible === false) continue;
       const sc = obj.coords?.scrCoords;
-      if (sc) {
-        const d = Math.sqrt((sc[1] - sx) ** 2 + (sc[2] - sy) ** 2);
-        if (d <= tolerance * 2) result.push(obj);
-      }
+      const near = Math.sqrt((sc[1] - sx) ** 2 + (sc[2] - sy) ** 2);
+      if (sc && (obj.hasPoint?.(sx, sy) || near <= tolerance * 2)) result.push(obj);
     }
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return result as any[];
+}
+
+/**
+ * True when the pointer is within `tolerance` of any stretch of a curve. The
+ * engine's own hasPoint measures to the nearest sample point, which for a locus
+ * of a line is the far end of a stroke many units away; the strokes between the
+ * samples are what the designer is aiming at.
+ */
+function curveHits(obj: LiveBoard, sx: number, sy: number, tolerance: number): boolean {
+  const pts = (obj?.points ?? []) as { scrCoords?: number[] }[];
+  let prev: [number, number] | null = null;
+  for (const p of pts) {
+    const sc = p?.scrCoords;
+    if (!sc || Number.isNaN(sc[1]) || Number.isNaN(sc[2])) {
+      prev = null;
+      continue;
+    }
+    if (!prev) {
+      if (Math.hypot(sx - sc[1], sy - sc[2]) <= tolerance) return true;
+      prev = [sc[1], sc[2]];
+      continue;
+    }
+    const dx = sc[1] - prev[0];
+    const dy = sc[2] - prev[1];
+    const len2 = dx * dx + dy * dy;
+    const t = len2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((sx - prev[0]) * dx + (sy - prev[1]) * dy) / len2));
+    if (Math.hypot(sx - (prev[0] + t * dx), sy - (prev[1] + t * dy)) <= tolerance) return true;
+    prev = [sc[1], sc[2]];
+  }
+  return false;
 }
 
 /**

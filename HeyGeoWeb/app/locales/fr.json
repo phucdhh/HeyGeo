@@ -217,14 +217,15 @@
     "error_read": "Impossible de lire le fichier : {{msg}}",
     "type_heygeo_label": "Fichier JSON (export HeyGeo)",
     "type_heygeo_hint": "Sélectionner le fichier .json exporté depuis HeyGeo Desktop",
-    "type_sketchpad_label": "Fichier JSON (The Geometer's Sketchpad)",
-    "type_sketchpad_hint": "Sélectionner le fichier .json exporté depuis The Geometer's Sketchpad",
+    "type_sketchpad_label": "Fichier .gsp/.json (The Geometer's Sketchpad)",
+    "type_sketchpad_hint": "Sélectionner le fichier .gsp/.json exporté depuis The Geometer's Sketchpad",
     "type_wsp_label": "Fichier -json.js (Web Sketchpad)",
     "type_wsp_hint": "Sélectionner le fichier -json.js depuis Web Sketchpad",
     "type_geogebra_label": "Fichier .ggb (GeoGebra)",
     "type_geogebra_hint": "Sélectionner le fichier .ggb exporté depuis GeoGebra",
     "type_gx_label": "Fichier HTML (Geometry Expressions)",
-    "type_gx_hint": "Sélectionner le fichier .html exporté depuis Geometry Expressions"
+    "type_gx_hint": "Sélectionner le fichier .html exporté depuis Geometry Expressions",
+    "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {
     "nav_download": "Télécharger",

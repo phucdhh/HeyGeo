@@ -827,7 +827,7 @@ describe('an action button the designer makes', () => {
     el({ type: 'point', id: 'B', parents: [2, 2], attrs: { name: 'B' } }),
     el({
       type: 'actionbutton', id: 'btn', parents: [6, 6.5, 'Ẩn A, B'],
-      attrs: { button: { action: 'hide', name: 'A, B', targets: ['A', 'B'] } },
+      attrs: { button: { action: 'toggle', name: 'A, B', targets: ['A', 'B'] } },
     }),
   ];
 
@@ -838,7 +838,7 @@ describe('an action button the designer makes', () => {
 
     const stored = saved.find((e) => e.id === 'btn')!;
     expect(stored.parents).toEqual([6, 6.5, 'Ẩn A, B']);
-    expect(stored.attrs.button).toEqual({ action: 'hide', name: 'A, B', targets: ['A', 'B'] });
+    expect(stored.attrs.button).toEqual({ action: 'toggle', name: 'A, B', targets: ['A', 'B'] });
     // JSXGraph is handed the caption, never the descriptor
     expect(b.objects.btn.visProp.button).toBeUndefined();
     expect(String(b.objects.btn.plaintext)).toBe('Ẩn A, B');
@@ -855,7 +855,7 @@ describe('an action button the designer makes', () => {
     const elements = load(b, DOC()).elements;
     b.update();
 
-    // what pressActionButton writes: the targets' visibility and the caption
+    // what the button runtime writes: the targets' visibility and the caption
     for (const id of ['A', 'B']) {
       const target = elements.find((e) => e.id === id)!;
       target.attrs = { ...target.attrs, visible: false };
@@ -875,7 +875,7 @@ describe('an action button the designer makes', () => {
     // the button still knows what it acts on, so a second press can show them
     expect(reloaded.objects.btn.visProp.button).toBeUndefined();
     expect(elements.find((e: HeyGeoElement) => e.id === 'btn')!.attrs.button)
-      .toEqual({ action: 'hide', name: 'A, B', targets: ['A', 'B'] });
+      .toEqual({ action: 'toggle', name: 'A, B', targets: ['A', 'B'] });
   });
 
   it('keeps an animation button and the run it was made for', () => {

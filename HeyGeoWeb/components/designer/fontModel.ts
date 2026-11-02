@@ -203,3 +203,34 @@ export function fontDocumentAttrs(
   if (stack !== null) label.fontFamily = stack;
   return { label };
 }
+
+/** Check if CSS contains bold declaration. */
+export function isCssBold(css: string | undefined): boolean {
+  return /(?:^|;)\s*font-weight\s*:\s*(bold|[6-9]00)/i.test(css ?? '');
+}
+
+/** Check if CSS contains italic declaration. */
+export function isCssItalic(css: string | undefined): boolean {
+  return /(?:^|;)\s*font-style\s*:\s*italic/i.test(css ?? '');
+}
+
+/** Toggle or set font-weight: bold in a CSS string. */
+export function withFontWeight(css: string | undefined, bold: boolean): string {
+  const rest = (css ?? '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && !/^font-weight\s*:/i.test(part));
+  if (bold) rest.push('font-weight:bold');
+  return rest.join(';');
+}
+
+/** Toggle or set font-style: italic in a CSS string. */
+export function withFontStyle(css: string | undefined, italic: boolean): string {
+  const rest = (css ?? '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && !/^font-style\s*:/i.test(part));
+  if (italic) rest.push('font-style:italic');
+  return rest.join(';');
+}
+

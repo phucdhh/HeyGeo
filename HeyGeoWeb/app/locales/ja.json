@@ -217,14 +217,15 @@
     "error_read": "ファイルを読み込めません: {{msg}}",
     "type_heygeo_label": "JSON ファイル（HeyGeo エクスポート）",
     "type_heygeo_hint": "HeyGeo Desktop からエクスポートした .json ファイルを選択",
-    "type_sketchpad_label": "JSON ファイル（The Geometer's Sketchpad）",
-    "type_sketchpad_hint": "Geometer's Sketchpad からエクスポートした .json ファイルを選択",
+    "type_sketchpad_label": ".gsp/.json ファイル（The Geometer's Sketchpad）",
+    "type_sketchpad_hint": "Geometer's Sketchpad からエクスポートした .gsp/.json ファイルを選択",
     "type_wsp_label": "ファイル -json.js（Web Sketchpad）",
     "type_wsp_hint": "Web Sketchpad の -json.js ファイルを選択",
     "type_geogebra_label": "ファイル .ggb（GeoGebra）",
     "type_geogebra_hint": "GeoGebra からエクスポートした .ggb ファイルを選択",
     "type_gx_label": "HTML ファイル（Geometry Expressions）",
-    "type_gx_hint": "Geometry Expressions からエクスポートした .html ファイルを選択"
+    "type_gx_hint": "Geometry Expressions からエクスポートした .html ファイルを選択",
+    "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {
     "nav_download": "ダウンロード",

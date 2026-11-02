@@ -32,6 +32,12 @@ import { plotPointOf, plotPointParents, plotPointProblem } from './plotPointMode
 import { buttonOf, buttonProblem } from './actionButtonModel';
 import { imageClosures, isImageSpec, type ImageSpec } from './transforms';
 import { withFontFamily } from './fontModel';
+import {
+  LINE_LOCUS_TYPE,
+  locusSamples,
+  locusSpan,
+  sampleLineLocus,
+} from './lineLocusModel';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -111,6 +117,10 @@ export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
   // a sector filled around the centre three points on its circle imply, the
   // shape Construct | Arc Sector Interior gives an arc through three points
   circumcirclesector: { jxg: 'circumcirclesector', parents: 3 },
+  // Construct | Arc Segment Interior: the region bounded by an arc and its
+  // chord. Built as a parametric curve traced over the arc then the chord;
+  // parents are [centre, startPt, endPt], the same triple a 'sector' uses.
+  arcsegment:     { jxg: 'curve',          parents: 3 },
   angle:          { jxg: 'angle',          parents: 3 },
   // hasInnerPoints belongs to the registry rather than to each document:
   // Sketchpad lets a click anywhere inside the shape select it, and a document
@@ -146,6 +156,10 @@ export const ELEMENT_REGISTRY: Record<string, RegistryEntry> = {
   plot:           { jxg: 'curve',          parents: 3, attrs: { numberPoints: PLOT_SAMPLES } },
   conic:          { jxg: 'conic',          parents: 5 },
   tracecurve:     { jxg: 'tracecurve',     parents: 2 },
+  // Construct | Locus… of a straight object: the family of lines the driver
+  // sweeps, drawn as one curve with the pen lifted between samples. Its parents
+  // are the driver and the line, both live board objects.
+  linelocus:      { jxg: 'curve',          parents: 2 },
   // desktop transforms: [dx,dy] / [angle, centreId] / [lineId]
   transform:      { jxg: 'transform',      parents: (n) => n >= 1 && n <= 2, parentMode: 'byName' },
   // The desktop exporter's spelling for an angle bisector; JSXGraph calls the
@@ -215,6 +229,53 @@ function imageOf(el: ElementSpec): ImageSpec | null {
   return el.type === 'point' && isImageSpec(el.attrs?.image) ? el.attrs.image : null;
 }
 
+/**
+ * Where a glider starts, when the document knows its place *along* the path
+ * instead of a pair of numbers.
+ *
+ * A point on a line has no coordinates of its own: its place is a distance the
+ * sketch measured along a line whose direction only the board can work out —
+ * the line's second point may itself be built from something else. So the
+ * document keeps the reading (`distance`, `ratio` or `turn`) and the registry
+ * walks the live path to find the point, once, when the element is created.
+ * Everything after that is JSXGraph's own dragging, as with any glider.
+ */
+export type GlideSpec =
+  | { ratio: number } // along a segment or a polygon's edge
+  | { distance: number } // along a line or a ray, in board units
+  | { turn: number }; // round a circle or an arc, in radians, page-wise
+
+export function isGlideSpec(value: unknown): value is GlideSpec {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.ratio === 'number' || typeof v.distance === 'number' || typeof v.turn === 'number';
+}
+
+/** The place a glider starts at on the path the board has just built. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function glideStart(spec: GlideSpec, path: Any): [number, number] | null {
+  if ('turn' in spec) {
+    // the page's y runs down and the board's up, so a page-wise turn is the
+    // opposite turn here
+    const c = path?.center;
+    const rim = path?.radiuspoint ?? path?.point2;
+    if (!c?.X || !rim?.X) return null;
+    const rad = -spec.turn;
+    const ux = rim.X() - c.X();
+    const uy = rim.Y() - c.Y();
+    const [cos, sin] = [Math.cos(rad), Math.sin(rad)];
+    return [c.X() + ux * cos - uy * sin, c.Y() + ux * sin + uy * cos];
+  }
+  const a = path?.point1;
+  const b = path?.point2;
+  if (!a?.X || !b?.X) return null;
+  const [dx, dy] = [b.X() - a.X(), b.Y() - a.Y()];
+  if ('ratio' in spec) return [a.X() + spec.ratio * dx, a.Y() + spec.ratio * dy];
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-9) return null;
+  return [a.X() + (dx * spec.distance) / len, a.Y() + (dy * spec.distance) / len];
+}
+
 function checkArity(entry: RegistryEntry, el: ElementSpec): string | undefined {
   // An image point is placed by its descriptor, so its only parent is the point
   // it copies.
@@ -258,6 +319,11 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
   const attrs = el.attrs ?? {};
   const image = imageOf(el);
   if (image) return imageClosures(board, String(el.parents[0]), image);
+  if (el.type === 'glider' && isGlideSpec(attrs.glide)) {
+    const path = elMap[String(el.parents[2])];
+    const start = glideStart(attrs.glide, path);
+    if (start) return [start[0], start[1], path];
+  }
   const measure = isMeasureSpec(attrs.measure) ? attrs.measure : null;
   const anchor = isAnchorSpec(attrs.anchor) ? attrs.anchor : null;
   if (measure || anchor) {
@@ -298,7 +364,72 @@ export function resolveParents(el: ElementSpec, board: Any, elMap: Record<string
 }
 
 /** Attributes that describe the element to this app, not to JSXGraph. */
-const APP_ATTRS = ['measure', 'anchor', 'image', 'coordsys', 'plot', 'func', 'plotAt', 'button'];
+const APP_ATTRS = ['measure', 'anchor', 'image', 'glide', 'coordsys', 'plot', 'func', 'plotAt', 'button'];
+
+/**
+ * Construct | Arc Segment Interior: the filled region bounded by an arc and
+ * its chord (not a pie-slice, unlike sector). Rendered as a parametric curve
+ * that first traces the arc from p1 to p2 counter-clockwise then returns
+ * along the straight chord from p2 back to p1. The curve is closed and filled.
+ *
+ * parents: [centrePtId, startPtId, endPtId] — the same triple as 'arc'.
+ */
+function createArcSegment(
+  board: Any,
+  el: ElementSpec,
+  elMap: Record<string, unknown>,
+): CreateOutcome {
+  const live = (id: unknown): Any => elMap[String(id)] ?? board?.objects?.[String(id)];
+  const center = live(el.parents[0]);
+  const p1     = live(el.parents[1]);
+  const p2     = live(el.parents[2]);
+  if (!center || !p1 || !p2) {
+    return { obj: null, error: `${el.type} tham chiếu đối tượng không tồn tại` };
+  }
+
+  const attrs: Record<string, Any> = { ...(el.attrs ?? {}) };
+  for (const key of APP_ATTRS) delete attrs[key];
+
+  try {
+    const obj = board.create('curve', [
+      (t: number) => {
+        const cx = center.X(); const cy = center.Y();
+        const r  = Math.hypot(p1.X() - cx, p1.Y() - cy);
+        const a1 = Math.atan2(p1.Y() - cy, p1.X() - cx);
+        const a2 = Math.atan2(p2.Y() - cy, p2.X() - cx);
+        let da = a2 - a1;
+        if (da < 0) da += 2 * Math.PI;
+        if (t <= 1) {
+          return cx + r * Math.cos(a1 + da * t);
+        }
+        const s = t - 1;
+        return p2.X() + s * (p1.X() - p2.X());
+      },
+      (t: number) => {
+        const cx = center.X(); const cy = center.Y();
+        const r  = Math.hypot(p1.X() - cx, p1.Y() - cy);
+        const a1 = Math.atan2(p1.Y() - cy, p1.X() - cx);
+        const a2 = Math.atan2(p2.Y() - cy, p2.X() - cx);
+        let da = a2 - a1;
+        if (da < 0) da += 2 * Math.PI;
+        if (t <= 1) {
+          return cy + r * Math.sin(a1 + da * t);
+        }
+        const s = t - 1;
+        return p2.Y() + s * (p1.Y() - p2.Y());
+      },
+      0, 2,
+    ], {
+      id: el.id,
+      numberPointsHigh: 100,
+      numberPointsLow: 50,
+      ...attrs,
+    });
+    return { obj };
+  } catch (e) {
+    return { obj: null, error: `${el.type}: ${(e as Error).message}` };
+  }
+}
 
 /** Build one element from its HeyGeo JSON description. */
 export function createElement(
@@ -319,6 +450,9 @@ export function createElement(
 
   const arityError = checkArity(entry, el);
   if (arityError) return { obj: null, error: arityError };
+
+  if (el.type === LINE_LOCUS_TYPE) return createLineLocus(board, el, elMap);
+  if (el.type === 'arcsegment') return createArcSegment(board, el, elMap);
 
   // An image point reads its source from the live board, not from elMap, so a
   // missing source has to be caught before the closures are built.
@@ -405,6 +539,62 @@ export function createElement(
     // A calculation reads the numbers its operands measure, so the descriptor
     // has to stay with the board that is drawing it.
     if (el.id && isMeasureSpec(el.attrs?.measure)) registerMeasure(board, el.id, el.attrs!.measure as MeasureSpec);
+    return { obj };
+  } catch (e) {
+    return { obj: null, error: `${el.type}: ${(e as Error).message}` };
+  }
+}
+
+/**
+ * Construct | Locus… of a straight object: the driver and the line it moves, as
+ * one curve. Sketchpad draws the whole family of lines, so the samples are pairs
+ * of far points with a NaN between pairs — the renderer lifts the pen on a NaN.
+ * The engine's own sampling and smoothing are switched off, because the table's
+ * indices are what the curve's parameter means.
+ */
+function createLineLocus(
+  board: Any,
+  el: ElementSpec,
+  elMap: Record<string, unknown>,
+): CreateOutcome {
+  const live = (id: unknown) => (elMap[String(id)] ?? board?.objects?.[String(id)]) as Any;
+  const driver = live(el.parents[0]);
+  const line = live(el.parents[1]);
+  if (!driver || !line) {
+    return { obj: null, error: `${el.type} tham chiếu đối tượng không tồn tại` };
+  }
+  const samples = locusSamples(el.attrs);
+  // A line built from coefficient functions has no stdform until the board has
+  // run once, so the figure is settled before it is sampled.
+  try {
+    board.update();
+  } catch {
+    // a board that is mid-update has its stdforms already
+  }
+  const table = sampleLineLocus(board, driver, line, samples, locusSpan(board));
+  if (table.length === 0) {
+    return { obj: null, error: `${el.type}: điểm dẫn không chạy trên đối tượng nào` };
+  }
+  const attrs = { ...(el.attrs ?? {}) };
+  for (const key of APP_ATTRS) delete attrs[key];
+  const n = table.length;
+  // The curve reads the table through this holder, so re-sampling replaces what
+  // it draws without the curve having to be built again.
+  const locus = { driver, line, samples, table, sig: '' };
+  try {
+    const obj = board.create('curve', [
+      (t: number) => locus.table[Math.round(t)]?.[0] ?? NaN,
+      (t: number) => locus.table[Math.round(t)]?.[1] ?? NaN,
+      0, n,
+    ], {
+      id: el.id,
+      numberPointsHigh: n,
+      numberPointsLow: n,
+      doAdvancedPlot: false,
+      RDPsmoothing: false,
+      ...attrs,
+    });
+    obj._locus = locus;
     return { obj };
   } catch (e) {
     return { obj: null, error: `${el.type}: ${(e as Error).message}` };

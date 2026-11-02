@@ -3,6 +3,8 @@ import {
   arrowDragMap,
   imageClosures,
   imageDeps,
+  imageFixedPoint,
+  imagePointIds,
   isImageSpec,
   type ImageSpec,
 } from './transforms';
@@ -53,6 +55,29 @@ describe('isImageSpec / imageDeps', () => {
   it('lists the elements the map is taken with', () => {
     expect(imageDeps({ attrs: { image: { op: 'dilate', of: ['O'], k: 2 } } })).toEqual(['O']);
     expect(imageDeps({ attrs: {} })).toEqual([]);
+  });
+});
+
+describe('imageFixedPoint / imagePointIds', () => {
+  it('names the centre a rotate or dilate leaves where it is', () => {
+    expect(imageFixedPoint({ op: 'rotate', of: ['O'], angle: 90 })).toBe('O');
+    expect(imageFixedPoint({ op: 'dilate', of: ['O'], k: 2 })).toBe('O');
+  });
+
+  it('moves every point of a translate or reflect', () => {
+    expect(imageFixedPoint({ op: 'translate', of: ['V1', 'V2'] })).toBeNull();
+    expect(imageFixedPoint({ op: 'reflect', of: ['mirror'] })).toBeNull();
+  });
+
+  it('rebuilds the centre of a selected segment instead of copying it', () => {
+    // Segment AB picked with A marked as the centre: only B gets a new point.
+    expect(imagePointIds(['A', 'B'], { op: 'rotate', of: ['A'], angle: 90 })).toEqual(['B']);
+    expect(imagePointIds(['A', 'B'], { op: 'dilate', of: ['A'], k: 2 })).toEqual(['B']);
+  });
+
+  it('copies both ends when the centre is elsewhere', () => {
+    expect(imagePointIds(['A', 'B'], { op: 'rotate', of: ['O'], angle: 90 })).toEqual(['A', 'B']);
+    expect(imagePointIds(['A', 'B'], { op: 'reflect', of: ['mirror'] })).toEqual(['A', 'B']);
   });
 });
 

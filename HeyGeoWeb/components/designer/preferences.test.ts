@@ -22,7 +22,7 @@ describe('preferences', () => {
     expect(readPreferences(storage())).toEqual(DEFAULT_PREFERENCES);
     expect(DEFAULT_PREFERENCES).toEqual({
       backgroundColor: '#ffffff',
-      foregroundColor: '#1e3c96',
+      foregroundColor: '#000080',
       selection: 'border',
     });
   });

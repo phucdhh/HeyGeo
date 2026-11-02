@@ -33,6 +33,7 @@ export type MeasureOp =
   | 'perimeter'       // args: [polygon]
   | 'angle'           // args: [point, vertex, point]
   | 'ratio'           // args: [segment, segment]
+  | 'threePointRatio' // args: [apex, unit, point] — apex→point over apex→unit
   | 'slope'           // args: [line | segment | ray]
   | 'coordinates'     // args: [point]
   | 'abscissa'        // args: [point]
@@ -87,6 +88,9 @@ export const RELATIVE_OPS: Partial<Record<MeasureOp, MeasureOp>> = {
  * two ids → their midpoint, a circle/arc → its centre, a segment or line → its
  * midpoint, a polygon → its centroid, one point → that point. `radiusFactor`
  * pushes the caption out by a multiple of a circle's radius.
+ * `at` pins the caption to a fixed place instead, as Sketchpad leaves a
+ * measurement where it was dropped while the figure moves; `of` then only says
+ * what the caption depends on.
  * With no anchor the element keeps the literal coordinates in its parents.
  */
 export interface AnchorSpec {
@@ -94,6 +98,7 @@ export interface AnchorSpec {
   dx?: number;
   dy?: number;
   radiusFactor?: number;
+  at?: [number, number];
 }
 
 export const DEFAULT_PRECISION = 2;
@@ -172,24 +177,34 @@ export function numberValueOf(board: Any, id: string): number | null {
   return operandValue(board, id, new Set());
 }
 
-/** The measurements the desktop's isLengthMeasure accepts as a circle's radius. */
-const LENGTH_OPS: MeasureOp[] = ['distance', 'pointSegmentDistance', 'length', 'radius'];
+/**
+ * The measurements a circle may take its radius from: the lengths the desktop's
+ * isLengthMeasure accepts, plus any number the page works out — a calculation
+ * or a parameter's reading is what Sketchpad's "By Center+Radius" draws with
+ * when the radius was picked off the page rather than typed.
+ */
+const LENGTH_OPS: MeasureOp[] = [
+  'distance', 'pointSegmentDistance', 'length', 'radius', 'calculate', 'value',
+];
 
 /** True when this element is a length a circle may be built about a centre from. */
 export function isLengthSource(board: Any, id: string): boolean {
   const spec = descriptorOf(board, id);
   if (spec) return LENGTH_OPS.includes(spec.op);
-  return live(board, id)?.elType === 'segment';
+  const elType = live(board, id)?.elType;
+  return elType === 'segment' || elType === 'slider';
 }
 
 /**
  * The length that element stands for, in the numbers the sketch shows: a
- * measurement's value, or the distance between a segment's two end points.
+ * measurement's value, the distance between a segment's two end points, or the
+ * number a parameter stands at.
  */
 export function lengthValueOf(board: Any, id: string): number | null {
   const spec = descriptorOf(board, id);
   if (spec) return LENGTH_OPS.includes(spec.op) ? measureValue(board, spec, new Set([id])) : null;
   const obj = live(board, id);
+  if (obj?.elType === 'slider' && obj.Value) return num(obj.Value());
   if (!obj || obj.elType !== 'segment' || !obj.point1 || !obj.point2) return null;
   return sep(obj.point1, obj.point2);
 }
@@ -292,16 +307,31 @@ function geometricValue(board: Any, spec: MeasureSpec, seen: Set<string>): numbe
       return a?.Perimeter ? num(a.Perimeter()) : null;
     case 'angle': {
       if (!a || !b || !c) return null;
-      // JSXGraph is y-up; the desktop measures the angle clockwise on screen.
-      const a0 = Math.atan2(-(a.Y() - b.Y()), a.X() - b.X());
-      const a2 = Math.atan2(-(c.Y() - b.Y()), c.X() - b.X());
-      return ((-(a2 - a0) + 4 * Math.PI) % (2 * Math.PI)) * (180 / Math.PI);
+      // Sketchpad's degrees are never negative and never past a straight angle.
+      const ux = a.X() - b.X();
+      const uy = a.Y() - b.Y();
+      const vx = c.X() - b.X();
+      const vy = c.Y() - b.Y();
+      return Math.abs(Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy)) * (180 / Math.PI);
     }
     case 'ratio': {
       if (!(a?.point1 && a?.point2 && b?.point1 && b?.point2)) return null;
       const l0 = sep(a.point1, a.point2);
       const l1 = sep(b.point1, b.point2);
       return l1 < 1e-12 ? 0 : l0 / l1;
+    }
+    case 'threePointRatio': {
+      // Sketchpad's Measure | Ratio of three collinear points A, B, C: the
+      // distance AC over AB, negative when B and C fall on opposite sides of A.
+      if (!(a && b && c)) return null;
+      const ux = b.X() - a.X();
+      const uy = b.Y() - a.Y();
+      const vx = c.X() - a.X();
+      const vy = c.Y() - a.Y();
+      const ab = Math.hypot(ux, uy);
+      if (ab < 1e-12) return null;
+      const sign = ux * vx + uy * vy < 0 ? -1 : 1;
+      return num((sign * Math.hypot(vx, vy)) / ab);
     }
     case 'slope': {
       const p1 = a?.point1;
@@ -431,6 +461,8 @@ function positionOf(o: Any): [number, number] | null {
 export function anchorClosures(board: Any, anchor: AnchorSpec): [() => number, () => number] {
   const dx = anchor.dx ?? 0;
   const dy = anchor.dy ?? 0;
+  const pinned = anchor.at;
+  if (pinned) return [() => pinned[0] + dx, () => pinned[1] + dy];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const base = (): [number, number] | null => {
     const pts = anchor.of.map((id) => positionOf(live(board, id))).filter(Boolean) as [number, number][];
@@ -488,6 +520,9 @@ const CAPTION_PLACES: Partial<Record<MeasureOp, { dx?: number; dy?: number; radi
   slope: { dy: 0.4 },
   equationLine: { dy: 0.4 },
   equationCircle: { dx: 0.5, dy: -0.5 },
+  // beside the vertex, inside the angle, where Sketchpad drops it — placing it on
+  // the centroid of the three points would stack both angles of a triangle
+  angle: { dx: 0.5, dy: -0.4 },
 };
 
 /**
@@ -508,9 +543,11 @@ export function captionAnchor(
   // rather than somewhere between its origin and its unit point
   const of = spec.op === 'ratio'
     ? [spec.args[0]]
-    : plain
-      ? spec.args.slice(2)
-      : spec.args;
+    : spec.op === 'angle'
+      ? [spec.args[1]]
+      : plain
+        ? spec.args.slice(2)
+        : spec.args;
   const key = of.join(',');
   const taken = existing.filter(
     (el) => (el.attrs?.anchor as AnchorSpec | undefined)?.of.join(',') === key,

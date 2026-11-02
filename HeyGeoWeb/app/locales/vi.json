@@ -217,14 +217,15 @@
     "error_read": "Không thể đọc file: {{msg}}",
     "type_heygeo_label": "File JSON (HeyGeo export)",
     "type_heygeo_hint": "Chọn file .json xuất từ ứng dụng HeyGeo Desktop",
-    "type_sketchpad_label": "File JSON (The Geometer's Sketchpad)",
-    "type_sketchpad_hint": "Chọn file .json xuất từ The Geometer's Sketchpad",
+    "type_sketchpad_label": "File Sketchpad (.gsp hoặc .json)",
+    "type_sketchpad_hint": "Chọn file .gsp (Sketchpad) hoặc .json xuất từ The Geometer's Sketchpad",
     "type_wsp_label": "File -json.js (Web Sketchpad)",
     "type_wsp_hint": "Chọn file -json.js tạo từ Web Sketchpad",
     "type_geogebra_label": "File .ggb (GeoGebra)",
     "type_geogebra_hint": "Chọn file .ggb xuất từ GeoGebra",
     "type_gx_label": "File HTML (Geometry Expressions)",
-    "type_gx_hint": "Chọn file .html xuất từ Geometry Expressions"
+    "type_gx_hint": "Chọn file .html xuất từ Geometry Expressions",
+    "error_bad_gsp": "Không đọc được đối tượng nào từ file .gsp này."
   },
   "release": {
     "nav_download": "Tải về",

@@ -37,9 +37,12 @@ function ModelViewer({ data, id }: { data: unknown; id?: string }) {
 // Resolve the underlying rendering engine so the "Được tạo bằng HeyGeo & …"
 // footer credits the correct tool (JSXGraph, Sketchpad, Web Sketchpad,
 // GeoGebra, CindyJS, Geometry Expressions) instead of always JSXGraph.
-function toolCredit(data: unknown): { label: string; url: string } {
+// A sketch drawn in HeyGeo Web Design credits the platform alone (`own`).
+function toolCredit(data: unknown): { label: string; url: string; own?: boolean } {
   const rec = data as Record<string, unknown>;
   switch (rec.__type) {
+    case 'heygeoweb':
+      return { label: 'HeyGeo Web', url: 'https://heygeo.pedu.vn/design', own: true };
     case 'sketchpad':
     case 'gsp':
       return { label: 'Sketchpad', url: 'https://gsptest.scratchconsortium.com/' };
@@ -153,13 +156,21 @@ export default async function SharePage({ params }: Props) {
 
             <div className="mt-6 pt-4 border-t border-gray-100 text-xs text-gray-400">
               Được tạo bằng{' '}
-              <a href="https://heygeo.pedu.vn" className="underline">
-                HeyGeo
-              </a>{' '}
-              &amp;{' '}
-              <a href={credit.url} target="_blank" rel="noopener noreferrer" className="underline">
-                {credit.label}
-              </a>
+              {credit.own ? (
+                <a href={credit.url} target="_blank" rel="noopener noreferrer" className="underline">
+                  {credit.label}
+                </a>
+              ) : (
+                <>
+                  <a href="https://heygeo.pedu.vn" className="underline">
+                    HeyGeo
+                  </a>{' '}
+                  &amp;{' '}
+                  <a href={credit.url} target="_blank" rel="noopener noreferrer" className="underline">
+                    {credit.label}
+                  </a>
+                </>
+              )}
             </div>
 
             <ModelReactionsBar modelId={model.id} isLoggedIn={currentUser !== null} />

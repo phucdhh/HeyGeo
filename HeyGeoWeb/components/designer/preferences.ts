@@ -20,7 +20,7 @@ export type SelectionStyle = 'border' | 'blinking';
 /** The app's own ink, so a fresh browser draws what it always drew. */
 export const DEFAULT_PREFERENCES: Preferences = {
   backgroundColor: '#ffffff',
-  foregroundColor: '#1e3c96',
+  foregroundColor: '#000080',
   selection: 'border',
 };
 

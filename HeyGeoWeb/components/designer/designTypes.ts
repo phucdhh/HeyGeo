@@ -1,5 +1,10 @@
 // ─── Tool modes – mirrors HeyGeoView::ToolMode enum from Desktop ─────────────
-import type { ActionButtonRows } from './actionButtonModel';
+import type {
+  ActionButtonAction,
+  ActionButtonRows,
+  MoveSpeed,
+  PresentSpec,
+} from './actionButtonModel';
 import type { AnimationRows, AnimationSpec } from './animationModel';
 import type { GridForm, GraphRows } from './coordsysModel';
 import type { FunctionRows } from './functionMenuModel';
@@ -112,6 +117,9 @@ export const TOOL_HINTS: Record<ToolMode, string> = {
 };
 
 // ─── Element kind vocabulary, shared by the panel and the Context menu ────────
+/** `jsonData.__type` of a sketch saved by this designer, which tells it apart from a desktop export. */
+export const DESIGN_TYPE = 'heygeoweb';
+
 export const ELEMENT_KIND_LABELS: Record<string, string> = {
   point: 'Điểm', glider: 'Điểm trên đối tượng', segment: 'Đoạn thẳng',
   line: 'Đường thẳng', ray: 'Tia', circle: 'Đường tròn', arc: 'Cung tròn',
@@ -119,6 +127,7 @@ export const ELEMENT_KIND_LABELS: Record<string, string> = {
   intersection: 'Giao điểm', perpendicular: 'Vuông góc',
   parallel: 'Song song', bisector: 'Phân giác', slider: 'Thanh trượt',
   functiongraph: 'Đồ thị hàm số',
+  curve: 'Quỹ tích', tracecurve: 'Quỹ tích', linelocus: 'Quỹ tích',
 };
 
 export function elementKindLabel(kind: string): string {
@@ -199,6 +208,13 @@ export interface MarkInfo {
     label: string;
     value: number;
   };
+  distance?: {
+    segmentId?: string;
+    points?: [string, string];
+    valueId?: string;
+    label: string;
+    value: number;
+  };
 }
 
 // ─── Cursor coords shown in status bar ────────────────────────────────────────
@@ -231,6 +247,7 @@ export interface CanvasHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   zoomFit: () => void;
+  zoomReset: () => void;
   setTitle: (t: string) => void;
   updateSelectedColor: (color: string) => void;
   /** The stroke colour the first picked object draws with, or null when nothing is picked. */
@@ -268,6 +285,12 @@ export interface CanvasHandle {
   /** Construct | Circle Interior: one picked circle, filled as its own disc. */
   canCircleInterior: () => boolean;
   createCircleInterior: () => boolean;
+  /** Construct | Triangle Interior: three picked points, filled in click order. */
+  canTriangleInterior: () => boolean;
+  createTriangleInterior: () => boolean;
+  /** Construct | Quadrilateral Interior: four picked points, filled in click order. */
+  canQuadrilateralInterior: () => boolean;
+  createQuadrilateralInterior: () => boolean;
   createBisector: () => void;
   /** Construct | Endpoints — one segment, ray or arc is picked. */
   canEndpoint: () => boolean;
@@ -282,6 +305,7 @@ export interface CanvasHandle {
   markVector: () => string | null;
   markAngle: () => string | null;
   markRatio: () => string | null;
+  markDistance: () => string | null;
   clearMarks: () => void;
   getMarks: () => MarkInfo;
   applyTranslate: (params: { type: 'vector' } | { type: 'rect'; dx: number; dy: number } | { type: 'polar'; distance: number; angleDeg: number }) => boolean;
@@ -303,6 +327,11 @@ export interface CanvasHandle {
   fontInfo: () => { size: number | null; family: string | null } | null;
   /** Display | Font — set the size, the family or both as one undo step. */
   updateSelectedFont: (font: { family?: string; size?: number }) => boolean;
+  /** Display | Text Style — bold/italic toggles and checks */
+  isSelectedBold: () => boolean;
+  toggleSelectedBold: () => boolean;
+  isSelectedItalic: () => boolean;
+  toggleSelectedItalic: () => boolean;
   /** Construct | Arc On Circle — one circle and two points are picked. */
   canArcOnCircle: () => boolean;
   /** Construct | Arc On Circle — draw the counterclockwise arc between them. */
@@ -310,9 +339,14 @@ export interface CanvasHandle {
   /** Construct | Arc Sector Interior — one picked arc is the wedge to fill. */
   canArcSector: () => boolean;
   createArcSector: () => boolean;
+  /** Construct | Arc Segment Interior — one picked arc fills the chord segment. */
+  canArcSegment: () => boolean;
+  createArcSegment: () => boolean;
   /** Display | Number of Samples… — the picked locus' count, or null. */
   samplesInfo: () => number | null;
   setSamples: (samples: number) => boolean;
+  /** Sketchpad's + and − on a picked locus: one step more or fewer samples. */
+  stepSamples: (delta: number) => boolean;
   toggleSelectedTrace: () => void;
   clearAllTraces: () => void;
   showAllHidden: () => void;
@@ -330,6 +364,8 @@ export interface CanvasHandle {
    * Slider tool's two clicks would, and open the same dialog over it.
    */
   beginParameter: () => SliderPos;
+  /** Number | Add Slider — the slider object itself, at its default place and range. */
+  addSlider: () => boolean;
   /** The numbers the board shows, for Number | Calculate… to read. */
   numberValues: () => NumberValue[];
   // Graph menu
@@ -363,10 +399,14 @@ export interface CanvasHandle {
   plotPickedPair: () => boolean;
   /** Graph | Plot Value On Axis… with the one number the designer picked. */
   plotValueOnAxis: () => boolean;
-  /** Edit | Action Buttons | Hide/Show: a button over what is selected. */
-  createActionButton: () => boolean;
+  /** Edit | Action Buttons | Hide/Show, Show or Hide: a button over what is selected. */
+  createActionButton: (action?: ActionButtonAction) => boolean;
   /** Edit | Action Buttons | Animation…: a button that runs what it was made from. */
   createAnimationButton: (spec: AnimationSpec) => boolean;
+  /** Edit | Action Buttons | Movement…: a button that carries pairs of points. */
+  createMovementButton: (speed: MoveSpeed) => boolean;
+  /** Edit | Action Buttons | Presentation…: a button that presses the picked buttons. */
+  createPresentButton: (present: PresentSpec) => boolean;
   /** Whether the Action Buttons row has a selection to make a button from. */
   actionButtonRows: () => ActionButtonRows;
   /** Display | Animate Objects…: set the selected gliders and parameters moving. */

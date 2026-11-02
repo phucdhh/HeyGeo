@@ -21,6 +21,7 @@ import type {
 } from './designTypes';
 import { emptyData, elementKindLabel } from './designTypes';
 import { DEFAULT_PREFERENCES, type Preferences } from './preferences';
+import { LINE_WIDTH, SELECT_INK, pointStyle } from './designStyle';
 import DesignContextMenu from './DesignContextMenu';
 import {
   objectMenu,
@@ -31,14 +32,17 @@ import {
 } from './contextMenuModel';
 import { createElement } from './elementRegistry';
 import {
-  anchorClosures, captionAnchor, isMeasureSpec, measureValue, type MeasureSpec,
+  LINE_LOCUS_TYPE, LOCUS_SAMPLES, locusSamples, refreshLineLocuses,
+} from './lineLocusModel';
+import {
+  anchorClosures, captionAnchor, isAnchorSpec, isMeasureSpec, measureValue, type MeasureSpec,
 } from './measurement';
 import { circleByRadiusPicks } from './circleByRadiusModel';
 import { arcOnCirclePicks, isPointKind, type ArcOnCircle } from './arcOnCircleModel';
 import { arcSectorPicks, type ArcSector } from './arcSectorModel';
 import { centreOf, endpointIds } from './pointConstructModel';
 import { measureItems, type MeasureItem } from './measureMenuModel';
-import { numberSources, parameterPlace } from './numberMenuModel';
+import { defaultSlider, numberSources, parameterPlace } from './numberMenuModel';
 import {
   coordsysOf,
   defaultFrame,
@@ -88,10 +92,16 @@ import {
   buttonCaption,
   buttonOf,
   buttonPlace,
-  buttonShows,
+  isMovablePoint,
+  movePairs,
   newActionButton,
+  type ActionButtonAction,
   type ActionButtonRows,
+  type ActionButtonSpec,
+  type MoveSpeed,
+  type PresentSpec,
 } from './actionButtonModel';
+import { createButtonRuntime, type ButtonRuntime } from './buttonRuntime';
 import {
   copyClosure,
   pasteElements,
@@ -113,7 +123,7 @@ import {
   type AnimationTargetState,
   type AnimatableKind,
 } from './animationModel';
-import { arrowDragMap, imageClosures, type ImageSpec, type RatioMark } from './transforms';
+import { arrowDragMap, imageClosures, imageFixedPoint, imagePointIds, type ImageSpec, type RatioMark } from './transforms';
 import {
   applyScene,
   clearHistory,
@@ -136,10 +146,14 @@ import {
   canChangeFont,
   fontAttrsOf,
   fontDocumentAttrs,
+  isCssBold,
+  isCssItalic,
   objectFontFamily,
   objectFontSize,
   sharedFontFamily,
   sharedFontSize,
+  withFontWeight,
+  withFontStyle,
   type FontChoice,
   type FontPick,
 } from './fontModel';
@@ -179,11 +193,26 @@ const SELECTABLE_KINDS = [
   ...POINT_ELTS,
   'line', 'segment', 'ray', 'parallel', 'perpendicular', 'bisector',
   'circle', 'arc', 'polygon',
+  // a locus is a curve, and Sketchpad lets a click land on one
+  'curve', 'tracecurve',
 ];
 
 /** Sketchpad also has a menu for a measurement or a caption, which a click
  *  cannot select, so the Context menu looks at these as well. */
 const CONTEXT_MENU_KINDS = [...SELECTABLE_KINDS, 'text', 'angle'];
+
+/** Straight objects a perpendicular or a parallel can be drawn to. */
+const LINE_KINDS = ['line', 'segment', 'ray', 'parallel', 'perpendicular', 'bisector'];
+
+/** How many more samples each press of + adds: a bundle of lines needs finer steps than a point path. */
+const LOCUS_STEP = 8;
+const TRACE_STEP = 20;
+
+/** How far, in pixels, a dragged label's nearest edge may sit from its object. */
+const LABEL_REACH = 15;
+
+/** Points drawn as a coloured disc inside a black rim. */
+const SOLID_POINTS = POINT_ELTS.filter((k) => k !== 'slider');
 
 /** Display | Label Object… relabels one point or one curve, as the desktop's
  *  canEditChangeLabel does; a slider or a caption has no label of its own. */
@@ -411,7 +440,9 @@ type SelDecoration =
   | { kind: 'line';    x1: number; y1: number; x2: number; y2: number;
       sfirst: boolean; slast: boolean }
   | { kind: 'circle';  cx: number; cy: number; r: number }
-  | { kind: 'polygon'; points: string };
+  | { kind: 'polygon'; points: string }
+  | { kind: 'path';    d: string }
+  | { kind: 'text';    x: number; y: number; w: number; h: number };
 
 /** The marked centre in screen pixels; `key` is what the 60 fps loop compares. */
 type CenterMark = { key: string; sx: number; sy: number };
@@ -448,6 +479,57 @@ function lineVisibleScrPts(obj: any, board: any): [[number, number], [number, nu
   ];
 }
 
+/** A tick mark on a straight element, rendered as 1, 2, or 3 short perpendicular strokes. */
+interface TickMarkDecoration {
+  id: string;
+  count: number;
+  mx: number;
+  my: number;
+  px: number;
+  py: number;
+  dx: number;
+  dy: number;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function computeTickDecorations(
+  tickMap: Map<string, number>,
+  board: any,
+): TickMarkDecoration[] {
+  if (!board || tickMap.size === 0) return [];
+  const decs: TickMarkDecoration[] = [];
+  for (const [id, count] of tickMap.entries()) {
+    if (count <= 0) continue;
+    const obj = board.objects?.[id];
+    if (!obj || obj.visProp?.visible === false) continue;
+    let p1sc: number[] | undefined;
+    let p2sc: number[] | undefined;
+    if (obj.point1?.coords?.scrCoords && obj.point2?.coords?.scrCoords) {
+      p1sc = obj.point1.coords.scrCoords;
+      p2sc = obj.point2.coords.scrCoords;
+    } else if (['parallel', 'perpendicular', 'bisector'].includes(obj.elType)) {
+      const ends = lineVisibleScrPts(obj, board);
+      if (ends) {
+        p1sc = [1, ends[0][0], ends[0][1]];
+        p2sc = [1, ends[1][0], ends[1][1]];
+      }
+    }
+    if (!p1sc || !p2sc) continue;
+    const mx = (p1sc[1] + p2sc[1]) / 2;
+    const my = (p1sc[2] + p2sc[2]) / 2;
+    const vx = p2sc[1] - p1sc[1];
+    const vy = p2sc[2] - p1sc[2];
+    const len = Math.hypot(vx, vy);
+    if (len < 1) continue;
+    const dx = vx / len;
+    const dy = vy / len;
+    const px = -dy;
+    const py = dx;
+    decs.push({ id, count, mx, my, px, py, dx, dy });
+  }
+  return decs;
+}
+
 function computeDecorations(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   selected: any[],
@@ -460,7 +542,7 @@ function computeDecorations(
       if (['point','glider','midpoint','circumcenter','intersection'].includes(obj.elType)) {
         const sc = obj.coords?.scrCoords;
         if (sc) decs.push({ kind: 'point', cx: sc[1], cy: sc[2],
-          r: (obj.visProp?.size ?? 4) + 1 });
+          r: (obj.visProp?.size ?? 3) + (obj.visProp?.strokewidth ?? 1.5) / 2 + 3 });
       } else if (['line','segment','ray','parallel','perpendicular','bisector'].includes(obj.elType)) {
         if (['parallel','perpendicular','bisector'].includes(obj.elType) && board) {
           // Use stdform + board transform for accurate screen direction
@@ -480,6 +562,12 @@ function computeDecorations(
             slast:  !!(obj.visProp?.straightlast  ?? (isInfinite || isRayLike)),
           });
         }
+      } else if (obj.elType === 'curve' || obj.elType === 'tracecurve'
+        || obj.elType === 'functiongraph') {
+        // A locus is a bundle of strokes, so its outline follows every run of
+        // points between the gaps that keep the strokes apart.
+        const d = curvePath(obj);
+        if (d) decs.push({ kind: 'path', d });
       } else if (obj.elType === 'circle') {
         const csc = (obj.center ?? obj.point1)?.coords?.scrCoords;
         const p2sc = obj.point2?.coords?.scrCoords;
@@ -498,6 +586,16 @@ function computeDecorations(
           })
           .filter(Boolean) as string[];
         if (pts.length >= 2) decs.push({ kind: 'polygon', points: pts.join(' ') });
+      } else if (obj.elType === 'text') {
+        const sc = obj.coords?.scrCoords;
+        const [w, h] = obj.size ?? [0, 0];
+        if (sc && w > 0) {
+          const side = obj.getAnchorX();
+          const base = obj.getAnchorY();
+          const left = side === 'right' ? sc[1] - w : side === 'middle' ? sc[1] - w / 2 : sc[1];
+          const bottom = base === 'top' ? sc[2] + h : base === 'middle' ? sc[2] + h / 2 : sc[2];
+          decs.push({ kind: 'text', x: left - 3, y: bottom - h - 2, w: w + 6, h: h + 4 });
+        }
       }
     } catch { /**/ }
   }
@@ -505,6 +603,28 @@ function computeDecorations(
 }
 
 // ─── Build SelectedElementInfo from board object ─────────────────────────────
+/**
+ * The screen-space outline of a curve, one run per stretch between its gaps.
+ * A locus of a line is many strokes in one curve, and a NaN point between them is
+ * what tells them apart.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function curvePath(obj: any): string {
+  const pts = obj?.points ?? [];
+  let d = '';
+  let pen = false;
+  for (const p of pts) {
+    const sc = p?.scrCoords;
+    if (!sc || Number.isNaN(sc[1]) || Number.isNaN(sc[2])) {
+      pen = false;
+      continue;
+    }
+    d += `${pen ? 'L' : 'M'}${sc[1]} ${sc[2]}`;
+    pen = true;
+  }
+  return d;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toSelectedInfo(obj: any): SelectedElementInfo {
   const vp = obj.visProp ?? {};
@@ -512,7 +632,7 @@ function toSelectedInfo(obj: any): SelectedElementInfo {
     id:          obj.id,
     type:        obj.elType ?? 'unknown',
     name:        obj.name ?? '',
-    strokeColor: vp.strokecolor  ?? '#000000',
+    strokeColor: SOLID_POINTS.includes(obj.elType) ? (vp.fillcolor ?? '#000000') : (vp.strokecolor ?? '#000000'),
     fillColor:   vp.fillcolor    ?? 'none',
     fillOpacity: vp.fillopacity  ?? 0.1,
     strokeWidth: vp.strokewidth  ?? 2,
@@ -569,6 +689,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   const marksRef = useRef<import('./designTypes').MarkInfo>({});
   const onNotifyRef = useRef(onNotify);
   useEffect(() => { onNotifyRef.current = onNotify; }, [onNotify]);
+  const onDirtyRef = useRef(onDirty);
+  useEffect(() => { onDirtyRef.current = onDirty; }, [onDirty]);
 
   // Snap indicator: screen position of snap target (null = none)
   // type: 'point' = snapping to existing point (red), 'curve' = snapping to curve (orange)
@@ -592,6 +714,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   // Document state captured on mouse-down, pushed to the undo stack only if the
   // pointer actually dragged something — a click must not become an undo step.
   const dragBaseRef = useRef<SceneSnapshot | null>(null);
+  // Set while a drag is moving something a locus follows, so the sampling loop
+  // can catch up between pointer events instead of waiting for the drag to end.
+  const locusDirtyRef = useRef(false);
 
   // Stable ref for onOpenProperties so the board dblclick closure is never stale
   const onOpenPropertiesRef = useRef(onOpenProperties);
@@ -627,6 +752,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   /** Latest pointer event anywhere in the window, used to read the pointer. */
   const pointerRef = useRef<PointerEvent | null>(null);
 
+  // ─── Pan state ────────────────────────────────────────────────────────────
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef<{ sx: number; sy: number; originX: number; originY: number } | null>(null);
+  const spaceHeldRef = useRef(false);
+
   // ─── Display | Animate Objects… ───────────────────────────────────────────
   // The run lives outside React state: every frame is a change to the board,
   // not a re-render, and stopping is what hands the final places to the document.
@@ -644,8 +774,37 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     return () => window.removeEventListener('pointermove', onMove, true);
   }, []);
 
+  // Spacebar hold → pan cursor
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.code === 'Space' && !spaceHeldRef.current) {
+        spaceHeldRef.current = true;
+        e.preventDefault();
+        if (containerRef.current) containerRef.current.style.cursor = 'grab';
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        spaceHeldRef.current = false;
+        if (containerRef.current) containerRef.current.style.cursor = '';
+        if (isPanningRef.current) {
+          isPanningRef.current = false;
+          panStartRef.current = null;
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
   // A run left behind on an unmounted canvas would keep ticking on a dead board.
-  useEffect(() => () => stopAnimation(false), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => stopMotion(false), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendingRef  = useRef<{
     phase: 'idle' | 'pt2' | 'pt3' | 'polygon' | 'slider_pt2';
@@ -672,6 +831,19 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   const selectedRef = useRef<any[]>([]);
   // Set to true in element's 'down' handler so rubber-band onMouseDown knows an object was clicked
   const objectClickedRef = useRef(false);
+  // A click on an unselected object adds it to the selection, so it is the one a
+  // drag that starts on it must narrow the selection back to.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const justAddedRef = useRef<any>(null);
+  // A click on a selected object deselects it, but only once the pointer is up
+  // without having moved — a press that turns into a drag moves the group.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const toggleOnUpRef = useRef<{ obj: any; x: number; y: number } | null>(null);
+  // A measurement caption being dragged: where it started and the pointer grab.
+  const captionDragRef = useRef<{
+    id: string; startX: number; startY: number; dx0: number; dy0: number;
+    shift: [number, number]; moved: boolean;
+  } | null>(null);
   // GSP-style selection decorations rendered as SVG overlay
   const [selDecorations, setSelDecorations] = useState<SelDecoration[]>([]);
   // The Context menu: the rows Sketchpad would show, and where the pointer was.
@@ -682,6 +854,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   const centerMarkRef = useRef<CenterMark | null>(null);
   // The frame's grid, painted on a layer of its own under JSXGraph's elements
   const gridPartsRef = useRef<GridParts | null>(null);
+  // Pen tool tick marks on straight elements: segmentId -> count (1..3)
+  const tickMarksRef = useRef<Map<string, number>>(new Map());
+  const [tickDecorations, setTickDecorations] = useState<TickMarkDecoration[]>([]);
 
   // Keep toolRef in sync with prop
   useEffect(() => {
@@ -837,15 +1012,104 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const board = boardRef.current;
     if (!board) return;
     // the objects a run was moving may be gone from the restored scene
-    stopAnimation(false);
+    stopMotion(false);
     cancelTool();
     const { elements, errors } = applyScene(board, target, planScene(currentScene(), target));
     elementsRef.current = elements;
     metaRef.current = { ...metaRef.current, axis: target.axis, grid: target.grid };
     setSceneChrome(board, metaRef.current);
     reportLoadErrors(errors);
+    syncLocusSamples(board);
+    syncTickMarksFromElements(board);
     keepSelection(board);
     onDirty();
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function syncTickMarksFromElements(board?: any) {
+    const b = board ?? boardRef.current;
+    tickMarksRef.current.clear();
+    for (const el of elementsRef.current) {
+      const tc = el.attrs?.tickCount;
+      if (typeof tc === 'number' && tc > 0) {
+        tickMarksRef.current.set(el.id, tc % 4);
+      }
+    }
+    if (b) {
+      setTickDecorations(computeTickDecorations(tickMarksRef.current, b));
+    }
+  }
+
+  function toggleTickMark(id: string) {
+    saveSnapshot();
+    const current = tickMarksRef.current.get(id) ?? 0;
+    const next = (current + 1) % 4; // 0 -> 1 -> 2 -> 3 -> 0
+    if (next === 0) {
+      tickMarksRef.current.delete(id);
+    } else {
+      tickMarksRef.current.set(id, next);
+    }
+    const el = elementsRef.current.find((e) => e.id === id);
+    if (el) {
+      if (next === 0) {
+        delete el.attrs.tickCount;
+      } else {
+        el.attrs.tickCount = next;
+      }
+    }
+    const board = boardRef.current;
+    if (board) {
+      setTickDecorations(computeTickDecorations(tickMarksRef.current, board));
+    }
+    onDirty();
+  }
+
+  /**
+   * A family of lines draws what the document says, so an undo to a different
+   * sample count has to be sampled again; the curve itself is never rebuilt.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function syncLocusSamples(board: any) {
+    for (const el of elementsRef.current) {
+      if (el.type !== LINE_LOCUS_TYPE) continue;
+      const info = board.objects?.[el.id]?._locus;
+      if (!info) continue;
+      info.samples = locusSamples(el.attrs);
+      info.sig = '';
+    }
+    if (refreshLineLocuses(board)) board.update();
+  }
+
+  /**
+   * Display | Number of Samples… and Sketchpad's +/− keys: how many positions of
+   * the driver a locus shows, as one undo step.
+   */
+  function applySamples(samples: number): boolean {
+    const board = boardRef.current;
+    const sel = selectedRef.current;
+    if (!board || sel.length !== 1) return false;
+    const rec = elementsRef.current.find((e) => e.id === sel[0].id);
+    if (rec?.type === LINE_LOCUS_TYPE) {
+      const obj = board.objects[rec.id];
+      if (!obj?._locus) return false;
+      const next = Math.max(2, Math.min(400, Math.round(samples)));
+      saveSnapshot();
+      rec.attrs.samples = next;
+      obj._locus.samples = next;
+      obj._locus.sig = '';
+      if (refreshLineLocuses(board)) board.update();
+      onDirty();
+      return true;
+    }
+    const obj = board.objects[rec?.id ?? ''] as { setAttribute?: (a: Record<string, unknown>) => void } | undefined;
+    if (rec?.type !== 'tracecurve' || !obj?.setAttribute) return false;
+    const next = Math.max(10, Math.min(5000, Math.round(samples)));
+    saveSnapshot();
+    obj.setAttribute({ numberPoints: next });
+    rec.attrs.numberPoints = next;
+    board.update();
+    onDirty();
+    return true;
   }
 
   /** Keep what is still on the board selected, by id. */
@@ -886,7 +1150,10 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     for (const measure of measures) {
       // a caption in this batch sees the ones already placed in it, so two of
       // the same row never print on top of each other
-      const anchor = captionAnchor(measure, [...elementsRef.current, ...built.map((b) => b.el)]);
+      const placed = captionAnchor(measure, [...elementsRef.current, ...built.map((b) => b.el)]);
+      // The value stays where it is dropped when the figure moves, as in Sketchpad.
+      const [bx, by] = anchorClosures(board, { ...placed, dx: 0, dy: 0 });
+      const anchor = { ...placed, at: [Number(bx().toFixed(4)), Number(by().toFixed(4))] as [number, number] };
       const [x, y] = anchorClosures(board, anchor);
       const el: HeyGeoElement = {
         type: 'text',
@@ -960,6 +1227,28 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     return arcSectorPicks([{ id: el.id, kind: el.type, parents: el.parents.map(String) }]);
   }
 
+  /**
+   * The arc Construct | Arc Segment Interior would fill: the region bounded by
+   * the arc and its straight chord.
+   */
+  function arcSegmentSelection(): { arc: string; parents: [string, string, string] } | null {
+    if (selectedRef.current.length !== 1) return null;
+    const id = selectedRef.current[0].id as string;
+    const el = elementsRef.current.find((e) => e.id === id);
+    if (!el || el.parents.length !== 3) return null;
+    if (el.type === 'arc') {
+      return { arc: el.id, parents: [String(el.parents[0]), String(el.parents[1]), String(el.parents[2])] };
+    }
+    if (el.type === 'circumcirclearc') {
+      const obj = boardRef.current?.objects[el.id];
+      const centerId = obj?.center?.id;
+      if (centerId) {
+        return { arc: el.id, parents: [centerId, String(el.parents[0]), String(el.parents[2])] };
+      }
+    }
+    return null;
+  }
+
   /** The one object Construct | Endpoints and Center Point read the pick from. */
   function pointConstructPick(): { id: string; kind: string; parents: string[] } | null {
     if (selectedRef.current.length !== 1) return null;
@@ -984,11 +1273,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const el = elementsRef.current.find((e) => e.id === pt.id);
       const stored = typeof el?.attrs?.name === 'string' ? el.attrs.name : '';
       const name = stored || nextPointName();
-      pt.setAttribute({
-        visible: true, name,
-        size: 4, strokeColor: '#c83c3c', fillColor: '#c83c3c',
-        label: { fontSize: 14, strokeColor: '#c83c3c' },
-      });
+      pt.setAttribute({ visible: true, name, ...pointStyle() });
       if (el) {
         el.attrs.visible = true;
         el.attrs.name = name;
@@ -996,8 +1281,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         elementsRef.current.push({
           type: 'point', id: pt.id,
           parents: [pt.X(), pt.Y()],
-          attrs: { name, visible: true, size: 4,
-                   strokeColor: '#c83c3c', fillColor: '#c83c3c' },
+          attrs: { name, visible: true, ...pointStyle() },
         });
       }
     }
@@ -1024,6 +1308,35 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const place = parameterPlace(elementsRef.current);
     sliderPosRef.current = place;
     return place;
+  }
+
+  /**
+   * Number | Add Slider — the JSXGraph slider itself, dropped where New
+   * Parameter would go and carrying the defaults its dialog opens on. It is
+   * left picked, so the properties panel names the number it holds and the
+   * designer can drag the knob straight away.
+   */
+  function addSlider(): boolean {
+    const place = parameterPlace(elementsRef.current);
+    const cfg = defaultSlider(elementsRef.current);
+    return addObject({
+      type: 'slider',
+      id: nextElId('sl'),
+      parents: [
+        [place.x1, place.y1],
+        [place.x2, place.y2],
+        [cfg.min, cfg.init, cfg.max],
+      ],
+      attrs: {
+        name: cfg.name,
+        snapWidth: cfg.step,
+        withTicks: true,
+        withLabel: true,
+        strokeColor: ink(),
+        fillColor: ink(),
+        label: { fontSize: 14, strokeColor: ink() },
+      },
+    });
   }
 
   /** The numbers the board shows, with what each one is worth right now. */
@@ -1239,9 +1552,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       id: nextElId('pt'),
       parents: [...frame],
       attrs: {
-        name: nextPointName(), size: 4, face: 'o',
-        strokeColor: ink(), fillColor: ink(),
-        label: { fontSize: 14, strokeColor: ink() },
+        name: nextPointName(), ...pointStyle(),
         plotAt: spec,
       },
     });
@@ -1281,21 +1592,38 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
   // ─── Action buttons ─────────────────────────────────────────────────────────
   /**
-   * Edit | Action Buttons | Hide/Show — a button that hides what the designer
-   * selected, and shows it again the next time it is pressed.
-   *
-   * Sketchpad makes the button out of the selection and drops it in the sketch;
-   * the button keeps the names of what it acts on, so the caption reads "Ẩn AB"
-   * even after the point it names has been renamed away from its default.
+   * The press itself lives in the runtime the read-only viewer shares, so a
+   * button a .gsp import brings in does the same thing on both pages. It is made
+   * once and kept, because a move in flight has to go on running — and be
+   * stoppable — while the designer carries on working.
    */
-  function createActionButton(): boolean {
-    const picked = new Set(selectedRef.current.map((o: { id: string }) => o.id));
-    const targets = elementsRef.current.filter((e) => picked.has(e.id));
-    if (targets.length === 0) {
-      onNotifyRef.current?.('Cần chọn đối tượng cho nút hành động.');
-      return false;
+  const buttonRuntimeRef = useRef<ButtonRuntime | null>(null);
+  function buttons(): ButtonRuntime {
+    if (buttonRuntimeRef.current === null) {
+      buttonRuntimeRef.current = createButtonRuntime({
+        board: () => boardRef.current,
+        elements: () => elementsRef.current,
+        beginChange: saveSnapshot,
+        changed: () => onDirtyRef.current(),
+        animate: (spec, targets) => startAnimation(spec, targets),
+        notify: (message) => onNotifyRef.current?.(message),
+      });
     }
-    const spec = newActionButton('hide', targets);
+    return buttonRuntimeRef.current;
+  }
+
+  /**
+   * Give up every clock that moves objects — the animation run and a button's
+   * move or presentation — because a board about to be freed or restored cannot
+   * have a frame still ticking on it.
+   */
+  function stopMotion(persist = true) {
+    buttonRuntimeRef.current?.stop();
+    stopAnimation(persist);
+  }
+
+  /** Drop a finished button into the sketch, in the column the others stand in. */
+  function addButton(spec: ActionButtonSpec): boolean {
     const [x, y] = buttonPlace(elementsRef.current);
     return addObject({
       type: 'actionbutton',
@@ -1303,6 +1631,25 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       parents: [x, y, buttonCaption(spec, false)],
       attrs: { button: spec },
     });
+  }
+
+  /**
+   * Edit | Action Buttons | Hide/Show, Show or Hide — a button that changes the
+   * visibility of what the designer selected.
+   *
+   * Sketchpad makes the button out of the selection and drops it in the sketch;
+   * the button keeps the names of what it acts on, so the caption reads "Ẩn AB"
+   * even after the point it names has been renamed away from its default. A
+   * Hide/Show button flips, so it starts out about to hide what is on the page.
+   */
+  function createActionButton(action: ActionButtonAction = 'toggle'): boolean {
+    const picked = new Set(selectedRef.current.map((o: { id: string }) => o.id));
+    const targets = elementsRef.current.filter((e) => picked.has(e.id));
+    if (targets.length === 0) {
+      onNotifyRef.current?.('Cần chọn đối tượng cho nút hành động.');
+      return false;
+    }
+    return addButton(newActionButton(action, targets));
   }
 
   /**
@@ -1319,14 +1666,41 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       onNotifyRef.current?.('Cần chọn điểm trượt hoặc tham số cho nút chuyển động.');
       return false;
     }
-    const button = newActionButton('animate', targets, spec);
-    const [x, y] = buttonPlace(elementsRef.current);
-    return addObject({
-      type: 'actionbutton',
-      id: nextElId('btn'),
-      parents: [x, y, buttonCaption(button, true)],
-      attrs: { button },
-    });
+    return addButton(newActionButton('animate', targets, { animation: spec }));
+  }
+
+  /**
+   * Edit | Action Buttons | Movement… — Sketchpad takes the picked points in the
+   * order they were picked and sends each one to the next, so four points are two
+   * moves and an odd point out is left alone. The destination stays live: a move
+   * towards a point that has since been dragged goes where it now is.
+   */
+  function createMovementButton(speed: MoveSpeed): boolean {
+    const picked = new Set(selectedRef.current.map((o: { id: string }) => o.id));
+    const points = elementsRef.current
+      .filter((e) => picked.has(e.id) && isMovablePoint(e));
+    const pairs = movePairs(points);
+    if (pairs.length === 0) {
+      onNotifyRef.current?.('Cần chọn ít nhất hai điểm cho nút di chuyển.');
+      return false;
+    }
+    const movers = points.filter((_, i) => i % 2 === 0);
+    const destinations = points.filter((_, i) => i % 2 === 1).map((p) => p.id);
+    return addButton(newActionButton('move', movers, { move: { destinations, speed } }));
+  }
+
+  /**
+   * Edit | Action Buttons | Presentation… — a button that presses the other
+   * buttons in the order they were picked, one after another or all at once.
+   */
+  function createPresentButton(present: PresentSpec): boolean {
+    const picked = new Set(selectedRef.current.map((o: { id: string }) => o.id));
+    const targets = elementsRef.current.filter((e) => picked.has(e.id) && buttonOf(e) !== null);
+    if (targets.length < 2) {
+      onNotifyRef.current?.('Cần chọn từ hai nút hành động trở lên cho nút trình diễn.');
+      return false;
+    }
+    return addButton(newActionButton('present', targets, { present }));
   }
 
   /** The button under these page pixels, if the click landed on one. */
@@ -1338,44 +1712,6 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       if (el && buttonOf(el)) return { el, obj };
     }
     return null;
-  }
-
-  /**
-   * Press a button: hide what it names, or show it again, as one undo step.
-   *
-   * The objects change visibility, not the button, so its caption is rewritten to
-   * name what the next press will do and kept in the element's parents — a reload
-   * then shows the same hidden sketch with the same "Hiện …" button.
-   */
-  function pressActionButton(el: HeyGeoElement, obj: unknown): boolean {
-    const board = boardRef.current;
-    const spec = buttonOf(el);
-    if (!board || !spec) return false;
-    // an animation button starts the run it was made for; nothing about it is
-    // stored on the button, so its caption stays what the press will do
-    if (spec.action === 'animate') {
-      return spec.animation ? startAnimation(spec.animation, spec.targets) : false;
-    }
-    const targets = spec.targets
-      .map((id) => elementsRef.current.find((e) => e.id === id))
-      .filter((e): e is HeyGeoElement => e !== undefined);
-    if (targets.length === 0) return false;
-    const isVisible = (id: string): boolean => {
-      const target = targets.find((t) => t.id === id);
-      return target === undefined ? false : target.attrs?.visible !== false;
-    };
-    const shows = buttonShows(spec, isVisible);
-    saveSnapshot();
-    for (const target of targets) {
-      target.attrs = { ...(target.attrs ?? {}), visible: shows };
-      board.objects?.[target.id]?.setAttribute({ visible: shows });
-    }
-    const caption = buttonCaption(spec, shows);
-    el.parents = [el.parents[0], el.parents[1], caption];
-    (obj as { setText?: (text: string) => void }).setText?.(caption);
-    board.update();
-    onDirty();
-    return true;
   }
 
   // ─── Edit | Copy, Cut and Paste ─────────────────────────────────────────────
@@ -1502,7 +1838,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         if (parents) target.el.parents = parents as HeyGeoElement['parents'];
       }
     }
-    onDirty();
+    onDirtyRef.current();
   }
 
   /**
@@ -1577,7 +1913,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       run.raf = requestAnimationFrame(frame);
     };
     run.raf = requestAnimationFrame(frame);
-    onDirty();
+    onDirtyRef.current();
     return true;
   }
 
@@ -1791,16 +2127,18 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   // ─── Rebuild board from elements[] ────────────────────────────────────────
   // Used when a whole new document arrives; a snapshot restore goes through
   // restoreScene instead.
-  function rebuildBoard(els: HeyGeoElement[]) {
+  function rebuildBoard(els: HeyGeoElement[], bb?: [number, number, number, number]) {
     const board = boardRef.current;
     if (!board) return;
     // the board about to be freed is what a run was moving objects on
-    stopAnimation(false);
+    stopMotion(false);
     // Free & re-init
     jxg().JSXGraph.freeBoard(board);
     const meta = metaRef.current;
     const newBoard = jxg().JSXGraph.initBoard(BOARD_ID, {
-      boundingbox: [-8, 8, 8, -8],
+      // a document that names its own view — a .gsp page spans hundreds of
+      // units — is shown where it was drawn, not clipped to the default ±8
+      boundingbox: bb ?? [-8, 8, 8, -8],
       axis: true,
       grid: true,
       showCopyright: false,
@@ -1809,6 +2147,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       resize: { enabled: true, throttle: 50 },
       pan: { enabled: false },
       zoom: { wheel: toolRef.current === 'selection', min: 0.1, max: 50 },
+      showInfobox: false,
     });
     boardRef.current = newBoard;
     attachBoardEvents(newBoard); // must be before loadDataToBoard so events attach to all elements
@@ -1821,6 +2160,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     onSelectionChange([]);
     setSelDecorations([]);
     pendingRef.current = { phase: 'idle' };
+    syncTickMarksFromElements(newBoard);
   }
 
   // ─── Rubber-band selection + middle-mouse pan ────────────────────────────
@@ -1907,6 +2247,15 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         return;
       }
 
+      // A click that stayed put on a selected object takes it out of the selection.
+      const toggle = toggleOnUpRef.current;
+      if (toggle) {
+        toggleOnUpRef.current = null;
+        if (Math.hypot(evt.clientX - toggle.x, evt.clientY - toggle.y) < 4) {
+          deselectObject(toggle.obj);
+        }
+      }
+
       if (!rubberRef.current.active) return;
       finishRubberBand();
     }
@@ -1925,7 +2274,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
             if (obj.visProp?.visible === false) continue;
             if (obj.elType === 'axis' || obj.elType === 'ticks' || obj.elType === 'grid') continue;
             let inside = false;
-            if (obj.elType === 'point') {
+            if (POINT_ELTS.includes(obj.elType)) {
               const sc = obj.coords?.scrCoords;
               if (sc) inside = sc[1] >= rb.x && sc[1] <= rb.x + rb.w &&
                                         sc[2] >= rb.y && sc[2] <= rb.y + rb.h;
@@ -1951,6 +2300,28 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
               const csc = obj.center?.coords?.scrCoords;
               if (csc) inside = csc[1] >= rb.x && csc[1] <= rb.x + rb.w &&
                                           csc[2] >= rb.y && csc[2] <= rb.y + rb.h;
+            } else if (obj.elType === 'curve' || obj.elType === 'tracecurve'
+              || obj.elType === 'functiongraph') {
+              // a curve counts as caught when any stretch of it runs through the box
+              const pts = obj.points ?? [];
+              for (let k = 0; k < pts.length; k += 3) {
+                const sc = pts[k]?.scrCoords;
+                if (sc && sc[1] >= rb.x && sc[1] <= rb.x + rb.w &&
+                          sc[2] >= rb.y && sc[2] <= rb.y + rb.h) { inside = true; break; }
+              }
+            } else if (obj.elType === 'text'
+              && elementsRef.current.some((e) => e.id === obj.id && isAnchorSpec(e.attrs?.anchor))) {
+              // a measurement caption is picked up by its own place
+              const sc = obj.coords?.scrCoords;
+              if (sc) inside = sc[1] >= rb.x && sc[1] <= rb.x + rb.w &&
+                                        sc[2] >= rb.y && sc[2] <= rb.y + rb.h;
+            } else if (obj.elType === 'arc') {
+              // An arc is picked up by any of the three points that define it
+              inside = [obj.center, obj.radiuspoint, obj.anglepoint].some((p) => {
+                const sc = p?.coords?.scrCoords;
+                return sc && sc[1] >= rb.x && sc[1] <= rb.x + rb.w &&
+                             sc[2] >= rb.y && sc[2] <= rb.y + rb.h;
+              });
             } else if (obj.elType === 'polygon') {
               // Polygon: check if centroid or any vertex is inside
               const verts = obj.vertices ?? [];
@@ -2064,11 +2435,22 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   // ─── Decoration interval loop ─────────────────────────────────────────────
   // Runs at ~60 fps to keep SVG decorators in sync as points are dragged / board panned.
   useEffect(() => {
+    let tick = 0;
     const id = setInterval(() => {
       const board = boardRef.current;
       if (!board) return;
       if (selectedRef.current.length > 0) {
         setSelDecorations(computeDecorations(selectedRef.current, board));
+      }
+      // A family of lines follows its driver while the page changes. On the frame
+      // after a drag event it is re-sampled at full quality, which is what makes
+      // a drag look smooth; the slower sweep below catches changes no drag reported.
+      tick += 1;
+      if (locusDirtyRef.current) {
+        locusDirtyRef.current = false;
+        if (refreshLineLocuses(board)) board.update();
+      } else if (tick % 10 === 0 && refreshLineLocuses(board)) {
+        board.update();
       }
       const next = readCenterMark(board);
       if (next?.key !== centerMarkRef.current?.key) {
@@ -2090,6 +2472,231 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     return { key: `${cInfo.id}:${Math.round(sc[1])}:${Math.round(sc[2])}`, sx: sc[1], sy: sc[2] };
   }
 
+  // ─── Dragging captions and labels ─────────────────────────────────────────
+  /** The measurement caption under a screen point, if there is one. */
+  function captionAt(sx: number, sy: number): HeyGeoElement | null {
+    const board = boardRef.current;
+    if (!board) return null;
+    for (const el of elementsRef.current) {
+      if (el.type !== 'text' || !isAnchorSpec(el.attrs?.anchor)) continue;
+      const obj = board.objects[el.id];
+      if (!obj || obj.visProp?.visible === false) continue;
+      if (obj.hasPoint?.(sx, sy)) return el;
+    }
+    return null;
+  }
+
+  /**
+   * A caption's place is a closure over the figure it measures, so JSXGraph
+   * cannot drag it. The pointer adds a live shift on top of that closure; on
+   * release the shift is folded into the anchor offsets and the caption rebuilt.
+   */
+  function beginCaptionDrag(el: HeyGeoElement, evt: { clientX: number; clientY: number }) {
+    const board = boardRef.current;
+    const obj = board?.objects[el.id];
+    const anchor = el.attrs?.anchor;
+    if (!board || !obj || !isAnchorSpec(anchor)) return;
+    const baseX = obj.XEval;
+    const baseY = obj.YEval;
+    const drag = {
+      id: el.id, startX: evt.clientX, startY: evt.clientY,
+      dx0: anchor.dx ?? 0, dy0: anchor.dy ?? 0,
+      shift: [0, 0] as [number, number], moved: false,
+    };
+    captionDragRef.current = drag;
+    obj.XEval = () => baseX.call(obj) + drag.shift[0];
+    obj.YEval = () => baseY.call(obj) + drag.shift[1];
+
+    const onMove = (e: PointerEvent) => {
+      const px = e.clientX - drag.startX;
+      const py = e.clientY - drag.startY;
+      if (!drag.moved && Math.hypot(px, py) < 3) return;
+      drag.moved = true;
+      drag.shift = [px / board.unitX, -py / board.unitY];
+      board.update();
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onUp, true);
+      captionDragRef.current = null;
+      if (!drag.moved) {
+        obj.XEval = baseX;
+        obj.YEval = baseY;
+        return;
+      }
+      const live = elementsRef.current.find((e) => e.id === drag.id);
+      const liveAnchor = live?.attrs?.anchor;
+      if (!live || !isAnchorSpec(liveAnchor)) return;
+      const round = (v: number) => Number(v.toFixed(4));
+      const before = currentScene();
+      live.attrs.anchor = {
+        ...liveAnchor,
+        dx: round(drag.dx0 + drag.shift[0]),
+        dy: round(drag.dy0 + drag.shift[1]),
+      };
+      const after = currentScene();
+      pushCapped(undoStack.current, before);
+      redoStack.current = [];
+      const { elements, errors } = applyScene(board, after, planScene(before, after));
+      elementsRef.current = elements;
+      reportLoadErrors(errors);
+      keepSelection(board);
+      onDirty();
+    };
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onUp, true);
+  }
+
+  /** The label under a screen point, if the designer can drag it. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function labelAt(sx: number, sy: number): any | null {
+    const board = boardRef.current;
+    if (!board) return null;
+    for (const id in board.objects) {
+      const o = board.objects[id];
+      const lb = o?.hasLabel ? o.label : null;
+      if (!lb || lb.visProp?.fixed !== false) continue;
+      if (o.visProp?.visible === false || lb.visPropCalc?.visible === false) continue;
+      if (!String(lb.plaintext ?? '').trim()) continue;
+      if (lb.hasPoint?.(sx, sy)) {
+        keepLabelNear(lb);
+        return lb;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * A label stays within LABEL_REACH pixels of the point (or the spot on the line
+   * or circle) it names, as in Sketchpad: farther off it would read as belonging
+   * to nothing. The distance is taken to the nearest edge of the label's box, so
+   * the label can go all the way round the point, left side included. JSXGraph
+   * moves a dragged label through setPositionDirectly, so the limit is applied
+   * right after each move.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function keepLabelNear(lb: any) {
+    if (lb._keptNear || typeof lb.setPositionDirectly !== 'function') return;
+    lb._keptNear = true;
+    const move = lb.setPositionDirectly;
+    lb.setPositionDirectly = function (this: typeof lb, ...args: unknown[]) {
+      const result = move.apply(this, args);
+      const rel = this.relativeCoords?.scrCoords;
+      const anchor = this.element?.getLabelAnchor?.()?.scrCoords;
+      if (!rel || !anchor) return result;
+      const off = this.visProp?.offset ?? [0, 0];
+      const ax = anchor[1] + (parseFloat(off[0]) || 0) + rel[1];
+      const ay = anchor[2] - (parseFloat(off[1]) || 0) + rel[2];
+      const [w, h] = this.size ?? [0, 0];
+      const side = this.getAnchorX();
+      const base = this.getAnchorY();
+      const left = side === 'right' ? ax - w : side === 'middle' ? ax - w / 2 : ax;
+      const bottom = base === 'top' ? ay + h : base === 'middle' ? ay + h / 2 : ay;
+      // the corner of the box nearest the point, and the way back to the point from it
+      const vx = anchor[1] - Math.min(Math.max(anchor[1], left), left + w);
+      const vy = anchor[2] - Math.min(Math.max(anchor[2], bottom - h), bottom);
+      const gap = Math.hypot(vx, vy);
+      if (gap > LABEL_REACH) {
+        const k = (gap - LABEL_REACH) / gap;
+        rel[1] += vx * k;
+        rel[2] += vy * k;
+      }
+      return result;
+    };
+  }
+
+  /**
+   * JSXGraph keeps a dragged label as a screen-pixel displacement from its
+   * offset. Fold that into the offset, which is what the document stores, so
+   * the label keeps its place after a save, a reload or an undo.
+   */
+  function flushLabelDrags() {
+    const board = boardRef.current;
+    if (!board) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const moved: { o: any; lb: any; from: [number, number]; to: [number, number] }[] = [];
+    for (const id in board.objects) {
+      const o = board.objects[id];
+      const lb = o?.hasLabel ? o.label : null;
+      const rel = lb?.relativeCoords?.scrCoords;
+      if (!lb || !rel || (Math.abs(rel[1]) < 1 && Math.abs(rel[2]) < 1)) continue;
+      const cur = lb.visProp?.offset ?? [0, 0];
+      const x = parseFloat(cur[0]) || 0;
+      const y = parseFloat(cur[1]) || 0;
+      moved.push({
+        o, lb,
+        from: [Math.round(x), Math.round(y)],
+        to: [Math.round(x + rel[1]), Math.round(y - rel[2])],
+      });
+    }
+    if (moved.length === 0) return;
+
+    const stored = moved
+      .map((m) => ({ ...m, el: elementsRef.current.find((e) => e.id === m.o.id) }));
+    // Undo reads the old place from the document, so it is written before the snapshot.
+    for (const m of stored) {
+      if (m.el) m.el.attrs.label = { ...((m.el.attrs.label ?? {}) as object), offset: m.from };
+    }
+    saveSnapshot();
+    for (const m of stored) {
+      if (m.el) m.el.attrs.label = { ...((m.el.attrs.label ?? {}) as object), offset: m.to };
+      m.lb.relativeCoords.scrCoords[1] = 0;
+      m.lb.relativeCoords.scrCoords[2] = 0;
+      m.lb.setAttribute({ offset: m.to });
+    }
+    board.update();
+    onDirty();
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function deselectObject(obj: any) {
+    selectedRef.current = selectedRef.current.filter((o) => o !== obj);
+    setSelDecorations(computeDecorations(selectedRef.current, boardRef.current));
+    onSelectionChange(selectedRef.current.map(toSelectedInfo));
+  }
+
+  /**
+   * The points Construct | Triangle / Quadrilateral Interior fills, in the order
+   * they were picked, so the shape follows the click order as Sketchpad's does.
+   */
+  function interiorVertexIds(count: number): string[] | null {
+    const ids = selectedRef.current
+      .filter((o) => SOLID_POINTS.includes(o.elType ?? ''))
+      .map((o) => o.id as string);
+    return ids.length === count ? ids : null;
+  }
+
+  /** Construct | Triangle / Quadrilateral Interior — a filled polygon with no outline of its own. */
+  function createPolygonInterior(count: number): boolean {
+    const ids = interiorVertexIds(count);
+    if (!ids) {
+      onNotifyRef.current?.(`Hãy chọn ${count} điểm.`);
+      return false;
+    }
+    return addObject({
+      type: 'polygon', id: nextElId('int'),
+      parents: [...ids],
+      attrs: { ...INTERIOR_STYLE, strokeColor: ink(), fillColor: ink(), borders: { visible: false } },
+    });
+  }
+
+  /** The point and the straight object a perpendicular or parallel is built from. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function pointAndLine(): { point: any; line: any } | null {
+    const sel = selectedRef.current;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const point = sel.find((o: any) => POINT_ELTS.includes(o.elType));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const line = sel.find((o: any) => LINE_KINDS.includes(o.elType));
+    if (!point || !line) {
+      onNotifyRef.current?.('Hãy chọn một điểm và một đường thẳng (hoặc đoạn thẳng, tia).');
+      return null;
+    }
+    return { point, line };
+  }
+
   // ─── Attach board-level events (click on objects for selection/info) ──────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function attachBoardEvents(board: any) {
@@ -2097,7 +2704,14 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const origCreate = board.create.bind(board);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     board.create = (type: string, parents: any[], attrs: Record<string, unknown>) => {
-      const obj = origCreate(type, parents, attrs);
+      // JSXGraph pins labels in place; unpinning them lets the designer drag a name
+      // around its object.
+      const skipLabel = type === 'axis' || type === 'grid' || type === 'ticks';
+      const withLabelDrag = skipLabel ? attrs : {
+        ...attrs,
+        label: { fixed: false, ...((attrs?.label as Record<string, unknown> | undefined) ?? {}) },
+      };
+      const obj = origCreate(type, parents, withLabelDrag);
       if (obj && typeof obj.on === 'function' && type !== 'axis' && type !== 'grid' && type !== 'ticks') {
         // ── info / text click ────────────────────────────────────────────
         obj.on('down', (evt: MouseEvent) => {
@@ -2113,6 +2727,13 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
             onDirty();
             return;
           }
+          if (toolRef.current === 'pen') {
+            const LINE_TYPES = ['segment', 'line', 'ray', 'parallel', 'perpendicular', 'bisector'];
+            if (LINE_TYPES.includes(obj.elType)) {
+              toggleTickMark(obj.id);
+              return;
+            }
+          }
           // Selection is handled by board.on('down') below using findObjectsAt.
           // objectClickedRef is set there; just stop DOM propagation here so
           // the container mousedown doesn’t also start rubber-band.
@@ -2126,12 +2747,21 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         });
         // ── drag: dragging an unselected object makes it the sole selection ──
         obj.on('drag', () => {
+          // Anything a locus is built from changes the family it sweeps, and the
+          // sampling loop picks this up on the next frame.
+          locusDirtyRef.current = true;
           if (dragBaseRef.current) {
             pushCapped(undoStack.current, dragBaseRef.current);
             redoStack.current = [];
             dragBaseRef.current = null;
           }
           if (toolRef.current !== 'selection') return;
+          // Pressing an unselected object and dragging it moves that object alone.
+          if (justAddedRef.current === obj && selectedRef.current.length > 1) {
+            selectedRef.current = [obj];
+            setSelDecorations(computeDecorations([obj], board));
+            onSelectionChange(selectedRef.current.map(toSelectedInfo));
+          }
           // Rotate and dilate always work on the whole selection. The translate
           // arrow joins them when more than one object is selected: dragging a
           // member of a group moves the group, which is what Sketchpad does.
@@ -2171,6 +2801,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           const carry = originCarriesUnit(
             elementsRef.current, (id: string) => board.objects[id], obj.id);
           if (carry) board.objects[carry.id]?.moveTo(carry.coords);
+          // A locus of a line follows what it was built from, so a drag ends by
+          // sampling the family again at full quality.
+          syncLocusSamples(board);
           if (syncPositions(elementsRef.current, board)) {
             setSelDecorations(computeDecorations(selectedRef.current, board));
             onSelectionChange(selectedRef.current.map(toSelectedInfo));
@@ -2210,12 +2843,36 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const rect = (board.containerObj as HTMLElement).getBoundingClientRect();
       const sx = evt.clientX - rect.left;
       const sy = evt.clientY - rect.top;
+      justAddedRef.current = null;
+      toggleOnUpRef.current = null;
       // A button is pressed, not selected: a plain click acts on it, and a
       // shift-click is how the designer picks the button itself to move or delete.
       const button = actionButtonAt(sx, sy);
       if (button) {
         if (evt.shiftKey) handleObjectClick(button.obj, true);
-        else pressActionButton(button.el, button.obj);
+        else buttons().press(button.el);
+        objectClickedRef.current = true;
+        return;
+      }
+      // A label is dragged by JSXGraph itself; here it only has to keep the press
+      // from clearing the selection or starting a rubber band.
+      if (labelAt(sx, sy)) {
+        objectClickedRef.current = true;
+        return;
+      }
+      // A measurement caption follows its figure, so it is dragged by hand.
+      const caption = captionAt(sx, sy);
+      if (caption) {
+        const picked = board.objects[caption.id];
+        if (evt.shiftKey) {
+          handleObjectClick(picked, true);
+        } else if (!selectedRef.current.includes(picked)) {
+          handleObjectClick(picked, true);
+          justAddedRef.current = picked;
+        } else {
+          toggleOnUpRef.current = { obj: picked, x: evt.clientX, y: evt.clientY };
+        }
+        beginCaptionDrag(caption, evt);
         objectClickedRef.current = true;
         return;
       }
@@ -2225,12 +2882,26 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const ptHits  = hits.filter(o => POINT_ELTS.includes(o.elType));
       const best = ptHits.length > 0 ? ptHits[0] : hits[0];
       if (best) {
-        handleObjectClick(best, evt.shiftKey);
+        const sel = selectedRef.current;
+        if (evt.shiftKey) {
+          handleObjectClick(best, true);
+        } else if (!sel.includes(best)) {
+          // Sketchpad adds every further click to the selection; no Shift needed.
+          handleObjectClick(best, true);
+          justAddedRef.current = best;
+        } else {
+          // Already selected: leave it for now, since this press may start a drag
+          // of the whole group. A click that stays put deselects it on release.
+          toggleOnUpRef.current = { obj: best, x: evt.clientX, y: evt.clientY };
+        }
         objectClickedRef.current = true; // prevent container mousedown from clearing selection
       } else {
         objectClickedRef.current = false; // no object hit — allow single-click deselect
       }
     });
+
+    // A dragged label has to land back in the document.
+    board.on('up', () => { flushLabelDrags(); });
 
     // Board-level double-click → open Properties dialog for element under cursor
     board.containerObj?.addEventListener('dblclick', (evt: MouseEvent) => {
@@ -2360,15 +3031,27 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
   /**
    * One attribute applied to every selected object, drawn, and written back into
    * the document so a reload keeps it. Every Display command is exactly this.
+   * `pointAttrs` replaces `attrs` for a point, whose black rim must stay black.
    */
-  function attrToSelected(attrs: Record<string, unknown>) {
+  function attrToSelected(attrs: Record<string, unknown>, pointAttrs?: Record<string, unknown>) {
     if (selectedRef.current.length === 0) return;
     saveSnapshot();
-    selectedRef.current.forEach((o) => o.setAttribute(attrs));
+    const attrsFor = (o: { elType?: string }) =>
+      pointAttrs && SOLID_POINTS.includes(o.elType ?? '') ? pointAttrs : attrs;
+    selectedRef.current.forEach((o) => {
+      const live: Record<string, unknown> = { ...attrsFor(o) };
+      // A picked object is still highlighted, and a highlighted one is drawn in its highlight colours.
+      if ('strokeColor' in live) live.highlightStrokeColor = live.strokeColor;
+      if ('fillColor' in live) live.highlightFillColor = live.fillColor;
+      o.setAttribute(live);
+    });
     boardRef.current?.update();
-    const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
+    const byId = new Map<string, { elType?: string }>(
+      selectedRef.current.map((o: { id: string; elType?: string }) => [o.id, o]),
+    );
     elementsRef.current.forEach((e) => {
-      if (ids.has(e.id)) Object.assign(e.attrs, attrs);
+      const o = byId.get(e.id);
+      if (o) Object.assign(e.attrs, attrsFor(o));
     });
     onSelectionChange(selectedRef.current.map(toSelectedInfo));
     onDirty();
@@ -2401,6 +3084,100 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
     elementsRef.current.forEach((el) => {
       if (ids.has(el.id)) Object.assign(el.attrs, fontDocumentAttrs(el, font));
+    });
+    onSelectionChange(selectedRef.current.map(toSelectedInfo));
+    onDirty();
+    return true;
+  }
+
+  function isSelectedBold(): boolean {
+    const sel = selectedRef.current;
+    if (sel.length === 0) return false;
+    const first = sel[0];
+    const css = first.elType === 'text'
+      ? first.visProp?.cssstyle
+      : first.label?.visProp?.cssstyle ?? first.visProp?.cssstyle;
+    return isCssBold(css);
+  }
+
+  function toggleSelectedBold(): boolean {
+    const picks = fontPicks();
+    if (!canChangeFont(picks) || selectedRef.current.length === 0) return false;
+    const current = isSelectedBold();
+    const next = !current;
+    saveSnapshot();
+    selectedRef.current.forEach((o) => {
+      if (o.elType === 'text') {
+        const curCss = o.visProp?.cssstyle;
+        const newCss = withFontWeight(curCss, next);
+        o.setAttribute?.({ cssStyle: newCss, display: 'html' });
+      } else {
+        const curCss = o.label?.visProp?.cssstyle ?? o.visProp?.cssstyle;
+        const newCss = withFontWeight(curCss, next);
+        o.setAttribute?.({ label: { cssStyle: newCss, display: 'html' } });
+      }
+    });
+    boardRef.current?.update();
+    const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
+    elementsRef.current.forEach((el) => {
+      if (ids.has(el.id)) {
+        if (el.type === 'text') {
+          const curCss = typeof el.attrs.cssStyle === 'string' ? el.attrs.cssStyle : undefined;
+          el.attrs.cssStyle = withFontWeight(curCss, next);
+        } else {
+          const label = { ...(el.attrs.label as Record<string, unknown> | undefined) };
+          const curCss = typeof label.cssStyle === 'string' ? label.cssStyle : undefined;
+          label.cssStyle = withFontWeight(curCss, next);
+          el.attrs.label = label;
+        }
+      }
+    });
+    onSelectionChange(selectedRef.current.map(toSelectedInfo));
+    onDirty();
+    return true;
+  }
+
+  function isSelectedItalic(): boolean {
+    const sel = selectedRef.current;
+    if (sel.length === 0) return false;
+    const first = sel[0];
+    const css = first.elType === 'text'
+      ? first.visProp?.cssstyle
+      : first.label?.visProp?.cssstyle ?? first.visProp?.cssstyle;
+    return isCssItalic(css);
+  }
+
+  function toggleSelectedItalic(): boolean {
+    const picks = fontPicks();
+    if (!canChangeFont(picks) || selectedRef.current.length === 0) return false;
+    const current = isSelectedItalic();
+    const next = !current;
+    saveSnapshot();
+    selectedRef.current.forEach((o) => {
+      if (o.elType === 'text') {
+        const curCss = o.visProp?.cssstyle;
+        const newCss = withFontStyle(curCss, next);
+        o.setAttribute?.({ cssStyle: newCss, display: 'html' });
+      } else {
+        const curCss = o.label?.visProp?.cssstyle ?? o.visProp?.cssstyle;
+        const newCss = withFontStyle(curCss, next);
+        o.setAttribute?.({ label: { cssStyle: newCss, display: 'html' } });
+      }
+    });
+    boardRef.current?.update();
+    const ids = new Set(selectedRef.current.map((o: { id: string }) => o.id));
+    elementsRef.current.forEach((el) => {
+      if (ids.has(el.id)) {
+        if (el.type === 'text') {
+          const curCss = typeof el.attrs.cssStyle === 'string' ? el.attrs.cssStyle : undefined;
+          el.attrs.cssStyle = withFontStyle(curCss, next);
+        } else {
+          const label = { ...(el.attrs.label as Record<string, unknown> | undefined) };
+          const curCss = typeof label.cssStyle === 'string' ? label.cssStyle : undefined;
+          label.cssStyle = withFontStyle(curCss, next);
+          el.attrs.label = label;
+        }
+      }
     });
     onSelectionChange(selectedRef.current.map(toSelectedInfo));
     onDirty();
@@ -2507,12 +3284,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     const name = namePt ? nextPointName() : '';
     const id   = `pt_${_elIdx++}`;
-    const ptAttrs = {
-      id, name, size: 4, face: 'o' as const,
-      strokeColor: ink(), fillColor: ink(),
-      highlightStrokeColor: '#c83c3c', highlightFillColor: '#c83c3c',
-      label: { fontSize: 14, strokeColor: ink() },
-    };
+    const ptAttrs = { id, name, ...pointStyle() };
 
     // Priority 2: snap to a nearby curve → create a glider (point constrained to curve)
     const snapC = findSnapCurve(board, sx, sy);
@@ -2521,7 +3293,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       elementsRef.current.push({
         type: 'glider', id,
         parents: [x, y, snapC.obj.id],
-        attrs: { name, size: 4, strokeColor: ink(), fillColor: ink() },
+        attrs: { name, ...pointStyle() },
       });
       return pt;
     }
@@ -2532,7 +3304,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const pt = board.create('point', [gx, gy], ptAttrs);
     elementsRef.current.push({
       type: 'point', id, parents: [gx, gy],
-      attrs: { name, size: 4, strokeColor: ink(), fillColor: ink() },
+      attrs: { name, ...pointStyle() },
     });
     return pt;
   }
@@ -2609,7 +3381,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         const jxgType  = straight || isRay ? 'line' : 'segment';
         const id = nextElId(straight ? 'ln' : isRay ? 'ray' : 'seg');
         const attrs: Record<string, unknown> = {
-          strokeColor: ink(), strokeWidth: 2,
+          strokeColor: ink(), strokeWidth: LINE_WIDTH,
           straightFirst: straight,
           straightLast:  straight || isRay,
           withLabel: false,
@@ -2644,7 +3416,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         removeGhost();
         const id = nextElId('circ');
         const attrs: Record<string, unknown> = {
-          strokeColor: ink(), strokeWidth: 2,
+          strokeColor: ink(), strokeWidth: LINE_WIDTH,
           fillColor: 'none', withLabel: false,
         };
         board.create('circle', [p.pt1, radiusPt], { id, ...attrs });
@@ -2679,7 +3451,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         const endPt = createOrSnapPoint(x, y, sx, sy);
         const id = nextElId('arc');
         const attrs: Record<string, unknown> = {
-          strokeColor: ink(), strokeWidth: 2, withLabel: false,
+          strokeColor: ink(), strokeWidth: LINE_WIDTH, withLabel: false,
         };
         board.create('arc', [p.pt1, p.pt2, endPt], { id, ...attrs });
         elementsRef.current.push({
@@ -2701,16 +3473,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         saveSnapshot();
         const name = nextPointName();
         const id   = `pt_${_elIdx++}`;
-        board.create('glider', [x, y, snapC.obj], {
-          id, name, size: 4, face: 'o' as const,
-          strokeColor: ink(), fillColor: ink(),
-          highlightStrokeColor: '#c83c3c', highlightFillColor: '#c83c3c',
-          label: { fontSize: 14, strokeColor: ink() },
-        });
+        board.create('glider', [x, y, snapC.obj], { id, name, ...pointStyle() });
         elementsRef.current.push({
           type: 'glider', id,
           parents: [x, y, snapC.obj.id],
-          attrs: { name, size: 4, strokeColor: ink(), fillColor: ink() },
+          attrs: { name, ...pointStyle() },
         });
         board.update();
         onDirty();
@@ -2729,11 +3496,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         const centerPt = circ.center ?? circ.point1;
         if (centerPt) {
           const name = nextPointName();
-          centerPt.setAttribute({
-            visible: true, name,
-            size: 4, strokeColor: '#c83c3c', fillColor: '#c83c3c',
-            label: { fontSize: 14, strokeColor: '#c83c3c' },
-          });
+          centerPt.setAttribute({ visible: true, name, ...pointStyle() });
           // Ensure the center point is recorded in elementsRef
           const existing = elementsRef.current.find(e => e.id === centerPt.id);
           if (existing) {
@@ -2743,8 +3506,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
             elementsRef.current.push({
               type: 'point', id: centerPt.id,
               parents: [centerPt.X(), centerPt.Y()],
-              attrs: { name, visible: true, size: 4,
-                       strokeColor: '#c83c3c', fillColor: '#c83c3c' },
+              attrs: { name, visible: true, ...pointStyle() },
             });
           }
           board.update();
@@ -2766,16 +3528,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         const id   = nextElId('mid');
         const name = nextPointName();
         try {
-          board.create('midpoint', [a, b], {
-            id, name, size: 4,
-            strokeColor: '#c83c3c', fillColor: '#c83c3c',
-            highlightStrokeColor: '#c83c3c', highlightFillColor: '#c83c3c',
-            label: { fontSize: 14, strokeColor: '#c83c3c' },
-          });
+          board.create('midpoint', [a, b], { id, name, ...pointStyle() });
           elementsRef.current.push({
             type: 'midpoint', id,
             parents: [a.id, b.id],
-            attrs: { name, size: 4, strokeColor: '#c83c3c', fillColor: '#c83c3c' },
+            attrs: { name, ...pointStyle() },
           });
           onDirty();
         } catch { /**/ }
@@ -2813,7 +3570,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     if (curTool === 'intersection') {
       const p = pendingRef.current;
       const geoObjs = findObjectsAt(board, sx, sy,
-        ['line', 'segment', 'ray', 'circle', 'arc']);
+        [...LINE_KINDS, 'circle', 'arc']);
       const geoObj = geoObjs[0];
       if (!geoObj) return;
 
@@ -2831,16 +3588,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           const id   = nextElId('int');
           const name = nextPointName();
           try {
-            board.create('intersection', [obj1, geoObj, idx], {
-              id, name, size: 4,
-              strokeColor: '#c83c3c', fillColor: '#c83c3c',
-              highlightStrokeColor: '#c83c3c', highlightFillColor: '#c83c3c',
-              label: { fontSize: 14, strokeColor: '#c83c3c' },
-            });
+            board.create('intersection', [obj1, geoObj, idx], { id, name, ...pointStyle() });
             elementsRef.current.push({
               type: 'intersection', id,
               parents: [obj1.id, geoObj.id, idx],
-              attrs: { name, size: 4, strokeColor: '#c83c3c', fillColor: '#c83c3c' },
+              attrs: { name, ...pointStyle() },
             });
             return true;
           } catch { return false; }
@@ -2892,6 +3644,15 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     if (curTool === 'slider') {
       handleSliderClick(x, y);
+      return;
+    }
+
+    if (curTool === 'pen') {
+      const LINE_TYPES = ['segment', 'line', 'ray', 'parallel', 'perpendicular', 'bisector'];
+      const hits = findObjectsAt(board, sx, sy, LINE_TYPES, 15);
+      if (hits.length > 0) {
+        toggleTickMark(hits[0].id);
+      }
       return;
     }
   }
@@ -3011,7 +3772,8 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     if (boardRef.current) return;
     resetCounters();
     const board = jxg().JSXGraph.initBoard(BOARD_ID, {
-      boundingbox: [-8, 8, 8, -8],
+      // same as rebuildBoard: open a document where it was drawn
+      boundingbox: initialData?.boundingbox ?? [-8, 8, 8, -8],
       // Axes and grid are always created because JSXGraph cannot bring hidden
       // ones back; setSceneChrome then applies what the document asks for.
       axis: true,
@@ -3022,6 +3784,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       resize: { enabled: true, throttle: 50 },
       pan:  { enabled: false },
       zoom: { wheel: true, min: 0.1, max: 50 },
+      showInfobox: false,
     });
     boardRef.current = board;
     attachBoardEvents(board);
@@ -3040,6 +3803,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       reportLoadErrors(errors);
       setSceneChrome(board, metaRef.current);
     }
+    syncTickMarksFromElements(board);
   }
 
   // Load the self-hosted engine (already-in-memory JXG resolves immediately)
@@ -3057,6 +3821,103 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     if (jxgLoaded) initBoard();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jxgLoaded]);
+
+  // ─── Pan via Space+Drag or Middle Mouse ───────────────────────────────────
+  useEffect(() => {
+    if (!jxgLoaded) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    function doPanStart(clientX: number, clientY: number) {
+      const board = boardRef.current;
+      if (!board) return;
+      const bb = board.getBoundingBox() as [number, number, number, number];
+      isPanningRef.current = true;
+      panStartRef.current = {
+        sx: clientX,
+        sy: clientY,
+        originX: bb[0],
+        originY: bb[1],
+      };
+      if (containerRef.current) containerRef.current.style.cursor = 'grabbing';
+    }
+
+    function doPanMove(clientX: number, clientY: number) {
+      if (!isPanningRef.current || !panStartRef.current) return;
+      const board = boardRef.current;
+      if (!board || !containerRef.current) return;
+      const dx = clientX - panStartRef.current.sx;
+      const dy = clientY - panStartRef.current.sy;
+      const bb = board.getBoundingBox() as [number, number, number, number];
+      const w = containerRef.current.clientWidth;
+      const h = containerRef.current.clientHeight;
+      const uPerPxX = (bb[2] - bb[0]) / w;
+      const uPerPxY = (bb[1] - bb[3]) / h;
+      const x0 = panStartRef.current.originX;
+      const y0 = panStartRef.current.originY;
+      const bw = bb[2] - bb[0];
+      const bh = bb[1] - bb[3];
+      const newBb: [number, number, number, number] = [
+        x0 - dx * uPerPxX,
+        y0 + dy * uPerPxY,
+        x0 - dx * uPerPxX + bw,
+        y0 + dy * uPerPxY - bh,
+      ];
+      board.setBoundingBox(newBb, false);
+      board.update();
+    }
+
+    function doPanEnd() {
+      if (!isPanningRef.current) return;
+      isPanningRef.current = false;
+      panStartRef.current = null;
+      if (containerRef.current) containerRef.current.style.cursor = spaceHeldRef.current ? 'grab' : '';
+    }
+
+    function onMouseDown(e: MouseEvent) {
+      // Middle mouse button (button === 1) always pans
+      if (e.button === 1) {
+        e.preventDefault();
+        doPanStart(e.clientX, e.clientY);
+        return;
+      }
+      // Space + left button pans
+      if (e.button === 0 && spaceHeldRef.current) {
+        e.preventDefault();
+        doPanStart(e.clientX, e.clientY);
+        return;
+      }
+    }
+
+    function onMouseMove(e: MouseEvent) {
+      if (!isPanningRef.current) return;
+      e.preventDefault();
+      doPanMove(e.clientX, e.clientY);
+    }
+
+    function onMouseUp(e: MouseEvent) {
+      if (e.button === 1 || (e.button === 0 && isPanningRef.current)) {
+        doPanEnd();
+      }
+    }
+
+    function onContextMenu(e: MouseEvent) {
+      // Prevent context menu on middle click
+      if (e.button === 1) e.preventDefault();
+    }
+
+    container.addEventListener('mousedown', onMouseDown, { capture: true });
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    container.addEventListener('contextmenu', onContextMenu);
+
+    return () => {
+      container.removeEventListener('mousedown', onMouseDown, { capture: true });
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      container.removeEventListener('contextmenu', onContextMenu);
+    };
+  }, [jxgLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── ResizeObserver: keep JSXGraph dimensions correct on window/layout resize ──
   useEffect(() => {
@@ -3102,6 +3963,21 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return false;
     }
 
+    // The centre of a rotate or dilate is its own image. A segment picked with
+    // that centre for an end must keep the designer's point as its image end,
+    // not stack an A' the designer never selected on top of A.
+    const fixedId = imageFixedPoint(image);
+    const moving = imagePointIds(basePoints.map((p) => p.id), image);
+
+    if (moving.length === 0) {
+      onNotifyRef.current?.(
+        image.op === 'rotate'
+          ? 'Tâm quay là điểm bất động — ảnh của nó trùng với chính nó. Hãy chọn thêm điểm hoặc đối tượng khác.'
+          : 'Tâm vị tự là điểm bất động — ảnh của nó trùng với chính nó. Hãy chọn thêm điểm hoặc đối tượng khác.'
+      );
+      return false;
+    }
+
     saveSnapshot();
 
     // 2. Create transformed points
@@ -3111,6 +3987,10 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     const newObjects: any[] = [];
 
     basePoints.forEach((origPt) => {
+      if (origPt.id === fixedId) {
+        transformedPts.set(origPt.id, origPt);
+        return;
+      }
       const [fnX, fnY] = imageClosures(board, origPt.id, image);
       const newId = nextElId('pt');
       const baseName = origPt.name ? `${origPt.name}'` : '';
@@ -3236,7 +4116,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       clearHistory(undoStack.current, redoStack.current);
       dragBaseRef.current = null;
       metaRef.current = { title: data.title, axis: data.axis ?? true, grid: data.grid ?? false };
-      rebuildBoard(data.elements);
+      rebuildBoard(data.elements, data.boundingbox);
     },
 
     undo: () => {
@@ -3271,16 +4151,37 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     zoomOut: () => boardRef.current?.zoomOut(0, 0),
     zoomFit: () => boardRef.current?.zoomFit(),
 
-    setTitle: (t: string) => { metaRef.current.title = t; },
-
-    updateSelectedColor: (color: string) => attrToSelected({ strokeColor: color, fillColor: color }),
-
-    selectedColor: () => {
-      const first = selectedRef.current[0] as { visProp?: { strokecolor?: string } } | undefined;
-      return first ? (first.visProp?.strokecolor ?? '#000000') : null;
+    zoomReset: () => {
+      const board = boardRef.current;
+      if (!board) return;
+      const container = containerRef.current;
+      if (!container) return;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      // 1 unit = 50px at zoom 100%, centered on (0,0)
+      const unitsX = w / 50;
+      const unitsY = h / 50;
+      board.setBoundingBox([-unitsX / 2, unitsY / 2, unitsX / 2, -unitsY / 2], false);
+      board.update();
     },
 
-    updateSelectedStrokeColor: (color: string) => attrToSelected({ strokeColor: color }),
+    setTitle: (t: string) => { metaRef.current.title = t; },
+
+    updateSelectedColor: (color: string) => attrToSelected(
+      { strokeColor: color, fillColor: color },
+      { fillColor: color },
+    ),
+
+    selectedColor: () => {
+      const first = selectedRef.current[0] as
+        { elType?: string; visProp?: { strokecolor?: string; fillcolor?: string } } | undefined;
+      if (!first) return null;
+      return SOLID_POINTS.includes(first.elType ?? '')
+        ? (first.visProp?.fillcolor ?? '#000000')
+        : (first.visProp?.strokecolor ?? '#000000');
+    },
+
+    updateSelectedStrokeColor: (color: string) => attrToSelected({ strokeColor: color }, { fillColor: color }),
 
     updateSelectedFillColor: (color: string) => attrToSelected({ fillColor: color }),
 
@@ -3301,6 +4202,10 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     },
 
     updateSelectedFont: applyFont,
+    isSelectedBold: () => isSelectedBold(),
+    toggleSelectedBold: () => toggleSelectedBold(),
+    isSelectedItalic: () => isSelectedItalic(),
+    toggleSelectedItalic: () => toggleSelectedItalic(),
 
     selectParents: selectParentsOfSelection,
 
@@ -3412,10 +4317,9 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       if (!glider) return { ok: false, reason: 'no_glider' };
 
       const TRACE_POINT_TYPES = ['point', 'glider', 'midpoint', 'circumcenter', 'intersection', 'slider'];
-      const TRACE_LINE_TYPES  = ['line', 'segment', 'ray'];
 
       const tracePoint = sel.find((o: any) => o !== glider && TRACE_POINT_TYPES.includes(o.elType));
-      const traceLine  = sel.find((o: any) => o !== glider && TRACE_LINE_TYPES.includes(o.elType));
+      const traceLine  = sel.find((o: any) => o !== glider && LINE_KINDS.includes(o.elType));
 
       if (!tracePoint && !traceLine) return { ok: false, reason: 'no_trace' };
 
@@ -3430,12 +4334,17 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         const id = nextElId('lc');
         specs.push({ type: 'tracecurve', id, parents: [glider.id, tracePoint.id], attrs: { ...baseAttrs } });
       } else if (traceLine) {
-        // Locus of a line: trace its two defining points
-        const lineAttrs = { ...baseAttrs, dash: 1 };
-        specs.push(
-          { type: 'tracecurve', id: nextElId('lc'), parents: [glider.id, traceLine.point1.id], attrs: { ...lineAttrs } },
-          { type: 'tracecurve', id: nextElId('lc'), parents: [glider.id, traceLine.point2.id], attrs: { ...lineAttrs } },
-        );
+        // A straight object sweeps out a family of lines, as Sketchpad's locus
+        // does; one curve with the pen lifted between samples draws them all.
+        const id = nextElId('lc');
+        specs.push({
+          type: LINE_LOCUS_TYPE, id,
+          parents: [glider.id, traceLine.id],
+          attrs: {
+            strokeColor: ink(), strokeWidth: 1, strokeOpacity: 0.35,
+            withLabel: false, highlight: false, samples: LOCUS_SAMPLES,
+          },
+        });
       }
 
       // JSXGraph recurses to stack depth when the traced object does not depend
@@ -3489,18 +4398,13 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           defaultY = (curve.point1.Y() + curve.point2.Y()) / 2;
         }
       } catch { /**/ }
-      const ptAttrs = {
-        id, name, size: 4, face: 'o' as const,
-        strokeColor: ink(), fillColor: ink(),
-        highlightStrokeColor: '#c83c3c', highlightFillColor: '#c83c3c',
-        label: { fontSize: 14, strokeColor: ink() },
-      };
+      const ptAttrs = { id, name, ...pointStyle() };
       try {
         board.create('glider', [defaultX, defaultY, curve], ptAttrs);
         elementsRef.current.push({
           type: 'glider', id,
           parents: [defaultX, defaultY, curve.id],
-          attrs: { name, size: 4, strokeColor: ink(), fillColor: ink() },
+          attrs: { name, ...pointStyle() },
         });
         board.update();
         onDirty();
@@ -3509,40 +4413,42 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     createIntersection: () => {
       const board = boardRef.current;
-      if (!board || selectedRef.current.length < 2) return;
-      saveSnapshot();
-      // Find 2 line-like or circle-like objects in selection
+      if (!board) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const geoSel = selectedRef.current.filter((o: any) =>
-        ['line', 'segment', 'ray', 'circle', 'arc'].includes(o.elType));
-      if (geoSel.length < 2) return;
+        [...LINE_KINDS, 'circle', 'arc'].includes(o.elType));
+      if (geoSel.length < 2) {
+        onNotifyRef.current?.('Hãy chọn hai đối tượng (đường thẳng, đoạn thẳng, tia hoặc đường tròn).');
+        return;
+      }
       const [a, b] = geoSel;
+      const wantsTwo = ['circle', 'arc'].includes(a.elType) || ['circle', 'arc'].includes(b.elType);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      function createIntPt(idx: number): boolean {
+      const made: { el: HeyGeoElement; obj: unknown }[] = [];
+      for (const idx of wantsTwo ? [0, 1] : [0]) {
         const id   = nextElId('int');
         const name = nextPointName();
+        const attrs = { name, ...pointStyle() };
         try {
-          board!.create('intersection', [a, b, idx], {
-            id, name, size: 4,
-            strokeColor: '#c83c3c', fillColor: '#c83c3c',
-            highlightStrokeColor: '#c83c3c', highlightFillColor: '#c83c3c',
-            label: { fontSize: 14, strokeColor: '#c83c3c' },
-          });
-          elementsRef.current.push({
-            type: 'intersection', id,
-            parents: [a.id, b.id, idx],
-            attrs: { name, size: 4, strokeColor: '#c83c3c', fillColor: '#c83c3c' },
-          });
-          return true;
-        } catch { return false; }
+          const obj = board.create('intersection', [a, b, idx], { id, ...attrs });
+          // Two parallel lines, or two segments that stop short, meet nowhere;
+          // JSXGraph answers with a point at infinity or NaN rather than an error.
+          const u: number[] | undefined = obj.coords?.usrCoords;
+          if (u && Math.abs(u[0]) > 1e-12 && Number.isFinite(u[1]) && Number.isFinite(u[2])) {
+            made.push({ el: { type: 'intersection', id, parents: [a.id, b.id, idx], attrs }, obj });
+          } else {
+            board.removeObject(obj);
+          }
+        } catch { /**/ }
       }
-
-      const ok = createIntPt(0);
-      const hasCircle =
-        ['circle', 'arc'].includes(a.elType) ||
-        ['circle', 'arc'].includes(b.elType);
-      if (ok && hasCircle) createIntPt(1);
+      if (made.length === 0) {
+        onNotifyRef.current?.('Hai đối tượng này không cắt nhau.');
+        return;
+      }
+      // The snapshot is the document without the new points, so it is taken before they are written.
+      saveSnapshot();
+      elementsRef.current.push(...made.map((m) => m.el));
+      board.update();
       onDirty();
     },
 
@@ -3571,16 +4477,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const id   = nextElId('mid');
       const name = nextPointName();
       try {
-        board.create('midpoint', [a, b], {
-          id, name, size: 4,
-          strokeColor: '#c83c3c', fillColor: '#c83c3c',
-          highlightStrokeColor: '#c83c3c', highlightFillColor: '#c83c3c',
-          label: { fontSize: 14, strokeColor: '#c83c3c' },
-        });
+        board.create('midpoint', [a, b], { id, name, ...pointStyle() });
         elementsRef.current.push({
           type: 'midpoint', id,
           parents: [a.id, b.id],
-          attrs: { name, size: 4, strokeColor: '#c83c3c', fillColor: '#c83c3c' },
+          attrs: { name, ...pointStyle() },
         });
         onDirty();
       } catch { /**/ }
@@ -3588,17 +4489,17 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     createPerpendicular: () => {
       const board = boardRef.current;
-      if (!board || selectedRef.current.length < 2) return;
+      const picked = pointAndLine();
+      if (!board || !picked) return;
       saveSnapshot();
       const id = nextElId('perp');
       try {
-        board.create('perpendicular', selectedRef.current.slice(0, 2), {
-          id, strokeColor: ink(), strokeWidth: 2,
-        });
+        const attrs = { strokeColor: ink(), strokeWidth: LINE_WIDTH };
+        board.create('perpendicular', [picked.line, picked.point], { id, ...attrs });
         elementsRef.current.push({
           type: 'perpendicular', id,
-          parents: [selectedRef.current[0].id, selectedRef.current[1].id],
-          attrs: {},
+          parents: [picked.line.id, picked.point.id],
+          attrs,
         });
         onDirty();
       } catch { /**/ }
@@ -3606,17 +4507,17 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
 
     createParallel: () => {
       const board = boardRef.current;
-      if (!board || selectedRef.current.length < 2) return;
+      const picked = pointAndLine();
+      if (!board || !picked) return;
       saveSnapshot();
       const id = nextElId('par');
       try {
-        board.create('parallel', selectedRef.current.slice(0, 2), {
-          id, strokeColor: ink(), strokeWidth: 2,
-        });
+        const attrs = { strokeColor: ink(), strokeWidth: LINE_WIDTH };
+        board.create('parallel', [picked.line, picked.point], { id, ...attrs });
         elementsRef.current.push({
           type: 'parallel', id,
-          parents: [selectedRef.current[0].id, selectedRef.current[1].id],
-          attrs: {},
+          parents: [picked.line.id, picked.point.id],
+          attrs,
         });
         onDirty();
       } catch { /**/ }
@@ -3627,6 +4528,11 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       if (sel.length !== 1) return false;
       return elementsRef.current.find((e) => e.id === sel[0].id)?.type === 'circle';
     },
+
+    canTriangleInterior: () => interiorVertexIds(3) !== null,
+    createTriangleInterior: () => createPolygonInterior(3),
+    canQuadrilateralInterior: () => interiorVertexIds(4) !== null,
+    createQuadrilateralInterior: () => createPolygonInterior(4),
 
     createCircleInterior: () => {
       const sel = selectedRef.current;
@@ -3648,7 +4554,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return addObject({
         type: 'circle', id: nextElId('circ'),
         parents: [picked.center, picked.radius],
-        attrs: { strokeColor: ink(), strokeWidth: 2, fillColor: 'none', withLabel: false },
+        attrs: { strokeColor: ink(), strokeWidth: LINE_WIDTH, fillColor: 'none', withLabel: false },
       });
     },
 
@@ -3660,7 +4566,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return addObject({
         type: 'arc', id: nextElId('arc'),
         parents: [picked.centre, picked.arc.start, picked.arc.end],
-        attrs: { strokeColor: ink(), strokeWidth: 2, withLabel: false },
+        attrs: { strokeColor: ink(), strokeWidth: LINE_WIDTH, withLabel: false },
       });
     },
 
@@ -3671,6 +4577,18 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       if (!picked) return false;
       return addObject({
         type: picked.type, id: nextElId('sec'),
+        parents: [...picked.parents],
+        attrs: { ...INTERIOR_STYLE, strokeColor: ink(), fillColor: ink() },
+      });
+    },
+
+    canArcSegment: () => arcSegmentSelection() !== null,
+
+    createArcSegment: () => {
+      const picked = arcSegmentSelection();
+      if (!picked) return false;
+      return addObject({
+        type: 'arcsegment', id: nextElId('arcseg'),
         parents: [...picked.parents],
         attrs: { ...INTERIOR_STYLE, strokeColor: ink(), fillColor: ink() },
       });
@@ -3715,17 +4633,14 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return addObject({
         type: 'circumcenter', id: nextElId('cc'),
         parents: [...centre.circumcentre],
-        attrs: {
-          name: nextPointName(), visible: true, size: 4,
-          strokeColor: '#c83c3c', fillColor: '#c83c3c',
-          label: { fontSize: 14, strokeColor: '#c83c3c' },
-        },
+        attrs: { name: nextPointName(), visible: true, ...pointStyle() },
       });
     },
 
     measureRows,
     createMeasure,
     beginParameter,
+    addSlider,
     numberValues,
 
     graphRows: (): GraphRows => (
@@ -3746,11 +4661,13 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     plotValueOnAxis,
     createActionButton,
     createAnimationButton,
+    createMovementButton,
+    createPresentButton,
     actionButtonRows: (): ActionButtonRows => (
       actionButtonRows(selectedRef.current.map((o) => o.id), elementsRef.current)
     ),
     startAnimation,
-    stopAnimation: () => stopAnimation(true),
+    stopAnimation: () => stopMotion(true),
     animationRows: (): AnimationRows => (
       animationRows(selectedRef.current.map((o) => o.id), elementsRef.current, animationRef.current !== null)
     ),
@@ -3761,7 +4678,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
     toggleFrameGrid,
     toggleSnap,
 
-    // ── Transform menu & marks ───────────────────────────────────────────────
+    // ── Transform menu & marks ────────────────────────────────────────────────
     markCenter: () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pt = selectedRef.current.find((o: any) => POINT_ELTS.includes(o.elType));
@@ -3877,6 +4794,51 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       return null;
     },
 
+    markDistance: () => {
+      const board = boardRef.current;
+      if (!board) return null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const picked: any[] = selectedRef.current;
+
+      // 1 segment
+      if (picked.length === 1 && picked[0].elType === 'segment') {
+        const seg = picked[0];
+        const span = Math.hypot(seg.point2.X() - seg.point1.X(), seg.point2.Y() - seg.point1.Y());
+        const label = seg.name || `Đoạn ${seg.id}`;
+        marksRef.current.distance = { segmentId: seg.id, label, value: span };
+        onNotifyRef.current?.(`Đã đánh dấu khoảng cách: ${label} = ${span.toFixed(2)} cm`);
+        return label;
+      }
+
+      // 2 points
+      if (picked.length === 2 && picked.every((o) => POINT_ELTS.includes(o.elType))) {
+        const [p1, p2] = picked;
+        const dist = Math.hypot(p2.X() - p1.X(), p2.Y() - p1.Y());
+        const label = `d(${p1.name || 'A'}, ${p2.name || 'B'})`;
+        marksRef.current.distance = { points: [p1.id, p2.id], label, value: dist };
+        onNotifyRef.current?.(`Đã đánh dấu khoảng cách: ${label} = ${dist.toFixed(2)} cm`);
+        return label;
+      }
+
+      // 1 measurement or parameter
+      if (picked.length === 1) {
+        const id = picked[0].id;
+        const el = elementsRef.current.find((e) => e.id === id);
+        const measure = el?.attrs?.measure as MeasureSpec | undefined;
+        const slider = board?.objects[id] as { Value?: () => number } | undefined;
+        const raw = measure ? measureValue(board, measure) : slider?.Value?.();
+        if (typeof raw === 'number' && Number.isFinite(raw)) {
+          const label = measure?.label || (el?.attrs?.name as string | undefined) || id;
+          marksRef.current.distance = { valueId: id, label, value: raw };
+          onNotifyRef.current?.(`Đã đánh dấu khoảng cách: ${label} = ${raw.toFixed(2)} cm`);
+          return label;
+        }
+      }
+
+      onNotifyRef.current?.('Hãy chọn 1 đoạn thẳng, 2 điểm, hoặc 1 số đo độ dài để đánh dấu khoảng cách.');
+      return null;
+    },
+
     clearMarks: () => {
       marksRef.current = {};
       onNotifyRef.current?.('Đã xóa tất cả các đánh dấu.');
@@ -3977,24 +4939,28 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
       const sel = selectedRef.current;
       if (sel.length !== 1) return null;
       const rec = elementsRef.current.find((e) => e.id === sel[0].id);
+      if (rec?.type === LINE_LOCUS_TYPE) return locusSamples(rec.attrs);
       if (rec?.type !== 'tracecurve') return null;
       const obj = boardRef.current?.objects[rec.id] as { numberPoints?: number } | undefined;
       return typeof obj?.numberPoints === 'number' ? obj.numberPoints : null;
     },
 
-    setSamples: (samples: number) => {
+    setSamples: (samples: number) => applySamples(samples),
+
+    /** Sketchpad's + and − on a picked locus: more or fewer of what it is made of. */
+    stepSamples: (delta: number) => {
       const board = boardRef.current;
       const sel = selectedRef.current;
       if (!board || sel.length !== 1) return false;
       const rec = elementsRef.current.find((e) => e.id === sel[0].id);
-      const obj = board.objects[rec?.id ?? ''] as { setAttribute?: (a: Record<string, unknown>) => void } | undefined;
-      if (rec?.type !== 'tracecurve' || !obj?.setAttribute) return false;
-      saveSnapshot();
-      obj.setAttribute({ numberPoints: samples });
-      rec.attrs.numberPoints = samples;
-      board.update();
-      onDirty();
-      return true;
+      if (rec?.type === LINE_LOCUS_TYPE) {
+        return applySamples(locusSamples(rec.attrs) + delta * LOCUS_STEP);
+      }
+      if (rec?.type === 'tracecurve') {
+        const obj = board.objects[rec.id] as { numberPoints?: number } | undefined;
+        return applySamples((obj?.numberPoints ?? 300) + delta * TRACE_STEP);
+      }
+      return false;
     },
 
     toggleSelectedTrace: () => {
@@ -4092,6 +5058,24 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
         text.textContent = content;
         svg.appendChild(text);
       }
+      for (const dec of tickDecorations) {
+        const tickLen = 7;
+        const spacing = 4;
+        for (let i = 0; i < dec.count; i++) {
+          const offset = (i - (dec.count - 1) / 2) * spacing;
+          const cx = dec.mx + dec.dx * offset;
+          const cy = dec.my + dec.dy * offset;
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', String(cx - dec.px * tickLen));
+          line.setAttribute('y1', String(cy - dec.py * tickLen));
+          line.setAttribute('x2', String(cx + dec.px * tickLen));
+          line.setAttribute('y2', String(cy + dec.py * tickLen));
+          line.setAttribute('stroke', '#1e3c96');
+          line.setAttribute('stroke-width', '1.8');
+          line.setAttribute('stroke-linecap', 'round');
+          svg.appendChild(line);
+        }
+      }
       return new XMLSerializer().serializeToString(svg);
     },
   }), []);  // eslint-disable-line react-hooks/exhaustive-deps
@@ -4136,7 +5120,7 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           }}
         />
 
-        {/* GSP-style selection decorations (pink outlines around selected objects) */}
+        {/* GSP-style selection decorations (purple outlines around selected objects) */}
         {selDecorations.length > 0 && (
           <svg
             className={preferences.selection === 'blinking' ? 'heygeo-blink' : undefined}
@@ -4151,14 +5135,14 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
                 return (
                   <circle key={i}
                     cx={dec.cx} cy={dec.cy} r={dec.r}
-                    fill="none" stroke="#e91e63" strokeWidth="1.5"
+                    fill="none" stroke={SELECT_INK} strokeWidth="2.5"
                   />
                 );
               }
               if (dec.kind === 'line') {
                 const dx = dec.x2 - dec.x1, dy = dec.y2 - dec.y1;
                 const len = Math.sqrt(dx * dx + dy * dy) || 1;
-                const px = -dy / len * 2, py = dx / len * 2;
+                const px = -dy / len * 3, py = dx / len * 3;
                 const EXT = 8000; // extend far for infinite lines
                 const ax1 = dec.sfirst ? dec.x1 - dx / len * EXT : dec.x1;
                 const ay1 = dec.sfirst ? dec.y1 - dy / len * EXT : dec.y1;
@@ -4167,19 +5151,19 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
                 return (
                   <g key={i}>
                     <line x1={ax1 + px} y1={ay1 + py} x2={ax2 + px} y2={ay2 + py}
-                      stroke="#e91e63" strokeWidth="1" fill="none" />
+                      stroke={SELECT_INK} strokeWidth="1" fill="none" />
                     <line x1={ax1 - px} y1={ay1 - py} x2={ax2 - px} y2={ay2 - py}
-                      stroke="#e91e63" strokeWidth="1" fill="none" />
+                      stroke={SELECT_INK} strokeWidth="1" fill="none" />
                   </g>
                 );
               }
               if (dec.kind === 'circle') {
                 return (
                   <g key={i}>
-                    <circle cx={dec.cx} cy={dec.cy} r={dec.r + 1}
-                      fill="none" stroke="#e91e63" strokeWidth="1" />
-                    <circle cx={dec.cx} cy={dec.cy} r={Math.max(0, dec.r - 1)}
-                      fill="none" stroke="#e91e63" strokeWidth="1" />
+                    <circle cx={dec.cx} cy={dec.cy} r={dec.r + 3}
+                      fill="none" stroke={SELECT_INK} strokeWidth="1" />
+                    <circle cx={dec.cx} cy={dec.cy} r={Math.max(0, dec.r - 3)}
+                      fill="none" stroke={SELECT_INK} strokeWidth="1" />
                   </g>
                 );
               }
@@ -4187,8 +5171,21 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
                 return (
                   <polygon key={i}
                     points={dec.points}
-                    fill="none" stroke="#e91e63" strokeWidth="1.5"
+                    fill="none" stroke={SELECT_INK} strokeWidth="2.5"
                   />
+                );
+              }
+              if (dec.kind === 'path') {
+                return (
+                  <path key={i} d={dec.d} fill="none"
+                    stroke={SELECT_INK} strokeWidth="3" strokeOpacity="0.55" />
+                );
+              }
+              if (dec.kind === 'text') {
+                return (
+                  <rect key={i} x={dec.x} y={dec.y} width={dec.w} height={dec.h}
+                    fill="#d98ee6" stroke="#000000" strokeWidth="1.5"
+                    style={{ mixBlendMode: 'multiply' }} />
                 );
               }
               return null;
@@ -4207,6 +5204,41 @@ const DesignCanvas = forwardRef<CanvasHandle, Props>(function DesignCanvas(
           }}>
             <circle cx={centerMark.sx} cy={centerMark.sy} r="8"
               fill="none" stroke="#1e3c96" strokeWidth="1.2" strokeDasharray="3 2" />
+          </svg>
+        )}
+
+        {/* Tick marks placed by Pen tool */}
+        {tickDecorations.length > 0 && (
+          <svg
+            style={{
+              position: 'absolute', inset: 0,
+              width: '100%', height: '100%',
+              pointerEvents: 'none', overflow: 'visible', zIndex: 6,
+            }}
+          >
+            {tickDecorations.map((dec) => {
+              const tickLen = 7;
+              const spacing = 4;
+              const lines = [];
+              for (let i = 0; i < dec.count; i++) {
+                const offset = (i - (dec.count - 1) / 2) * spacing;
+                const cx = dec.mx + dec.dx * offset;
+                const cy = dec.my + dec.dy * offset;
+                lines.push(
+                  <line
+                    key={i}
+                    x1={cx - dec.px * tickLen}
+                    y1={cy - dec.py * tickLen}
+                    x2={cx + dec.px * tickLen}
+                    y2={cy + dec.py * tickLen}
+                    stroke="#1e3c96"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                );
+              }
+              return <g key={dec.id}>{lines}</g>;
+            })}
           </svg>
         )}
 

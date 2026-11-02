@@ -23,6 +23,20 @@ import { useEffect, useRef, useState, useId } from 'react';
 import Script from 'next/script';
 import { getJXG, whenJsxGraphReady } from '@/lib/jsxgraph';
 import { createElement, normalizeElement } from './designer/elementRegistry';
+import { refreshLineLocuses } from './designer/lineLocusModel';
+import { findObjectsAt } from './designer/sceneModel';
+import { createButtonRuntime } from './designer/buttonRuntime';
+import { buttonOf } from './designer/actionButtonModel';
+import {
+  advanceAnimation,
+  animatables,
+  animationProblem,
+  sliderRange,
+  startState,
+  type AnimationSpec,
+  type AnimationTargetState,
+} from './designer/animationModel';
+import type { HeyGeoElement as DocumentElement } from './designer/designTypes';
 
 export interface HeyGeoElement {
   type: string;
@@ -114,6 +128,8 @@ export default function JSXGraphViewer({ data, containerId }: Props) {
   const [loaded, setLoaded]     = useState(() => getJXG() !== null);
   const [katexLoaded, setKatex] = useState(false);
   const [error, setError]       = useState('');
+  /** Why a pressed button did nothing; shown quietly under the board. */
+  const [notice, setNotice]     = useState('');
 
   // If KaTeX was already loaded by a previous render, detect eagerly.
   useEffect(() => {
@@ -173,6 +189,7 @@ export default function JSXGraphViewer({ data, containerId }: Props) {
     }
 
     setError('');
+    setNotice('');
 
     // Collects per-element cleanup fns (e.g. label-drag capture listeners)
     const labelCleanupFns: (() => void)[] = [];
@@ -556,6 +573,109 @@ export default function JSXGraphViewer({ data, containerId }: Props) {
           }
         }
       }
+
+      // ── the sketch's own buttons, pressable by a reader ─────────────────────
+      //
+      // A shared Sketchpad file is full of buttons, and boxes that answer to
+      // nothing would tell the reader the import failed. The press itself is the
+      // designer's runtime; this board only supplies the objects, its own clock
+      // for an Animate button and a line to say why a press did nothing.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const viewBoard = board as any;
+      const doc = data.elements as unknown as DocumentElement[];
+
+      let clock: number | null = null;
+      const stopClock = () => {
+        if (clock !== null) cancelAnimationFrame(clock);
+        clock = null;
+      };
+      const say = (message: string) => setNotice(message);
+
+      function runAnimation(spec: AnimationSpec, ids: string[]): boolean {
+        const problem = animationProblem(spec);
+        if (problem) { say(`Không chạy được: ${problem}`); return false; }
+        const runs: { el: DocumentElement; state: AnimationTargetState }[] = [];
+        for (const el of animatables(doc, ids)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const obj = viewBoard.objects?.[el.id] as any;
+          if (!obj) continue;
+          if (el.type === 'glider') {
+            runs.push({ el, state: startState(Number(obj.position), spec.direction) });
+            continue;
+          }
+          const range = sliderRange(el);
+          if (!range) continue;
+          const value: number = obj.Value?.() ?? range[0];
+          runs.push({ el, state: startState((value - range[0]) / (range[1] - range[0]), spec.direction) });
+        }
+        if (runs.length === 0) {
+          say('Nút chạy này không còn điểm trượt hay tham số nào để chuyển động.');
+          return false;
+        }
+        stopClock();
+        let last = performance.now();
+        const frame = (now: number) => {
+          // a tab that fell asleep must not jump the whole distance at once
+          const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+          last = now;
+          let alive = false;
+          for (const run of runs) {
+            run.state = advanceAnimation(run.state, spec, dt);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const obj = viewBoard.objects?.[run.el.id] as any;
+            if (!obj) { run.state = { ...run.state, done: true }; continue; }
+            if (run.el.type === 'glider') obj.setGliderPosition?.(run.state.phase);
+            else {
+              const range = sliderRange(run.el);
+              if (range) obj.setValue?.(range[0] + run.state.phase * (range[1] - range[0]));
+            }
+            if (!run.state.done) alive = true;
+          }
+          viewBoard.update();
+          clock = alive ? requestAnimationFrame(frame) : null;
+        };
+        clock = requestAnimationFrame(frame);
+        return true;
+      }
+
+      const buttons = createButtonRuntime({
+        board: () => viewBoard,
+        elements: () => doc,
+        animate: runAnimation,
+        notify: say,
+      });
+      labelCleanupFns.push(() => { buttons.stop(); stopClock(); });
+
+      /** Where the event happened in screen pixels, from a mouse or a finger. */
+      const at = (evt: unknown): [number, number] | null => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const e = evt as any;
+        const touch = e?.changedTouches?.[0] ?? e?.touches?.[0];
+        const cx = touch?.clientX ?? e?.clientX;
+        const cy = touch?.clientY ?? e?.clientY;
+        return typeof cx === 'number' && typeof cy === 'number' ? [cx, cy] : null;
+      };
+
+      viewBoard.on('down', (evt: unknown) => {
+        const where = at(evt);
+        if (!where) return;
+        const box = (viewBoard.containerObj as HTMLElement).getBoundingClientRect();
+        const hit = findObjectsAt(viewBoard, where[0] - box.left, where[1] - box.top, ['text'], 10)
+          .map((obj) => doc.find((el) => el.id === obj.id))
+          .find((el) => el !== undefined && buttonOf(el) !== null);
+        if (hit) buttons.press(hit);
+      });
+
+      // A locus of a straight object is a family of lines that follows its
+      // driver, so a reader who drags the driver has to see it move. The sweep
+      // runs between the engine's own updates, never inside one.
+      const locusTimer = window.setInterval(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const brd = board as any;
+        if (brd.inUpdate) return;
+        if (refreshLineLocuses(brd)) brd.update();
+      }, 120);
+      labelCleanupFns.push(() => window.clearInterval(locusTimer));
     } catch (e) {
       console.error('JSXGraph render error:', e);
       setError('Không thể hiển thị mô hình. Vui lòng kiểm tra định dạng JSON.');
@@ -609,6 +729,9 @@ export default function JSXGraphViewer({ data, containerId }: Props) {
             style={{ overflow: 'hidden' }}
           />
         </div>
+        {notice && (
+          <p role="status" className="px-2 pt-1 text-xs text-gray-600">{notice}</p>
+        )}
       </div>
     </>
   );

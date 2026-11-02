@@ -27,7 +27,8 @@ function toolLabelFromType(rec: Record<string, unknown>): string | null {
     return rec.codeMode === true ? 'JSXGraph' : 'HeyGeo';
   }
   switch (type) {
-    case 'heygeo':    return 'HeyGeo';
+    case 'heygeo':
+    case 'heygeoweb': return 'HeyGeo';
     case 'jsxgraph':  return 'JSXGraph';
     case 'sketchpad':
     case 'gsp':       return 'Sketchpad';

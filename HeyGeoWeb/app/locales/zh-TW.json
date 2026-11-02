@@ -217,14 +217,15 @@
     "error_read": "無法讀取檔案：{{msg}}",
     "type_heygeo_label": "JSON 檔案（HeyGeo 匯出）",
     "type_heygeo_hint": "選擇從 HeyGeo Desktop 匯出的 .json 檔案",
-    "type_sketchpad_label": "JSON 檔案（The Geometer's Sketchpad）",
-    "type_sketchpad_hint": "選擇從 Geometer's Sketchpad 匯出的 .json 檔案",
+    "type_sketchpad_label": ".gsp/.json 檔案（The Geometer's Sketchpad）",
+    "type_sketchpad_hint": "選擇從 Geometer's Sketchpad 匯出的 .gsp/.json 檔案",
     "type_wsp_label": "檔案 -json.js（Web Sketchpad）",
     "type_wsp_hint": "選擇 Web Sketchpad 的 -json.js 檔案",
     "type_geogebra_label": "檔案 .ggb（GeoGebra）",
     "type_geogebra_hint": "選擇從 GeoGebra 匯出的 .ggb 檔案",
     "type_gx_label": "HTML 檔案（Geometry Expressions）",
-    "type_gx_hint": "選擇從 Geometry Expressions 匯出的 .html 檔案"
+    "type_gx_hint": "選擇從 Geometry Expressions 匯出的 .html 檔案",
+    "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {
     "nav_download": "下載",

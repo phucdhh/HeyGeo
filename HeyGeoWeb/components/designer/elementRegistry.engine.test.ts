@@ -175,7 +175,7 @@ describe('registry against the real engine', () => {
     // the button Edit | Action Buttons | Hide/Show makes over point A
     spec({
       type: 'actionbutton', id: 'btn1', parents: [6, 6.5, 'Ẩn A'],
-      attrs: { button: { action: 'hide', name: 'A', targets: ['A'] } },
+      attrs: { button: { action: 'toggle', name: 'A', targets: ['A'] } },
     }),
   ];
 

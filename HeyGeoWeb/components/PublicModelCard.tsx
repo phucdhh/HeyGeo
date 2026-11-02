@@ -64,7 +64,8 @@ export default function PublicModelCard({
     ?? ((modelType === 'sketchpad' || modelType === 'wsp') ? WSP_SVG : null)
     ?? (modelType === 'gx' ? GX_SVG : null)
     ?? (modelType === 'cindy' ? CINDY_SVG : null)
-    ?? ((!modelType || modelType === 'jsxgraph' || modelType === 'design') ? JXG_SVG : null);
+    ?? ((!modelType || modelType === 'jsxgraph' || modelType === 'design'
+      || modelType === 'heygeoweb') ? JXG_SVG : null);
   return (
     <div
       className="card hover:shadow-lg transition-shadow flex flex-col overflow-hidden group relative"

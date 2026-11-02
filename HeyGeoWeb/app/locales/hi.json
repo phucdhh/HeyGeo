@@ -217,14 +217,15 @@
     "error_read": "फ़ाइल पढ़ने में असमर्थ: {{msg}}",
     "type_heygeo_label": "JSON फ़ाइल (HeyGeo export)",
     "type_heygeo_hint": "HeyGeo Desktop से .json फ़ाइल चुनें",
-    "type_sketchpad_label": "JSON फ़ाइल (The Geometer's Sketchpad)",
-    "type_sketchpad_hint": "Geometer's Sketchpad से .json फ़ाइल चुनें",
+    "type_sketchpad_label": ".gsp/.json फ़ाइल (The Geometer's Sketchpad)",
+    "type_sketchpad_hint": "Geometer's Sketchpad से .gsp/.json फ़ाइल चुनें",
     "type_wsp_label": "फ़ाइल -json.js (Web Sketchpad)",
     "type_wsp_hint": "Web Sketchpad से -json.js फ़ाइल चुनें",
     "type_geogebra_label": "फ़ाइल .ggb (GeoGebra)",
     "type_geogebra_hint": "GeoGebra से .ggb फ़ाइल चुनें",
     "type_gx_label": "HTML फ़ाइल (Geometry Expressions)",
-    "type_gx_hint": "Geometry Expressions से .html फ़ाइल चुनें"
+    "type_gx_hint": "Geometry Expressions से .html फ़ाइल चुनें",
+    "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {
     "nav_download": "डाउनलोड",

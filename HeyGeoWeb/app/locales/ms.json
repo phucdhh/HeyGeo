@@ -217,14 +217,15 @@
     "error_read": "Tidak dapat membaca fail: {{msg}}",
     "type_heygeo_label": "Fail JSON (eksport HeyGeo)",
     "type_heygeo_hint": "Pilih fail .json yang dieksport dari HeyGeo Desktop",
-    "type_sketchpad_label": "Fail JSON (The Geometer's Sketchpad)",
-    "type_sketchpad_hint": "Pilih fail .json yang dieksport dari Geometer's Sketchpad",
+    "type_sketchpad_label": "Fail .gsp/.json (The Geometer's Sketchpad)",
+    "type_sketchpad_hint": "Pilih fail .gsp/.json yang dieksport dari Geometer's Sketchpad",
     "type_wsp_label": "Fail -json.js (Web Sketchpad)",
     "type_wsp_hint": "Pilih fail -json.js dari Web Sketchpad",
     "type_geogebra_label": "Fail .ggb (GeoGebra)",
     "type_geogebra_hint": "Pilih fail .ggb yang dieksport dari GeoGebra",
     "type_gx_label": "Fail HTML (Geometry Expressions)",
-    "type_gx_hint": "Pilih fail .html yang dieksport dari Geometry Expressions"
+    "type_gx_hint": "Pilih fail .html yang dieksport dari Geometry Expressions",
+    "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {
     "nav_download": "Muat turun",

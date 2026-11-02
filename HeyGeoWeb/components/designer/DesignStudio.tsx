@@ -30,7 +30,7 @@ import type {
   NumberValue,
   SliderPos,
 } from './designTypes';
-import { emptyData, TOOL_SHORTCUTS } from './designTypes';
+import { emptyData, DESIGN_TYPE, TOOL_SHORTCUTS } from './designTypes';
 import {
   cycleFamily,
   cycleVariation,
@@ -38,6 +38,8 @@ import {
 } from './toolboxModel';
 import { calculateSpec, seedCalculate } from './numberMenuModel';
 import { plotPointSeed, type PlotPointSpec } from './plotPointModel';
+import { parseGsp } from '@/lib/gsp/gspBinary';
+import { gspToHeyGeo } from '@/lib/gsp/gspToHeyGeo';
 
 import DesignMenuBar         from './DesignMenuBar';
 import DesignToolbar         from './DesignToolbar';
@@ -52,12 +54,14 @@ import NewFunctionDialog from './NewFunctionDialog';
 import PlotPointDialog from './PlotPointDialog';
 import PlotCurveDialog from './PlotCurveDialog';
 import AnimateDialog from './AnimateDialog';
+import { MovementDialog, PresentDialog } from './ActionButtonDialogs';
 import LabelObjectDialog from './LabelObjectDialog';
 import ColorDialog from './ColorDialog';
 import FontDialog from './FontDialog';
 import { DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE } from './fontModel';
 import SamplesDialog from './SamplesDialog';
 import LocusDialog from './LocusDialog';
+import PublishDialog, { type PublishResult } from './PublishDialog';
 import TransformDialog, { type TransformMode } from './TransformDialog';
 import ExportImageDialog from './ExportImageDialog';
 import PreferencesDialog from './PreferencesDialog';
@@ -127,6 +131,12 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
   const [isSaving,       setIsSaving]       = useState(false);
   const [saveError,      setSaveError]      = useState('');
 
+  // Publish to Web dialog
+  const [showPublish,   setShowPublish]   = useState(false);
+  const [isPublishing,  setIsPublishing]  = useState(false);
+  const [publishError,  setPublishError]  = useState('');
+  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
+
   // About dialog
   const [showAbout, setShowAbout] = useState(false);
 
@@ -177,6 +187,9 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
    * makes it.
    */
   const [animateMode, setAnimateMode] = useState<'run' | 'button' | null>(null);
+
+  /** Edit | Action Buttons | Movement… and Presentation… — the button's own two dialogs. */
+  const [buttonDialog, setButtonDialog] = useState<'move' | 'present' | null>(null);
 
   /** Display | Label Object… — the label the one picked point or curve carries. */
   const [labelObject, setLabelObject] = useState<string | null>(null);
@@ -406,6 +419,8 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         if (e.key === '=') { e.preventDefault(); canvasRef.current?.zoomIn(); return; }
         if (e.key === '-') { e.preventDefault(); canvasRef.current?.zoomOut(); return; }
         if (e.key === '0') { e.preventDefault(); canvasRef.current?.zoomFit(); return; }
+        if (e.key === '1') { e.preventDefault(); canvasRef.current?.zoomReset?.(); return; }
+        if (e.key === 'b') { e.preventDefault(); canvasRef.current?.toggleSelectedBold?.(); return; }
         return;
       }
       // Shift+arrow is the GSP toolbox keyboard: Left/Right changes the
@@ -425,6 +440,13 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         canvasRef.current?.deleteSelected();
         refreshUndoState();
         return;
+      }
+      // Sketchpad's +/− give a picked locus more or fewer of what it is made of.
+      if (e.key === '+' || e.key === '=') {
+        if (canvasRef.current?.stepSamples(1)) { e.preventDefault(); refreshUndoState(); return; }
+      }
+      if (e.key === '-' || e.key === '_') {
+        if (canvasRef.current?.stepSamples(-1)) { e.preventDefault(); refreshUndoState(); return; }
       }
       if (e.key === 'Escape') {
         // Sketchpad's Escape walks down a ladder: first the Context menu, then the
@@ -521,7 +543,12 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: saveTitle, description: saveDesc, jsonData: data, isPublic, thumbnailSvg }),
+        // The type marks a sketch drawn here, so the Gallery credits HeyGeo Web
+        // and the dashboard offers this designer again.
+        body: JSON.stringify({
+          title: saveTitle, description: saveDesc, isPublic, thumbnailSvg,
+          jsonData: { ...data, __type: DESIGN_TYPE },
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -551,6 +578,62 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
     if (!data) return;
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     downloadBlob(blob, `${title || 'heygeo'}.json`);
+  }
+
+  // ─── File | Publish to Web… ────────────────────────────────────────────────
+  /** Save the sketch as a public model, so the Gallery lists it beside the other tools' models. */
+  async function doPublish(publishTitle: string, publishDesc: string) {
+    setIsPublishing(true);
+    setPublishError('');
+    try {
+      const data = canvasRef.current?.getHeyGeoData();
+      if (!data) throw new Error('Canvas không sẵn sàng');
+      data.title = publishTitle;
+      canvasRef.current?.setTitle(publishTitle);
+      setTitle(publishTitle);
+
+      const thumbnailSvg = canvasRef.current?.exportSVG?.() || undefined;
+      const payload = {
+        title: publishTitle,
+        description: publishDesc,
+        jsonData: { ...data, __type: DESIGN_TYPE },
+        isPublic: true,
+        thumbnailSvg,
+      };
+      // A sketch that already has a model behind it is published from that one,
+      // so the Gallery does not collect a copy on every press.
+      const res = editingId
+        ? await fetch(`/api/models/${editingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        : await fetch('/api/models', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error('Bạn cần đăng nhập để xuất bản mô hình.');
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+
+      const savedId = body.model?.id ?? editingId;
+      const token = body.model?.shareToken as string | undefined;
+      const shareUrl = (body.shareUrl as string | undefined)
+        ?? (token ? `${window.location.origin}/share/${token}` : null);
+      clearDraft(window.localStorage, draftKeyRef.current);
+      draftKeyRef.current = draftKey(savedId ?? null);
+      setEditingId(savedId);
+      setIsPublic(true);
+      setDescription(publishDesc);
+      setIsDirty(false);
+      setPublishResult({ title: publishTitle, shareUrl });
+      showSaveSuccess('✓ Đã xuất bản mô hình');
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : 'Lỗi không xác định');
+    } finally {
+      setIsPublishing(false);
+    }
   }
 
   function handleExportSVG() {
@@ -635,7 +718,13 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onToolChange={setTool}
         onShowAbout={() => setShowAbout(true)}
         onCreateLocus={handleOpenLocusDialog}
+        onPublish={() => {
+          setPublishError('');
+          setPublishResult(null);
+          setShowPublish(true);
+        }}
         onNewParameter={handleNewParameter}
+        onAddSlider={() => canvasRef.current?.addSlider()}
         onOpenCalculate={handleOpenCalculate}
         onOpenNewFunction={() => setNewFunctionOpen(true)}
         onPlotAsXy={handlePlotAsXy}
@@ -647,6 +736,8 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         onSamples={handleSamples}
         onFont={handleFont}
         onActionButtonAnimation={() => setAnimateMode('button')}
+        onActionButtonMovement={() => setButtonDialog('move')}
+        onActionButtonPresent={() => setButtonDialog('present')}
         onOpenTransform={(mode) => setTransformMode(mode)}
         onUnderDevelopment={notifyUnderDev}
       />
@@ -702,6 +793,19 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
           Lỗi: {saveError}
           <button className="ml-3 underline" onClick={() => setSaveError('')}>Đóng</button>
         </div>
+      )}
+
+      {/* ── Publish to Web dialog ── */}
+      {showPublish && (
+        <PublishDialog
+          initialTitle={title}
+          initialDescription={description}
+          publishing={isPublishing}
+          error={publishError}
+          result={publishResult}
+          onPublish={doPublish}
+          onClose={() => setShowPublish(false)}
+        />
       )}
 
       {/* ── Save success toast ── */}
@@ -807,6 +911,26 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setAnimateMode(null);
           }}
           onCancel={() => setAnimateMode(null)}
+        />
+      )}
+
+      {/* ── Action Buttons | Movement… and Presentation… ── */}
+      {buttonDialog === 'move' && (
+        <MovementDialog
+          onConfirm={(move) => {
+            canvasRef.current?.createMovementButton(move.speed);
+            setButtonDialog(null);
+          }}
+          onCancel={() => setButtonDialog(null)}
+        />
+      )}
+      {buttonDialog === 'present' && (
+        <PresentDialog
+          onConfirm={(present) => {
+            canvasRef.current?.createPresentButton(present);
+            setButtonDialog(null);
+          }}
+          onCancel={() => setButtonDialog(null)}
         />
       )}
 
@@ -932,18 +1056,31 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
         </div>
       )}
 
-      {/* ── Hidden file input for JSON import ── */}
+      {/* ── Hidden file input for JSON and Sketchpad binary import ── */}
       <input
         ref={fileInputRef}
         type="file"
-        accept=".json"
+        accept=".json,.gsp"
         className="hidden"
         onChange={async (e) => {
           const file = e.target.files?.[0];
+          e.target.value = '';
           if (!file) return;
           try {
-            const text = await file.text();
-            const data = JSON.parse(text) as HeyGeoData;
+            let data: HeyGeoData;
+            let notes: string[] = [];
+            if (file.name.toLowerCase().endsWith('.gsp')) {
+              const sketch = parseGsp(new Uint8Array(await file.arrayBuffer()));
+              const converted = gspToHeyGeo(sketch, file.name.replace(/\.gsp$/i, ''));
+              if (converted.data.elements.length === 0) {
+                alert('Không đọc được đối tượng nào từ file .gsp này.');
+                return;
+              }
+              data = converted.data;
+              notes = converted.warnings;
+            } else {
+              data = JSON.parse(await file.text()) as HeyGeoData;
+            }
             if (isDirty && !confirm('Bạn chưa lưu. Nhập tệp mới sẽ mất dữ liệu hiện tại. Tiếp tục?')) return;
             canvasRef.current?.loadData(data);
             setTitle(data.title ?? 'Không tên');
@@ -952,10 +1089,10 @@ export default function DesignStudio({ initialData, modelId, initialDescription,
             setSelected([]);
             setElementCount(data.elements?.length ?? 0);
             refreshUndoState();
+            if (notes.length) alert(notes.join('\n'));
           } catch {
-            alert('Không thể đọc tệp. Hãy đảm bảo là tệp JSON hợp lệ.');
+            alert('Không thể đọc tệp. Hãy đảm bảo là tệp JSON hoặc .gsp hợp lệ.');
           }
-          e.target.value = '';
         }}
       />
     </div>

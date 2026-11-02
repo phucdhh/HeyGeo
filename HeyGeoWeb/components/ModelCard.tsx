@@ -329,6 +329,13 @@ export default function ModelCard({ id, title, description, isPublic, viewCount,
                   </a>
                 );
               }
+              if (modelType === 'heygeoweb') {
+                return (
+                  <Link href={`/design?id=${id}`} className="btn-primary !py-1.5 !text-xs">
+                    ✏️ Design
+                  </Link>
+                );
+              }
               if (modelType === 'gx') {
                 return (
                   <button

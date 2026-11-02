@@ -111,8 +111,8 @@ describe('measureValue', () => {
     expect(measureValue(b(), spec({ op: 'segmentArea', args: ['ghost'] }))).toBeNull();
   });
 
-  it('measures the angle from the first wing to the second, like the desktop', () => {
-    expect(measureValue(b(), spec({ op: 'angle', args: ['N', 'A', 'U'] }))).toBeCloseTo(270, 6);
+  it('measures the angle between the two wings from 0 to 180, like Sketchpad', () => {
+    expect(measureValue(b(), spec({ op: 'angle', args: ['N', 'A', 'U'] }))).toBeCloseTo(90, 6);
     expect(measureValue(b(), spec({ op: 'angle', args: ['U', 'A', 'N'] }))).toBeCloseTo(90, 6);
   });
 
@@ -346,6 +346,17 @@ describe('captionAnchor', () => {
   it('belongs under the numerator of a ratio', () => {
     // both segments give the value, but the caption is about the first one
     expect(captionAnchor(spec({ op: 'ratio', args: ['s', 'tall'] }), [])).toMatchObject({ of: ['s'] });
+  });
+
+  it('puts an angle beside its vertex, not on the middle of its three points', () => {
+    expect(captionAnchor(spec({ op: 'angle', args: ['A', 'B', 'C'] }), []))
+      .toMatchObject({ of: ['B'], dx: 0.5, dy: -0.4 });
+  });
+
+  it('steps a second angle of the same vertex below the first', () => {
+    const first = { attrs: { anchor: { of: ['B'], dx: 0.5, dy: -0.4 } } };
+    expect(captionAnchor(spec({ op: 'angle', args: ['A', 'B', 'C'] }), [first]).dy)
+      .toBeCloseTo(-0.9, 6);
   });
 
   it('steps a second caption of the same geometry below the first', () => {

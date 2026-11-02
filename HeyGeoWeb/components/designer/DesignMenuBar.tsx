@@ -41,7 +41,9 @@ const NO_FUNCTION_ROWS: FunctionRows = { canNew: true, canPlot: false, target: n
 const NO_PLOT_POINT_ROWS: PlotPointRows = { canPlotPair: false, canPlotValue: false, canOpen: false };
 
 /** Nothing is picked, so there is nothing to make a button out of. */
-const NO_ACTION_BUTTON_ROWS: ActionButtonRows = { canCreate: false, canAnimate: false };
+const NO_ACTION_BUTTON_ROWS: ActionButtonRows = {
+  canCreate: false, canAnimate: false, canMove: false, canPresent: false,
+};
 
 /** Nothing that can move is picked, and nothing is moving. */
 const NO_ANIMATION_ROWS: AnimationRows = { canAnimate: false, running: false };
@@ -89,8 +91,12 @@ interface Props {
   onToolChange: (mode: ToolMode) => void;
   onShowAbout: () => void;
   onCreateLocus: () => void;
+  /** File | Publish to Web… — the studio publishes the sketch to the Gallery. */
+  onPublish: () => void;
   /** Number | New Parameter… — the studio opens the parameter dialog. */
   onNewParameter: () => void;
+  /** Number | Add Slider — a JSXGraph slider with the dialog's defaults. */
+  onAddSlider: () => void;
   /** Number | Calculate… — the studio opens the Calculator. */
   onOpenCalculate: () => void;
   /** Graph | New Function… — the studio opens the function dialog. */
@@ -113,6 +119,10 @@ interface Props {
   onFont: () => void;
   /** Edit | Action Buttons | Animation… — the studio asks how the button runs. */
   onActionButtonAnimation: () => void;
+  /** Edit | Action Buttons | Movement… — the studio asks how fast the button travels. */
+  onActionButtonMovement: () => void;
+  /** Edit | Action Buttons | Presentation… — the studio asks how the sequence is worked through. */
+  onActionButtonPresent: () => void;
   onOpenTransform?: (mode: 'translate' | 'rotate' | 'dilate') => void;
   onUnderDevelopment: () => void;
 }
@@ -257,6 +267,7 @@ export default function DesignMenuBar({
   onShowAbout,
   onCreateLocus,
   onNewParameter,
+  onAddSlider,
   onOpenCalculate,
   onOpenNewFunction,
   onPlotAsXy,
@@ -266,8 +277,11 @@ export default function DesignMenuBar({
   onLabelObject,
   onOtherColor,
   onSamples,
+  onPublish,
   onFont,
   onActionButtonAnimation,
+  onActionButtonMovement,
+  onActionButtonPresent,
   onOpenTransform,
   onUnderDevelopment,
 }: Props) {
@@ -376,11 +390,11 @@ export default function DesignMenuBar({
         { label: 'Save',                       shortcut: 'Ctrl+S',       action: onSave },
         { label: 'Save As…',                   shortcut: 'Ctrl+Shift+S', action: onSaveAs },
         { separator: true },
-        { label: 'Import JSON…',                                         action: onImportFile },
+        { label: 'Import…',                                              action: onImportFile },
         { label: 'Export JSON…',                                         action: onExportJSON },
         { label: 'Export To Image…',                                     action: onExportImage },
         { label: 'Export SVG…',                                          action: onExportSVG },
-        { label: 'Publish to Web…',                                      action: onUnderDevelopment },
+        { label: 'Publish to Web…',                                      action: onPublish },
         { separator: true },
         { label: 'Print…',                     shortcut: 'Ctrl+P',       action: onUnderDevelopment },
         { separator: true },
@@ -413,20 +427,38 @@ export default function DesignMenuBar({
         {
           label: 'Action Buttons',
           // Sketchpad builds a button out of a selection, then offers the five
-          // behaviours; Hide/Show and Animation are written so far.
+          // behaviours; every one of them but Link is written.
           submenu: [
             {
               label: 'Animation…',
               disabled: !actionButtons.canAnimate,
               action: onActionButtonAnimation,
             },
-            { label: 'Movement…', action: onUnderDevelopment },
+            {
+              label: 'Movement…',
+              disabled: !actionButtons.canMove,
+              action: onActionButtonMovement,
+            },
             {
               label: 'Hide/Show',
               disabled: !actionButtons.canCreate,
-              action: () => canvasRef.current?.createActionButton(),
+              action: () => canvasRef.current?.createActionButton('toggle'),
             },
-            { label: 'Presentation…', action: onUnderDevelopment },
+            {
+              label: 'Show',
+              disabled: !actionButtons.canCreate,
+              action: () => canvasRef.current?.createActionButton('show'),
+            },
+            {
+              label: 'Hide',
+              disabled: !actionButtons.canCreate,
+              action: () => canvasRef.current?.createActionButton('hide'),
+            },
+            {
+              label: 'Presentation…',
+              disabled: !actionButtons.canPresent,
+              action: onActionButtonPresent,
+            },
             { label: 'Link…', action: onUnderDevelopment },
           ],
         },
@@ -486,7 +518,23 @@ export default function DesignMenuBar({
             { label: 'Font…', disabled: font === null, action: onFont },
           ],
         },
-        { label: 'Text Style',                                     action: onUnderDevelopment },
+        {
+          label: 'Text Style',
+          disabled: font === null,
+          submenu: [
+            {
+              label: 'Bold',
+              shortcut: 'Ctrl+B',
+              checked: canvasRef.current?.isSelectedBold() ?? false,
+              action: () => canvasRef.current?.toggleSelectedBold(),
+            },
+            {
+              label: 'Italic',
+              checked: canvasRef.current?.isSelectedItalic() ?? false,
+              action: () => canvasRef.current?.toggleSelectedItalic(),
+            },
+          ],
+        },
         { separator: true },
         { label: 'Show/Hide Label',        shortcut: 'Ctrl+K',    action: () => canvasRef.current?.toggleSelectedLabel() },
         { label: 'Label Object…',          disabled: labelText === null, action: onLabelObject },
@@ -553,6 +601,16 @@ export default function DesignMenuBar({
         // Interiors
         { label: 'Polygon',                shortcut: 'Alt+G',     action: () => onToolChange('polygon') },
         {
+          label: 'Triangle Interior',
+          disabled: !canvasRef.current?.canTriangleInterior(),
+          action: () => canvasRef.current?.createTriangleInterior(),
+        },
+        {
+          label: 'Quadrilateral Interior',
+          disabled: !canvasRef.current?.canQuadrilateralInterior(),
+          action: () => canvasRef.current?.createQuadrilateralInterior(),
+        },
+        {
           label: 'Circle Interior',
           disabled: !canvasRef.current?.canCircleInterior(),
           action: () => canvasRef.current?.createCircleInterior(),
@@ -562,7 +620,11 @@ export default function DesignMenuBar({
           disabled: !canvasRef.current?.canArcSector(),
           action: () => canvasRef.current?.createArcSector(),
         },
-        { label: 'Arc Segment Interior',                           action: onUnderDevelopment },
+        {
+          label: 'Arc Segment Interior',
+          disabled: !canvasRef.current?.canArcSegment(),
+          action: () => canvasRef.current?.createArcSegment(),
+        },
         { separator: true },
         // Locus
         { label: 'Locus…',                                         action: onCreateLocus },
@@ -584,6 +646,9 @@ export default function DesignMenuBar({
 
     // ── Number ────────────────────────────────────────────────────────────
     {
+      // Sketchpad's Number menu, in its order: make a number, calculate with
+      // it, tabulate it, then define a function from it. Add Slider is this
+      // app's own row — the JSXGraph control the rest of the menu reads.
       label: 'Number',
       items: [
         { label: 'New Parameter…',                action: onNewParameter },
@@ -595,12 +660,16 @@ export default function DesignMenuBar({
           disabled: !canCalculate(numberValues(), selectedIds),
           action: onOpenCalculate,
         },
+        { label: 'Add Slider',                    action: onAddSlider },
         { separator: true },
         { label: 'Tabulate',                      action: onUnderDevelopment },
-        { label: 'Add Table Data',                action: onUnderDevelopment },
-        { label: 'Remove Table Data',             action: onUnderDevelopment },
+        { label: 'Add Table Data…',               action: onUnderDevelopment },
+        { label: 'Remove Table Data…',            action: onUnderDevelopment },
         { separator: true },
-        { label: 'Define Function From Sketch…',  action: onUnderDevelopment },
+        // GSP defines the function here and plots it from the Graph menu.
+        { label: 'New Function…',                 action: onOpenNewFunction },
+        { label: 'Define Derivative Function',    action: onUnderDevelopment },
+        { label: 'Define Function from Drawing',  action: onUnderDevelopment },
       ],
     },
 
@@ -614,7 +683,7 @@ export default function DesignMenuBar({
         { label: 'Mark Mirror',                   action: () => canvasRef.current?.markMirror() },
         { label: 'Mark Angle',                    action: () => canvasRef.current?.markAngle() },
         { label: 'Mark Ratio',                    action: () => canvasRef.current?.markRatio() },
-        { label: 'Mark Distance/Length',          action: onUnderDevelopment },
+        { label: 'Mark Distance/Length',          action: () => canvasRef.current?.markDistance() },
         { label: 'Clear Marks',                   action: () => canvasRef.current?.clearMarks() },
         { separator: true },
         // Transform operations
@@ -707,11 +776,11 @@ export default function DesignMenuBar({
       items: [
         { label: 'New View Window',               action: onUnderDevelopment },
         { separator: true },
-        { label: 'Pan',                           action: onUnderDevelopment },
+        { label: 'Pan (Space + Drag)',             disabled: true },
         { label: 'Zoom In',    shortcut: 'Ctrl++', action: onZoomIn },
         { label: 'Zoom Out',   shortcut: 'Ctrl+-', action: onZoomOut },
         { label: 'Zoom to Fit',shortcut: 'Ctrl+0', action: onZoomFit },
-        { label: 'Zoom 100%',                     action: onUnderDevelopment },
+        { label: 'Zoom 100%',  shortcut: 'Ctrl+1', action: () => canvasRef.current?.zoomReset?.() },
         { separator: true },
         { label: 'Minimize Window',               action: onUnderDevelopment },
         { label: 'Bring All To Front',            action: onUnderDevelopment },
