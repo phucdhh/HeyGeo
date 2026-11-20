@@ -32,16 +32,102 @@ export interface MathboxSrcdocOpts {
 
 /**
  * Runs inside the iframe before user code. MathBox keeps its data (matrix, array,
- * interval, labels…) in float textures read by vertex shaders, and uploads them as
- * RGB/FLOAT for 3-channel data. Some in-app WebViews (seen in Zalo) accept that
- * upload but read back zeros, so only the shader-drawn axes show up. This probes the
- * real round trip; if RGB fails but RGBA works it widens RGB float uploads to RGBA,
- * otherwise it shows a notice. Probe details go to the parent as 'heygeo-mathbox-compat'.
+ * interval, labels…) in float textures read by vertex shaders. Some in-app WebViews
+ * (seen in Zalo) either read zeros back from RGB/FLOAT uploads or expose no
+ * OES_texture_float at all, so only the shader-drawn axes show up. This probes the
+ * real upload/readback round trip and patches the texture uploads to fit:
+ *   - RGB float broken, RGBA float fine -> widen RGB uploads to RGBA
+ *   - no float textures, half float fine -> upload every float texture as RGBA half float
+ *   - neither works -> show a notice
+ * Probe details go to the parent as 'heygeo-mathbox-compat'.
  */
 const COMPAT_SCRIPT = `
       (function(){
         var info = {};
-        function probe(gl, channels) {
+        var HALF = 0x8D61; // HALF_FLOAT_OES
+
+        var f32 = new Float32Array(1), u32 = new Uint32Array(f32.buffer);
+        function toHalf(v) {
+          f32[0] = v;
+          var x = u32[0], sign = (x >>> 16) & 0x8000, e = (x >>> 23) & 0xff, m = x & 0x7fffff;
+          if (e === 0xff) return sign | 0x7c00 | (m ? 0x200 : 0);
+          var ne = e - 127 + 15;
+          if (ne >= 31) return sign | 0x7c00;
+          if (ne <= 0) {
+            if (ne < -10) return sign;
+            var shift = 14 - ne;
+            return sign | (((m | 0x800000) + (1 << (shift - 1))) >> shift);
+          }
+          var r = (ne << 10) | (m >> 13);
+          if (m & 0x1000) r++;
+          return sign | r;
+        }
+
+        // Expand any float upload to RGBA (as half floats when asHalf) so every texture
+        // is a plain 4-channel one; LUMINANCE samples as (l,l,l,1) and L+A as (l,l,l,a).
+        function expand(src, w, h, channels, asHalf) {
+          var n = w * h, out = asHalf ? new Uint16Array(n * 4) : new Float32Array(n * 4);
+          var one = asHalf ? 0x3c00 : 1;
+          function cv(v) { return asHalf ? toHalf(v) : v; }
+          for (var i = 0; i < n; i++) {
+            var r, g, b, a;
+            if (channels === 1) { r = g = b = cv(src[i]); a = one; }
+            else if (channels === 2) { r = g = b = cv(src[2*i]); a = cv(src[2*i+1]); }
+            else if (channels === 3) { r = cv(src[3*i]); g = cv(src[3*i+1]); b = cv(src[3*i+2]); a = one; }
+            else { r = cv(src[4*i]); g = cv(src[4*i+1]); b = cv(src[4*i+2]); a = cv(src[4*i+3]); }
+            out[4*i] = r; out[4*i+1] = g; out[4*i+2] = b; out[4*i+3] = a;
+          }
+          return out;
+        }
+
+        function channelsOf(gl, fmt) {
+          if (fmt === gl.LUMINANCE) return 1;
+          if (fmt === gl.LUMINANCE_ALPHA) return 2;
+          if (fmt === gl.RGB) return 3;
+          if (fmt === gl.RGBA) return 4;
+          return 0;
+        }
+
+        // widenAll=false: only RGB float uploads; asHalf=true: every float upload as half float.
+        function patchUploads(asHalf) {
+          var P = window.WebGLRenderingContext.prototype;
+          var origImage = P.texImage2D, origSub = P.texSubImage2D;
+          function applies(gl, fmt, type, data) {
+            if (type !== gl.FLOAT) return false;
+            var ch = channelsOf(gl, fmt);
+            if (!ch) return false;
+            if (data && !(data instanceof Float32Array)) return false;
+            return asHalf || ch === 3;
+          }
+          P.texImage2D = function(target, level, ifmt, w, h, border, fmt, type, data) {
+            if (arguments.length === 9 && applies(this, fmt, type, data)) {
+              var ch = channelsOf(this, fmt);
+              return origImage.call(this, target, level, this.RGBA, w, h, border, this.RGBA,
+                asHalf ? HALF : type, data ? expand(data, w, h, ch, asHalf) : (asHalf ? new Uint16Array(w*h*4) : null));
+            }
+            return origImage.apply(this, arguments);
+          };
+          P.texSubImage2D = function(target, level, x, y, w, h, fmt, type, data) {
+            if (arguments.length === 9 && applies(this, fmt, type, data)) {
+              var ch = channelsOf(this, fmt);
+              return origSub.call(this, target, level, x, y, w, h, this.RGBA,
+                asHalf ? HALF : type, expand(data, w, h, ch, asHalf));
+            }
+            return origSub.apply(this, arguments);
+          };
+          if (asHalf) {
+            // three only enables the extensions it knows; make sure half float is on for every context.
+            var origGetContext = HTMLCanvasElement.prototype.getContext;
+            HTMLCanvasElement.prototype.getContext = function(kind) {
+              var c = origGetContext.apply(this, arguments);
+              if (c && kind !== '2d' && c.getExtension) { try { c.getExtension('OES_texture_half_float'); } catch(e){} }
+              return c;
+            };
+          }
+        }
+
+        // Upload [0.25, 0.5, 0.75, 1] the way MathBox would, sample it in a vertex shader and read the pixel back.
+        function probe(gl, mode) {
           var tex = gl.createTexture();
           var vs = gl.createShader(gl.VERTEX_SHADER), fs = gl.createShader(gl.FRAGMENT_SHADER), prog = gl.createProgram();
           try {
@@ -55,9 +141,13 @@ const COMPAT_SCRIPT = `
             gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            var fmt = channels === 3 ? gl.RGB : gl.RGBA;
-            var data = new Float32Array(channels === 3 ? [0.25, 0.5, 0.75] : [0.25, 0.5, 0.75, 1]);
-            gl.texImage2D(gl.TEXTURE_2D, 0, fmt, 1, 1, 0, fmt, gl.FLOAT, data);
+            if (mode === 'rgb') {
+              gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 1, 1, 0, gl.RGB, gl.FLOAT, new Float32Array([0.25, 0.5, 0.75]));
+            } else if (mode === 'rgba') {
+              gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array([0.25, 0.5, 0.75, 1]));
+            } else {
+              gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, HALF, new Uint16Array([toHalf(0.25), toHalf(0.5), toHalf(0.75), toHalf(1)]));
+            }
             gl.viewport(0, 0, 1, 1);
             gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
             gl.drawArrays(gl.POINTS, 0, 1);
@@ -66,30 +156,6 @@ const COMPAT_SCRIPT = `
             return Math.abs(px[0]-64) < 8 && Math.abs(px[1]-128) < 8 && Math.abs(px[2]-191) < 8;
           } catch(e) { return false; }
           finally { gl.deleteTexture(tex); gl.deleteProgram(prog); gl.deleteShader(vs); gl.deleteShader(fs); }
-        }
-
-        function widenRgbFloatUploads() {
-          var P = window.WebGLRenderingContext.prototype;
-          var origImage = P.texImage2D, origSub = P.texSubImage2D;
-          function widen(w, h, src) {
-            var n = w * h, out = new Float32Array(n * 4);
-            for (var i = 0; i < n; i++) {
-              out[4*i] = src[3*i]; out[4*i+1] = src[3*i+1]; out[4*i+2] = src[3*i+2]; out[4*i+3] = 1;
-            }
-            return out;
-          }
-          P.texImage2D = function(target, level, ifmt, w, h, border, fmt, type, data) {
-            if (arguments.length === 9 && fmt === this.RGB && type === this.FLOAT) {
-              return origImage.call(this, target, level, this.RGBA, w, h, border, this.RGBA, type, data ? widen(w, h, data) : data);
-            }
-            return origImage.apply(this, arguments);
-          };
-          P.texSubImage2D = function(target, level, x, y, w, h, fmt, type, data) {
-            if (arguments.length === 9 && fmt === this.RGB && type === this.FLOAT) {
-              return origSub.call(this, target, level, x, y, w, h, this.RGBA, type, widen(w, h, data));
-            }
-            return origSub.apply(this, arguments);
-          };
         }
 
         function notice(text) {
@@ -108,15 +174,21 @@ const COMPAT_SCRIPT = `
             notice('Trình duyệt này không hỗ trợ WebGL, không thể hiển thị mô hình 3D. Hãy mở liên kết bằng Chrome hoặc Safari. / WebGL is unavailable here – please open this link in Chrome or Safari.');
           } else {
             info.float = !!gl.getExtension('OES_texture_float');
+            info.half = !!gl.getExtension('OES_texture_half_float');
             info.vtf = gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS);
-            if (info.float && info.vtf > 0) {
-              info.rgb = probe(gl, 3);
-              info.rgba = probe(gl, 4);
+            var usable = false;
+            if (info.vtf > 0 && info.float) {
+              info.rgb = probe(gl, 'rgb');
+              info.rgba = probe(gl, 'rgba');
+              if (info.rgb && info.rgba && !window.__heygeoForceHalf) usable = true;
+              else if (!info.rgb && info.rgba && !window.__heygeoForceHalf) { patchUploads(false); info.widened = true; usable = true; }
             }
-            if (window.__heygeoForceWiden || (info.rgb === false && info.rgba === true)) {
-              widenRgbFloatUploads();
-              info.widened = true;
-            } else if (!info.float || !info.vtf || info.rgba === false) {
+            if (!usable && info.vtf > 0 && info.half) {
+              info.halfOk = probe(gl, 'half');
+              if (info.halfOk) { patchUploads(true); info.halved = true; usable = true; }
+            }
+            if (!usable) {
+              info.ua = navigator.userAgent.slice(0, 120);
               notice('Trình duyệt này không hỗ trợ texture số thực nên mô hình 3D có thể không hiển thị đầy đủ. Hãy mở liên kết bằng Chrome hoặc Safari. / Float textures are unavailable here – open this link in Chrome or Safari. [' + JSON.stringify(info) + ']');
             }
           }
