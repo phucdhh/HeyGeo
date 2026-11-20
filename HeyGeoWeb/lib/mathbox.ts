@@ -38,7 +38,9 @@ export interface MathboxSrcdocOpts {
  * real upload/readback round trip and patches the texture uploads to fit:
  *   - RGB float broken, RGBA float fine -> widen RGB uploads to RGBA
  *   - no float textures, half float fine -> upload every float texture as RGBA half float
- *   - neither works -> show a notice
+ *   - neither on WebGL1, but WebGL2 (float textures are core there) -> hand MathBox a WebGL2
+ *     context in place of its 'webgl' one and upload every float texture as RGBA32F
+ *   - nothing works -> show a notice
  * Probe details go to the parent as 'heygeo-mathbox-compat'.
  */
 const COMPAT_SCRIPT = `
@@ -126,6 +128,85 @@ const COMPAT_SCRIPT = `
           }
         }
 
+        // WebGL2 has float textures in core but wants sized internal formats, which MathBox's
+        // WebGL1-style uploads don't use, so expand them to RGBA32F here.
+        function patchWebGL2() {
+          var P2 = window.WebGL2RenderingContext.prototype;
+          var origImage = P2.texImage2D, origSub = P2.texSubImage2D;
+          var RGBA32F = 0x8814;
+          function applies(gl, fmt, type, data) {
+            return type === gl.FLOAT && channelsOf(gl, fmt) > 0 && (!data || data instanceof Float32Array);
+          }
+          P2.texImage2D = function(target, level, ifmt, w, h, border, fmt, type, data) {
+            if (arguments.length === 9 && applies(this, fmt, type, data)) {
+              return origImage.call(this, target, level, RGBA32F, w, h, border, this.RGBA, type,
+                data ? expand(data, w, h, channelsOf(this, fmt), false) : null);
+            }
+            return origImage.apply(this, arguments);
+          };
+          P2.texSubImage2D = function(target, level, x, y, w, h, fmt, type, data) {
+            if (arguments.length === 9 && applies(this, fmt, type, data)) {
+              return origSub.call(this, target, level, x, y, w, h, this.RGBA, type,
+                expand(data, w, h, channelsOf(this, fmt), false));
+            }
+            return origSub.apply(this, arguments);
+          };
+          // MathBox's raw shaders are GLSL ES 1.00. WebGL2 would still accept them, but only
+          // ES 3.00 has derivatives (its surface shading needs dFdx/dFdy), so port them.
+          var origShaderSource = P2.shaderSource;
+          P2.shaderSource = function(shader, src) {
+            src = String(src);
+            if (/^\\s*#version/.test(src)) return origShaderSource.call(this, shader, src);
+            var isFragment = this.getShaderParameter(shader, this.SHADER_TYPE) === this.FRAGMENT_SHADER;
+            src = src
+              .replace(/^[ \\t]*#extension[^\\n]*$/gm, '')
+              .replace(/\\bgl_FragColor\\b/g, 'heygeoFragColor')
+              .replace(/\\btexture2D\\s*\\(/g, 'texture(')
+              .replace(/\\btextureCube\\s*\\(/g, 'texture(')
+              .replace(/\\btexture2DLodEXT\\s*\\(/g, 'textureLod(')
+              .replace(/\\btexture2DLod\\s*\\(/g, 'textureLod(')
+              .replace(/\\b(sample|smooth|flat|centroid|patch|noperspective)\\b/g, 'heygeo_$1')
+              .replace(/\\battribute\\b/g, 'in')
+              .replace(/\\bvarying\\b/g, isFragment ? 'in' : 'out');
+            var head = '#version 300 es\\n';
+            if (isFragment) head += 'layout(location = 0) out highp vec4 heygeoFragColor;\\n';
+            return origShaderSource.call(this, shader, head + src);
+          };
+          var origGetContext = HTMLCanvasElement.prototype.getContext;
+          HTMLCanvasElement.prototype.getContext = function(kind, attrs) {
+            if (kind === 'webgl' || kind === 'experimental-webgl') return origGetContext.call(this, 'webgl2', attrs);
+            return origGetContext.apply(this, arguments);
+          };
+        }
+
+        function probeWebGL2() {
+          var c2 = document.createElement('canvas');
+          c2.width = c2.height = 1;
+          var g = c2.getContext('webgl2');
+          if (!g) return false;
+          var tex = g.createTexture();
+          var vs = g.createShader(g.VERTEX_SHADER), fs = g.createShader(g.FRAGMENT_SHADER), prog = g.createProgram();
+          try {
+            g.shaderSource(vs, '#version 300 es\\nuniform sampler2D t; out vec4 v; void main(){ v = texelFetch(t, ivec2(0), 0); gl_Position = vec4(0.0,0.0,0.0,1.0); gl_PointSize = 1.0; }');
+            g.shaderSource(fs, '#version 300 es\\nprecision mediump float; in vec4 v; out vec4 o; void main(){ o = vec4(v.rgb, 1.0); }');
+            g.compileShader(vs); g.compileShader(fs);
+            g.attachShader(prog, vs); g.attachShader(prog, fs); g.linkProgram(prog);
+            if (!g.getProgramParameter(prog, g.LINK_STATUS)) return false;
+            g.useProgram(prog);
+            g.bindTexture(g.TEXTURE_2D, tex);
+            g.pixelStorei(g.UNPACK_ALIGNMENT, 1);
+            g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.NEAREST);
+            g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.NEAREST);
+            g.texImage2D(g.TEXTURE_2D, 0, 0x8814, 1, 1, 0, g.RGBA, g.FLOAT, new Float32Array([0.25, 0.5, 0.75, 1]));
+            g.viewport(0, 0, 1, 1);
+            g.clearColor(0, 0, 0, 0); g.clear(g.COLOR_BUFFER_BIT);
+            g.drawArrays(g.POINTS, 0, 1);
+            var px = new Uint8Array(4);
+            g.readPixels(0, 0, 1, 1, g.RGBA, g.UNSIGNED_BYTE, px);
+            return Math.abs(px[0]-64) < 8 && Math.abs(px[1]-128) < 8 && Math.abs(px[2]-191) < 8;
+          } catch(e) { return false; }
+        }
+
         // Upload [0.25, 0.5, 0.75, 1] the way MathBox would, sample it in a vertex shader and read the pixel back.
         function probe(gl, mode) {
           var tex = gl.createTexture();
@@ -177,18 +258,29 @@ const COMPAT_SCRIPT = `
             info.half = !!gl.getExtension('OES_texture_half_float');
             info.vtf = gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS);
             var usable = false;
-            if (info.vtf > 0 && info.float) {
+            if (window.__heygeoForceGl2) {
+              /* skip the WebGL1 float paths */
+            } else if (info.vtf > 0 && info.float) {
               info.rgb = probe(gl, 'rgb');
               info.rgba = probe(gl, 'rgba');
               if (info.rgb && info.rgba && !window.__heygeoForceHalf) usable = true;
               else if (!info.rgb && info.rgba && !window.__heygeoForceHalf) { patchUploads(false); info.widened = true; usable = true; }
             }
-            if (!usable && info.vtf > 0 && info.half) {
+            if (!usable && !window.__heygeoForceGl2 && info.vtf > 0 && info.half) {
               info.halfOk = probe(gl, 'half');
               if (info.halfOk) { patchUploads(true); info.halved = true; usable = true; }
             }
+            if (!usable && (window.__heygeoForceGl2 || (!info.float && !info.half))) {
+              info.gl2 = probeWebGL2();
+              if (info.gl2) { patchWebGL2(); info.webgl2 = true; usable = true; }
+            }
             if (!usable) {
               info.ua = navigator.userAgent.slice(0, 120);
+              try {
+                var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+                if (dbg) info.gpu = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)).slice(0, 60);
+              } catch(e){}
+              info.ext = (gl.getSupportedExtensions() || []).length;
               notice('Trình duyệt này không hỗ trợ texture số thực nên mô hình 3D có thể không hiển thị đầy đủ. Hãy mở liên kết bằng Chrome hoặc Safari. / Float textures are unavailable here – open this link in Chrome or Safari. [' + JSON.stringify(info) + ']');
             }
           }
