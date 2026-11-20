@@ -31,6 +31,101 @@ export interface MathboxSrcdocOpts {
 }
 
 /**
+ * Runs inside the iframe before user code. MathBox keeps its data (matrix, array,
+ * interval, labels…) in float textures read by vertex shaders, and uploads them as
+ * RGB/FLOAT for 3-channel data. Some in-app WebViews (seen in Zalo) accept that
+ * upload but read back zeros, so only the shader-drawn axes show up. This probes the
+ * real round trip; if RGB fails but RGBA works it widens RGB float uploads to RGBA,
+ * otherwise it shows a notice. Probe details go to the parent as 'heygeo-mathbox-compat'.
+ */
+const COMPAT_SCRIPT = `
+      (function(){
+        var info = {};
+        function probe(gl, channels) {
+          var tex = gl.createTexture();
+          var vs = gl.createShader(gl.VERTEX_SHADER), fs = gl.createShader(gl.FRAGMENT_SHADER), prog = gl.createProgram();
+          try {
+            gl.shaderSource(vs, 'uniform sampler2D t; varying vec4 v; void main(){ v = texture2D(t, vec2(0.5)); gl_Position = vec4(0.0,0.0,0.0,1.0); gl_PointSize = 1.0; }');
+            gl.shaderSource(fs, 'precision mediump float; varying vec4 v; void main(){ gl_FragColor = vec4(v.rgb, 1.0); }');
+            gl.compileShader(vs); gl.compileShader(fs);
+            gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+            if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return false;
+            gl.useProgram(prog);
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            var fmt = channels === 3 ? gl.RGB : gl.RGBA;
+            var data = new Float32Array(channels === 3 ? [0.25, 0.5, 0.75] : [0.25, 0.5, 0.75, 1]);
+            gl.texImage2D(gl.TEXTURE_2D, 0, fmt, 1, 1, 0, fmt, gl.FLOAT, data);
+            gl.viewport(0, 0, 1, 1);
+            gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.drawArrays(gl.POINTS, 0, 1);
+            var px = new Uint8Array(4);
+            gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+            return Math.abs(px[0]-64) < 8 && Math.abs(px[1]-128) < 8 && Math.abs(px[2]-191) < 8;
+          } catch(e) { return false; }
+          finally { gl.deleteTexture(tex); gl.deleteProgram(prog); gl.deleteShader(vs); gl.deleteShader(fs); }
+        }
+
+        function widenRgbFloatUploads() {
+          var P = window.WebGLRenderingContext.prototype;
+          var origImage = P.texImage2D, origSub = P.texSubImage2D;
+          function widen(w, h, src) {
+            var n = w * h, out = new Float32Array(n * 4);
+            for (var i = 0; i < n; i++) {
+              out[4*i] = src[3*i]; out[4*i+1] = src[3*i+1]; out[4*i+2] = src[3*i+2]; out[4*i+3] = 1;
+            }
+            return out;
+          }
+          P.texImage2D = function(target, level, ifmt, w, h, border, fmt, type, data) {
+            if (arguments.length === 9 && fmt === this.RGB && type === this.FLOAT) {
+              return origImage.call(this, target, level, this.RGBA, w, h, border, this.RGBA, type, data ? widen(w, h, data) : data);
+            }
+            return origImage.apply(this, arguments);
+          };
+          P.texSubImage2D = function(target, level, x, y, w, h, fmt, type, data) {
+            if (arguments.length === 9 && fmt === this.RGB && type === this.FLOAT) {
+              return origSub.call(this, target, level, x, y, w, h, this.RGBA, type, widen(w, h, data));
+            }
+            return origSub.apply(this, arguments);
+          };
+        }
+
+        function notice(text) {
+          var d = document.createElement('div');
+          d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:5;padding:8px 10px;background:#fef3c7;color:#92400e;font:12px/1.4 system-ui,sans-serif;';
+          d.textContent = text;
+          document.body.appendChild(d);
+        }
+
+        try {
+          var c = document.createElement('canvas');
+          c.width = c.height = 1;
+          var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+          if (!gl) {
+            info.webgl = false;
+            notice('Trình duyệt này không hỗ trợ WebGL, không thể hiển thị mô hình 3D. Hãy mở liên kết bằng Chrome hoặc Safari. / WebGL is unavailable here – please open this link in Chrome or Safari.');
+          } else {
+            info.float = !!gl.getExtension('OES_texture_float');
+            info.vtf = gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS);
+            if (info.float && info.vtf > 0) {
+              info.rgb = probe(gl, 3);
+              info.rgba = probe(gl, 4);
+            }
+            if (window.__heygeoForceWiden || (info.rgb === false && info.rgba === true)) {
+              widenRgbFloatUploads();
+              info.widened = true;
+            } else if (!info.float || !info.vtf || info.rgba === false) {
+              notice('Trình duyệt này không hỗ trợ texture số thực nên mô hình 3D có thể không hiển thị đầy đủ. Hãy mở liên kết bằng Chrome hoặc Safari. / Float textures are unavailable here – open this link in Chrome or Safari. [' + JSON.stringify(info) + ']');
+            }
+          }
+        } catch(e) { info.error = String(e); }
+        try { window.parent.postMessage({type:'heygeo-mathbox-compat',info:info},'*'); } catch(e){}
+      })();
+`;
+
+/**
  * Build the full HTML document used as the sandboxed iframe's srcDoc, both
  * for the live editor preview and for share/detail viewers.
  */
@@ -74,6 +169,7 @@ export function buildMathboxSrcdoc(code: string, opts: MathboxSrcdocOpts): strin
       var element = document.getElementById(BOARDID);
       var MathBox = window.MathBox;
       var THREE = window.THREE;
+${COMPAT_SCRIPT}
 
       function reportError(msg) {
         try { window.parent.postMessage({type:'heygeo-mathbox-error',message:String(msg)},'*'); } catch(e){}
