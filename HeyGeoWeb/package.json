@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node scripts/sync-jsxgraph-vendor.js && prisma generate",
+    "prebuild": "node scripts/sync-jsxgraph-vendor.js && node scripts/sync-mathbox-vendor.js && prisma generate",
     "vendor:jsxgraph": "node scripts/sync-jsxgraph-vendor.js",
+    "vendor:mathbox": "node scripts/sync-mathbox-vendor.js",
     "vendor:check": "test \"$(cat public/vendor/jsxgraph/VERSION)\" = \"$(node -p \"require('./node_modules/jsxgraph/package.json').version\")\" || (echo 'public/vendor/jsxgraph lệch phiên bản với node_modules — chạy npm run vendor:jsxgraph'; exit 1)",
     "build": "next build",
     "postbuild": "cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
@@ -37,10 +38,12 @@
     "jsxgraph": "1.12.2",
     "jszip": "^3.10.2",
     "katex": "^0.16.38",
-    "next": "16.4.3",
+    "mathbox": "2.3.1",
+    "next": "16.4.6",
     "react": "^18",
     "react-dom": "^18",
-    "react-i18next": "^16.6.6"
+    "react-i18next": "^16.6.6",
+    "three": "0.137.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

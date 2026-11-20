@@ -62,6 +62,26 @@ function Thumbnail({ jsonData }: { jsonData: unknown }) {
     );
   }
 
+  // MathBox model
+  if (rec?.__type === 'mathbox') {
+    return (
+      <svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <rect width="200" height="120" fill="#0e2230"/>
+        {/* Axes */}
+        <line x1="30" y1="90" x2="170" y2="90" stroke="#155e75" strokeWidth="1.5"/>
+        <line x1="100" y1="105" x2="100" y2="15" stroke="#155e75" strokeWidth="1.5"/>
+        <line x1="100" y1="90" x2="155" y2="35" stroke="#155e75" strokeWidth="1.5"/>
+        {/* Wireframe surface */}
+        <path d="M 45 78 Q 100 18 155 78" fill="none" stroke="#22d3ee" strokeWidth="2"/>
+        <path d="M 55 70 Q 100 32 145 70" fill="none" stroke="#0891b2" strokeWidth="1.5"/>
+        <path d="M 65 64 Q 100 44 135 64" fill="none" stroke="#0e7490" strokeWidth="1.5"/>
+        <line x1="100" y1="25" x2="100" y2="64" stroke="#67e8f9" strokeWidth="1"/>
+        <circle cx="100" cy="25" r="3.5" fill="#f97316"/>
+        <text x="100" y="114" textAnchor="middle" fontSize="9" fill="#67e8f9" fontFamily="sans-serif" fontWeight="600">MathBox</text>
+      </svg>
+    );
+  }
+
   // GeoGebra model
   if (rec?.__type === 'geogebra') {
     return (
@@ -312,6 +332,13 @@ export default function ModelCard({ id, title, description, isPublic, viewCount,
                 return (
                   <Link href={`/cindy?id=${id}`} className="btn-primary !py-1.5 !text-xs">
                     🎯 Edit CindyJS
+                  </Link>
+                );
+              }
+              if (modelType === 'mathbox') {
+                return (
+                  <Link href={`/mathbox?id=${id}`} className="btn-primary !py-1.5 !text-xs">
+                    🧊 Edit MathBox
                   </Link>
                 );
               }

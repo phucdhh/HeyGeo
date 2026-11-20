@@ -118,6 +118,7 @@
     "upload_first": "Tải lên mô hình đầu tiên",
     "jsxgraph": "💻 JSXGraph",
     "cindyjs": "🎯 CindyJS",
+    "mathbox": "🧊 MathBox",
     "just_now": "vừa xong",
     "minutes_ago": "{{count}} phút trước",
     "hours_ago": "{{count}} giờ trước",
@@ -333,5 +334,21 @@
     "history_title": "Lịch sử phát triển",
     "milestones_title": "Các mốc quan trọng",
     "changelog_title": "ChangeLog (gần đây nhất)"
+  },
+  "mathbox": {
+    "untitled": "Chưa đặt tên",
+    "saved": "✓ Đã lưu mô hình",
+    "unknown_error": "Lỗi không xác định",
+    "run_hint": "Ctrl+Enter để chạy",
+    "save": "💾 Lưu",
+    "error_prefix": "Lỗi",
+    "close": "Đóng",
+    "back": "← Quay lại",
+    "run_title": "Chạy code (Ctrl+Enter)",
+    "reset_title": "Khôi phục code mẫu",
+    "drag_title": "Kéo để thay đổi độ rộng",
+    "auto_runs": "tự động · {{count}}×",
+    "no_bootstrap": "Thiếu MathBox.mathBox(…). Hãy khởi tạo engine: var mathbox = MathBox.mathBox({ element: element, … }) để có canvas WebGL (canvas cần thiết để tạo thumbnail).",
+    "menu_examples": "📚 Ví dụ"
   }
 }

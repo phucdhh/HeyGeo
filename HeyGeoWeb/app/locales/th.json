@@ -118,6 +118,7 @@
     "upload_first": "อัปโหลดโมเดลแรก",
     "jsxgraph": "💻 JSXGraph",
     "cindyjs": "🎯 CindyJS",
+    "mathbox": "🧊 MathBox",
     "just_now": "เมื่อกี้",
     "minutes_ago": "{{count}} นาทีที่แล้ว",
     "hours_ago": "{{count}} ชั่วโมงที่แล้ว",
@@ -333,5 +334,21 @@
     "history_title": "ประวัติการพัฒนา",
     "milestones_title": "เหตุการณ์สำคัญ",
     "changelog_title": "บันทึกการเปลี่ยนแปลง (ล่าสุด)"
+  },
+  "mathbox": {
+    "untitled": "ไม่มีชื่อ",
+    "saved": "✓ บันทึกโมเดลแล้ว",
+    "unknown_error": "ข้อผิดพลาดที่ไม่ทราบสาเหตุ",
+    "run_hint": "กด Ctrl+Enter เพื่อรัน",
+    "save": "💾 บันทึก",
+    "error_prefix": "ข้อผิดพลาด",
+    "close": "ปิด",
+    "back": "← กลับ",
+    "run_title": "รันโค้ด (Ctrl+Enter)",
+    "reset_title": "คืนค่าโค้ดตัวอย่าง",
+    "drag_title": "ลากเพื่อปรับขนาด",
+    "auto_runs": "อัตโนมัติ · {{count}}×",
+    "no_bootstrap": "ไม่พบ MathBox.mathBox(…) กรุณาเริ่มต้นเอนจิน: var mathbox = MathBox.mathBox({ element: element, … }) เพื่อให้มี canvas WebGL (จำเป็นสำหรับการสร้างภาพขนาดย่อ)",
+    "menu_examples": "📚 ตัวอย่าง"
   }
 }

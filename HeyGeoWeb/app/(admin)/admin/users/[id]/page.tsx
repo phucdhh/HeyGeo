@@ -56,6 +56,7 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
     const codeMode = rec?.codeMode as boolean | undefined;
     if (codeMode) return `/coding?id=${m.id}`;
     if (type === 'cindy') return `/cindy?id=${m.id}`;
+    if (type === 'mathbox') return `/mathbox?id=${m.id}`;
     if (type === 'wsp' || type === 'sketchpad') return `/wsp?id=${m.id}`;
     if (type === 'geogebra') return `/geogebra?id=${m.id}`;
     return `/design?id=${m.id}`;
@@ -67,6 +68,7 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
     const codeMode = rec?.codeMode as boolean | undefined;
     if (codeMode) return 'Coding';
     if (type === 'cindy') return 'CindyJS';
+    if (type === 'mathbox') return 'MathBox';
     if (type === 'wsp' || type === 'sketchpad') return 'WSP';
     if (type === 'geogebra') return 'GeoGebra';
     return 'Design';

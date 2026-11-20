@@ -9,6 +9,7 @@ import WSPViewer from '@/components/WSPViewer';
 import GeoGebraViewer, { type GGBApi, detectIs3D } from '@/components/GeoGebraViewer';
 import GeometryExpressionsViewer from '@/components/GeometryExpressionsViewer';
 import CindyJSViewer from '@/components/CindyJSViewer';
+import MathboxViewer from '@/components/MathboxViewer';
 import LatexEditor from '@/components/LatexEditor';
 import LatexRenderer from '@/components/LatexRenderer';
 
@@ -18,7 +19,7 @@ const MATH_CATEGORIES = [
 ];
 
 const TOOL_CATEGORIES_SET = new Set([
-  'HeyGeo', 'JSXGraph', 'CindyJS', 'GeoGebra', 'Sketchpad', 'Web Sketchpad', 'Geometry Expressions',
+  'HeyGeo', 'JSXGraph', 'CindyJS', 'MathBox', 'GeoGebra', 'Sketchpad', 'Web Sketchpad', 'Geometry Expressions',
 ]);
 
 function toolLabelFromType(rec: Record<string, unknown>): string | null {
@@ -36,6 +37,7 @@ function toolLabelFromType(rec: Record<string, unknown>): string | null {
     case 'geogebra':  return 'GeoGebra';
     case 'cindyjs':
     case 'cindy':     return 'CindyJS';
+    case 'mathbox':   return 'MathBox';
     case 'gx':        return 'Geometry Expressions';
     default:          return null;
   }
@@ -54,6 +56,9 @@ function ModelViewer({ data, onGgbReady, onCindyReady }: { data: object; onGgbRe
   }
   if (rec.__type === 'cindy') {
     return <CindyJSViewer code={rec.code as string} idSuffix="detail" onReady={onCindyReady} />;
+  }
+  if (rec.__type === 'mathbox') {
+    return <MathboxViewer code={rec.code as string} idSuffix="detail" onReady={onCindyReady} />;
   }
   return <JSXGraphViewer data={data as Parameters<typeof JSXGraphViewer>[0]['data']} />;
 }

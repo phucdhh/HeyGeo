@@ -118,6 +118,7 @@
     "upload_first": "Muat naik model pertama",
     "jsxgraph": "💻 JSXGraph",
     "cindyjs": "🎯 CindyJS",
+    "mathbox": "🧊 MathBox",
     "just_now": "baru sahaja",
     "minutes_ago": "{{count}} minit lepas",
     "hours_ago": "{{count}} jam lepas",
@@ -333,5 +334,21 @@
     "history_title": "Sejarah Pembangunan",
     "milestones_title": "Pencapaian Penting",
     "changelog_title": "Log Perubahan (terkini)"
+  },
+  "mathbox": {
+    "untitled": "Tanpa tajuk",
+    "saved": "✓ Model disimpan",
+    "unknown_error": "Ralat tidak diketahui",
+    "run_hint": "Ctrl+Enter untuk jalankan",
+    "save": "💾 Simpan",
+    "error_prefix": "Ralat",
+    "close": "Tutup",
+    "back": "← Kembali",
+    "run_title": "Jalankan kod (Ctrl+Enter)",
+    "reset_title": "Pulihkan kod contoh",
+    "drag_title": "Seret untuk ubah saiz",
+    "auto_runs": "auto · {{count}}×",
+    "no_bootstrap": "MathBox.mathBox(…) tiada. Mulakan enjin: var mathbox = MathBox.mathBox({ element: element, … }) untuk mendapatkan kanvas WebGL (kanvas diperlukan untuk mencipta lakaran kecil).",
+    "menu_examples": "📚 Contoh"
   }
 }

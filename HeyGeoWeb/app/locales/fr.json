@@ -118,6 +118,7 @@
     "upload_first": "Télécharger mon premier modèle",
     "jsxgraph": "💻 JSXGraph",
     "cindyjs": "🎯 CindyJS",
+    "mathbox": "🧊 MathBox",
     "just_now": "à l'instant",
     "minutes_ago": "il y a {{count}} min",
     "hours_ago": "il y a {{count}} h",
@@ -333,5 +334,21 @@
     "history_title": "Historique de développement",
     "milestones_title": "Étapes clés",
     "changelog_title": "Journal des modifications (récent)"
+  },
+  "mathbox": {
+    "untitled": "Sans titre",
+    "saved": "✓ Modèle enregistré",
+    "unknown_error": "Erreur inconnue",
+    "run_hint": "Ctrl+Entrée pour exécuter",
+    "save": "💾 Enregistrer",
+    "error_prefix": "Erreur",
+    "close": "Fermer",
+    "back": "← Retour",
+    "run_title": "Exécuter le code (Ctrl+Entrée)",
+    "reset_title": "Restaurer le code d'exemple",
+    "drag_title": "Glisser pour redimensionner",
+    "auto_runs": "auto · {{count}}×",
+    "no_bootstrap": "MathBox.mathBox(…) manquant. Initialisez le moteur : var mathbox = MathBox.mathBox({ element: element, … }) pour obtenir un canvas WebGL (nécessaire pour créer la miniature).",
+    "menu_examples": "📚 Exemples"
   }
 }

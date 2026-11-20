@@ -25,6 +25,7 @@ const TOOL_CATEGORIES = [
   'HeyGeo',
   'JSXGraph',
   'CindyJS',
+  'MathBox',
   'GeoGebra',
   'Sketchpad',
   'Web Sketchpad',

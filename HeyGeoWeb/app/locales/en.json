@@ -118,6 +118,7 @@
     "upload_first": "Upload your first model",
     "jsxgraph": "💻 JSXGraph",
     "cindyjs": "🎯 CindyJS",
+    "mathbox": "🧊 MathBox",
     "just_now": "just now",
     "minutes_ago": "{{count}} min ago",
     "hours_ago": "{{count}} hr ago",
@@ -333,5 +334,21 @@
     "history_title": "Development History",
     "milestones_title": "Key Milestones",
     "changelog_title": "ChangeLog (most recent)"
+  },
+  "mathbox": {
+    "untitled": "Untitled",
+    "saved": "✓ Model saved",
+    "unknown_error": "Unknown error",
+    "run_hint": "Ctrl+Enter to run",
+    "save": "💾 Save",
+    "error_prefix": "Error",
+    "close": "Close",
+    "back": "← Back",
+    "run_title": "Run code (Ctrl+Enter)",
+    "reset_title": "Restore sample code",
+    "drag_title": "Drag to resize",
+    "auto_runs": "auto · {{count}}×",
+    "no_bootstrap": "Missing MathBox.mathBox(…). Initialize the engine: var mathbox = MathBox.mathBox({ element: element, … }) to get a WebGL canvas (the canvas is required to create a thumbnail).",
+    "menu_examples": "📚 Examples"
   }
 }

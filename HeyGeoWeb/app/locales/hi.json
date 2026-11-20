@@ -118,6 +118,7 @@
     "upload_first": "पहला मॉडल अपलोड करें",
     "jsxgraph": "💻 JSXGraph",
     "cindyjs": "🎯 CindyJS",
+    "mathbox": "🧊 MathBox",
     "just_now": "अभी",
     "minutes_ago": "{{count}} मिनट पहले",
     "hours_ago": "{{count}} घंटे पहले",
@@ -333,5 +334,21 @@
     "history_title": "विकास इतिहास",
     "milestones_title": "प्रमुख मील के पत्थर",
     "changelog_title": "परिवर्तन लॉग (हालिया)"
+  },
+  "mathbox": {
+    "untitled": "बिना शीर्षक",
+    "saved": "✓ मॉडल सहेजा गया",
+    "unknown_error": "अज्ञात त्रुटि",
+    "run_hint": "चलाने के लिए Ctrl+Enter",
+    "save": "💾 सहेजें",
+    "error_prefix": "त्रुटि",
+    "close": "बंद करें",
+    "back": "← वापस",
+    "run_title": "कोड चलाएँ (Ctrl+Enter)",
+    "reset_title": "नमूना कोड पुनर्स्थापित करें",
+    "drag_title": "आकार बदलने के लिए खींचें",
+    "auto_runs": "स्वतः · {{count}}×",
+    "no_bootstrap": "MathBox.mathBox(…) नहीं मिला। WebGL कैनवास पाने के लिए इंजन आरंभ करें: var mathbox = MathBox.mathBox({ element: element, … }) (थंबनेल बनाने के लिए कैनवास आवश्यक है)।",
+    "menu_examples": "📚 उदाहरण"
   }
 }

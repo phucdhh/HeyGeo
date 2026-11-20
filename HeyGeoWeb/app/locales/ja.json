@@ -118,6 +118,7 @@
     "upload_first": "最初のモデルをアップロード",
     "jsxgraph": "💻 JSXGraph",
     "cindyjs": "🎯 CindyJS",
+    "mathbox": "🧊 MathBox",
     "just_now": "たった今",
     "minutes_ago": "{{count}}分前",
     "hours_ago": "{{count}}時間前",
@@ -333,5 +334,21 @@
     "history_title": "開発の歴史",
     "milestones_title": "主なマイルストーン",
     "changelog_title": "変更履歴（最新）"
+  },
+  "mathbox": {
+    "untitled": "無題",
+    "saved": "✓ モデルを保存しました",
+    "unknown_error": "不明なエラー",
+    "run_hint": "Ctrl+Enter で実行",
+    "save": "💾 保存",
+    "error_prefix": "エラー",
+    "close": "閉じる",
+    "back": "← 戻る",
+    "run_title": "コードを実行 (Ctrl+Enter)",
+    "reset_title": "サンプルコードを復元",
+    "drag_title": "ドラッグして幅を変更",
+    "auto_runs": "自動 · {{count}}×",
+    "no_bootstrap": "MathBox.mathBox(…) がありません。WebGL キャンバスを得るにはエンジンを初期化してください: var mathbox = MathBox.mathBox({ element: element, … }) （サムネイル作成にはキャンバスが必要です）。",
+    "menu_examples": "📚 サンプル"
   }
 }

@@ -7,6 +7,7 @@ import WSPViewer from '@/components/WSPViewer';
 import GeoGebraViewer from '@/components/GeoGebraViewer';
 import GeometryExpressionsViewer from '@/components/GeometryExpressionsViewer';
 import CindyJSViewer from '@/components/CindyJSViewer';
+import MathboxViewer from '@/components/MathboxViewer';
 import LatexRenderer from '@/components/LatexRenderer';
 import CommentsSection from '@/components/CommentsSection';
 import ModelReactionsBar from '@/components/ModelReactionsBar';
@@ -25,6 +26,9 @@ function ModelViewer({ data, id }: { data: unknown; id?: string }) {
   }
   if (rec.__type === 'cindy') {
     return <CindyJSViewer code={rec.code as string} idSuffix="share" />;
+  }
+  if (rec.__type === 'mathbox') {
+    return <MathboxViewer code={rec.code as string} idSuffix="share" />;
   }
   return (
     <JSXGraphViewer
@@ -55,6 +59,8 @@ function toolCredit(data: unknown): { label: string; url: string; own?: boolean 
     case 'cindy':
     case 'cindyjs':
       return { label: 'CindyJS', url: 'https://cindyjs.org' };
+    case 'mathbox':
+      return { label: 'MathBox', url: 'https://mathbox.org' };
     default:
       return { label: 'JSXGraph', url: 'https://jsxgraph.uni-bayreuth.de' };
   }

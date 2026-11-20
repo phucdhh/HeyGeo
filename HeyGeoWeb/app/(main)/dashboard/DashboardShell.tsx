@@ -154,6 +154,9 @@ export default function DashboardShell({ userName, userEmail, models, notificati
           <Link href="/cindy" className="btn-secondary text-sm flex items-center gap-1.5">
             {t('dashboard.cindyjs')}
           </Link>
+          <Link href="/mathbox" className="btn-secondary text-sm flex items-center gap-1.5">
+            {t('dashboard.mathbox')}
+          </Link>
           <Link href="/models/new" className="btn-primary">
             {t('dashboard.upload')}
           </Link>

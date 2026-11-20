@@ -118,6 +118,7 @@
     "upload_first": "上傳第一個模型",
     "jsxgraph": "💻 JSXGraph",
     "cindyjs": "🎯 CindyJS",
+    "mathbox": "🧊 MathBox",
     "just_now": "剛才",
     "minutes_ago": "{{count}} 分鐘前",
     "hours_ago": "{{count}} 小時前",
@@ -333,5 +334,21 @@
     "history_title": "開發歷程",
     "milestones_title": "重要里程碑",
     "changelog_title": "更新日誌（最近）"
+  },
+  "mathbox": {
+    "untitled": "未命名",
+    "saved": "✓ 模型已儲存",
+    "unknown_error": "未知錯誤",
+    "run_hint": "按 Ctrl+Enter 執行",
+    "save": "💾 儲存",
+    "error_prefix": "錯誤",
+    "close": "關閉",
+    "back": "← 返回",
+    "run_title": "執行程式碼 (Ctrl+Enter)",
+    "reset_title": "還原範例程式碼",
+    "drag_title": "拖曳以調整寬度",
+    "auto_runs": "自動 · {{count}}×",
+    "no_bootstrap": "缺少 MathBox.mathBox(…)。請初始化引擎：var mathbox = MathBox.mathBox({ element: element, … })，以取得 WebGL 畫布（建立縮圖需要畫布）。",
+    "menu_examples": "📚 範例"
   }
 }

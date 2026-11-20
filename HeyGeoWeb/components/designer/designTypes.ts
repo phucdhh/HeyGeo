@@ -63,6 +63,14 @@ export interface CindyData {
   code?: string;
 }
 
+// ─── MathBox model ────────────────────────────────────────────────────────────
+export interface MathboxData {
+  __type: 'mathbox';
+  version: string;
+  title: string;
+  code?: string;
+}
+
 export function emptyData(title = 'Chưa đặt tên'): HeyGeoData {
   return {
     version: '1.0',

@@ -118,6 +118,7 @@
     "upload_first": "Erstes Modell hochladen",
     "jsxgraph": "💻 JSXGraph",
     "cindyjs": "🎯 CindyJS",
+    "mathbox": "🧊 MathBox",
     "just_now": "gerade eben",
     "minutes_ago": "vor {{count}} Min.",
     "hours_ago": "vor {{count}} Std.",
@@ -333,5 +334,21 @@
     "history_title": "Entwicklungshistorie",
     "milestones_title": "Wichtige Meilensteine",
     "changelog_title": "Änderungsprotokoll (neueste)"
+  },
+  "mathbox": {
+    "untitled": "Unbenannt",
+    "saved": "✓ Modell gespeichert",
+    "unknown_error": "Unbekannter Fehler",
+    "run_hint": "Strg+Enter zum Ausführen",
+    "save": "💾 Speichern",
+    "error_prefix": "Fehler",
+    "close": "Schließen",
+    "back": "← Zurück",
+    "run_title": "Code ausführen (Strg+Enter)",
+    "reset_title": "Beispielcode wiederherstellen",
+    "drag_title": "Ziehen, um die Größe zu ändern",
+    "auto_runs": "auto · {{count}}×",
+    "no_bootstrap": "MathBox.mathBox(…) fehlt. Initialisieren Sie die Engine: var mathbox = MathBox.mathBox({ element: element, … }), um ein WebGL-Canvas zu erhalten (für die Vorschaubild-Erstellung erforderlich).",
+    "menu_examples": "📚 Beispiele"
   }
 }

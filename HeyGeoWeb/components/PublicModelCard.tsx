@@ -25,6 +25,9 @@ const GX_SVG = `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg"><r
 // Static placeholder for CindyJS models
 const CINDY_SVG = `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="120" fill="#fff1f2"/><line x1="16" y1="60" x2="184" y2="60" stroke="#fecdd3" stroke-width="1.5"/><line x1="100" y1="8" x2="100" y2="112" stroke="#fecdd3" stroke-width="1.5"/><path d="M100,60 C100,20 160,20 160,60 C160,100 100,100 100,60" fill="none" stroke="#f43f5e" stroke-width="2"/><path d="M100,60 C100,20 40,20 40,60 C40,100 100,100 100,60" fill="none" stroke="#e11d48" stroke-width="2"/><circle cx="100" cy="60" r="3" fill="#be123c"/><circle cx="160" cy="60" r="3" fill="#be123c"/><circle cx="40" cy="60" r="3" fill="#be123c"/><text x="100" y="116" text-anchor="middle" font-size="9" fill="#be123c" font-family="sans-serif" font-weight="600">CindyJS</text></svg>`;
 
+// Static placeholder for MathBox models
+const MATHBOX_SVG = `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="120" fill="#0e2230"/><line x1="30" y1="90" x2="170" y2="90" stroke="#155e75" stroke-width="1.5"/><line x1="100" y1="105" x2="100" y2="15" stroke="#155e75" stroke-width="1.5"/><line x1="100" y1="90" x2="155" y2="35" stroke="#155e75" stroke-width="1.5"/><path d="M45,78 Q100,18 155,78" fill="none" stroke="#22d3ee" stroke-width="2"/><path d="M55,70 Q100,32 145,70" fill="none" stroke="#0891b2" stroke-width="1.5"/><path d="M65,64 Q100,44 135,64" fill="none" stroke="#0e7490" stroke-width="1.5"/><line x1="100" y1="25" x2="100" y2="64" stroke="#67e8f9" stroke-width="1"/><circle cx="100" cy="25" r="3.5" fill="#f97316"/><text x="100" y="114" text-anchor="middle" font-size="9" fill="#67e8f9" font-family="sans-serif" font-weight="600">MathBox</text></svg>`;
+
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -64,6 +67,7 @@ export default function PublicModelCard({
     ?? ((modelType === 'sketchpad' || modelType === 'wsp') ? WSP_SVG : null)
     ?? (modelType === 'gx' ? GX_SVG : null)
     ?? (modelType === 'cindy' ? CINDY_SVG : null)
+    ?? (modelType === 'mathbox' ? MATHBOX_SVG : null)
     ?? ((!modelType || modelType === 'jsxgraph' || modelType === 'design'
       || modelType === 'heygeoweb') ? JXG_SVG : null);
   return (
