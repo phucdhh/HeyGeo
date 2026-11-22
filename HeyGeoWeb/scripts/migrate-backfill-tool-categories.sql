@@ -7,18 +7,21 @@ SET categories = array_cat(
   ARRAY(
     SELECT unnest(categories)
     EXCEPT
-    SELECT unnest(ARRAY['HeyGeo','JSXGraph','CindyJS','GeoGebra','Sketchpad','Web Sketchpad','Geometry Expressions'])
+    SELECT unnest(ARRAY['HeyGeo','JSXGraph','CindyJS','MathBox','GeoGebra','Sketchpad','Web Sketchpad','Geometry Expressions','HTML'])
   ),
   -- Append the correct tool category based on __type
   CASE ("jsonData"->>'__type')
     WHEN 'jsxgraph'  THEN ARRAY['JSXGraph']
+    WHEN 'heygeoweb' THEN ARRAY['HeyGeo']
     WHEN 'sketchpad' THEN ARRAY['Sketchpad']
     WHEN 'gsp'       THEN ARRAY['Sketchpad']
     WHEN 'wsp'       THEN ARRAY['Web Sketchpad']
     WHEN 'geogebra'  THEN ARRAY['GeoGebra']
     WHEN 'cindyjs'   THEN ARRAY['CindyJS']
     WHEN 'cindy'     THEN ARRAY['CindyJS']
+    WHEN 'mathbox'   THEN ARRAY['MathBox']
     WHEN 'gx'        THEN ARRAY['Geometry Expressions']
+    WHEN 'html'      THEN ARRAY['HTML']
     ELSE ARRAY[]::TEXT[]
   END
 )
@@ -30,7 +33,7 @@ SET categories = array_cat(
   ARRAY(
     SELECT unnest(categories)
     EXCEPT
-    SELECT unnest(ARRAY['HeyGeo','JSXGraph','CindyJS','GeoGebra','Sketchpad','Web Sketchpad','Geometry Expressions'])
+    SELECT unnest(ARRAY['HeyGeo','JSXGraph','CindyJS','MathBox','GeoGebra','Sketchpad','Web Sketchpad','Geometry Expressions','HTML'])
   ),
   ARRAY['HeyGeo']
 )
@@ -43,7 +46,7 @@ SET categories = array_cat(
   ARRAY(
     SELECT unnest(categories)
     EXCEPT
-    SELECT unnest(ARRAY['HeyGeo','JSXGraph','CindyJS','GeoGebra','Sketchpad','Web Sketchpad','Geometry Expressions'])
+    SELECT unnest(ARRAY['HeyGeo','JSXGraph','CindyJS','MathBox','GeoGebra','Sketchpad','Web Sketchpad','Geometry Expressions','HTML'])
   ),
   ARRAY['JSXGraph']
 )
