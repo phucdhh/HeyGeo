@@ -316,6 +316,11 @@
     "html_warning_pref": "यदि मॉडल किसी मौजूदा ऐप — HeyGeo, Sketchpad, Web Sketchpad, GeoGebra, Geometry Expressions — में बनाया गया है तो उस ऐप का फ़ाइल प्रकार चुनें, ताकि मॉडल सही ढंग से नामित और खोला जाए।",
     "html_warning_admin": "स्वलिखित HTML पृष्ठ उसमें मौजूद किसी भी स्क्रिप्ट को चलाता है। सिस्टम को नुकसान की आशंका पर Admin मॉडल हटा सकते हैं।",
     "html_warning_confirm": "समझा, अपलोड करें",
+    "thumb_label": "पूर्वदृश्य (वैकल्पिक)",
+    "thumb_pick": "छवि चुनें",
+    "thumb_clear": "डिफ़ॉल्ट छवि उपयोग करें",
+    "thumb_hint": "HeyGeo छवि को अधिकतम 640×360 तक घटाता है और 150 KB से कम WebP के रूप में सहेजता है। खाली छोड़ने पर मॉडल कार्ड सामान्य चित्र दिखाता है।",
+    "thumb_error": "यह छवि पढ़ी नहीं जा सकी। PNG, JPG या WebP फ़ाइल चुनें।",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {

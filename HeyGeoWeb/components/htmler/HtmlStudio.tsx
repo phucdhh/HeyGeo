@@ -13,6 +13,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import SaveModelDialog from '@/components/designer/SaveModelDialog';
 import GeometryExpressionsViewer from '@/components/GeometryExpressionsViewer';
 import HtmlCodeEditor, { type HtmlEditorHandle } from './HtmlCodeEditor';
+import ThumbCaptureButton from './ThumbCaptureButton';
+import { encodedBytes } from '@/lib/thumbCapture';
 import { HTML_THUMB_SVG, type HtmlPageType } from '@/lib/htmlModel';
 
 interface Props {
@@ -22,6 +24,8 @@ interface Props {
   initialTitle?: string;
   initialDescription?: string;
   initialIsPublic?: boolean;
+  /** The stored thumbnail, so the studio shows it and keeps it on every save. */
+  initialThumbnail?: string | null;
   initialHtml: string;
 }
 
@@ -31,9 +35,11 @@ export default function HtmlStudio({
   initialTitle,
   initialDescription = '',
   initialIsPublic = false,
+  initialThumbnail = null,
   initialHtml,
 }: Props) {
   const editorRef = useRef<HtmlEditorHandle | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
 
   const [title,       setTitle]       = useState(initialTitle ?? 'Chưa đặt tên');
   const [description, setDescription] = useState(initialDescription);
@@ -44,6 +50,17 @@ export default function HtmlStudio({
   const [preview, setPreview] = useState(initialHtml);
   const [runSeq,  setRunSeq]  = useState(0);
   const [code,    setCode]    = useState(initialHtml);
+  // One thumbnail per row: either the placeholder or an image the author took.
+  // Whatever is stored stays stored, so saving a page never discards a thumbnail
+  // that another editor set.
+  const [thumb, setThumb] = useState<{ dataUrl: string; isImage: boolean; width: number; height: number; bytes: number }>(() => {
+    const stored = initialThumbnail ?? '';
+    if (stored.startsWith('data:image/')) {
+      return { dataUrl: stored, isImage: true, width: 0, height: 0, bytes: encodedBytes(stored) };
+    }
+    return { dataUrl: stored || HTML_THUMB_SVG, isImage: false, width: 0, height: 0, bytes: 0 };
+  });
+  const [thumbError, setThumbError] = useState('');
   const hasTyped = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -99,10 +116,13 @@ export default function HtmlStudio({
 
       const url    = updateId ? `/api/models/${updateId}` : '/api/models';
       const method = updateId ? 'PUT' : 'POST';
-      // A new page gets the HTML placeholder; an existing one keeps its own
-      // thumbnail, which may be a real screenshot.
-      const body: Record<string, unknown> = { title: saveTitle, description: saveDesc, jsonData, isPublic: pub };
-      if (!updateId) body.thumbnailSvg = HTML_THUMB_SVG;
+      const body: Record<string, unknown> = {
+        title: saveTitle,
+        description: saveDesc,
+        jsonData,
+        isPublic: pub,
+        thumbnailSvg: thumb.dataUrl,
+      };
 
       const res = await fetch(url, {
         method,
@@ -128,7 +148,7 @@ export default function HtmlStudio({
       setIsSaving(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingId, pageType]);
+  }, [editingId, pageType, thumb]);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-900">
@@ -198,11 +218,36 @@ export default function HtmlStudio({
 
         <div className="flex-1 min-h-0 overflow-auto p-4 bg-gray-800">
           <div className="h-full min-h-[400px] flex flex-col">
+            <div className="flex items-center gap-2 flex-wrap pb-2">
+              <ThumbCaptureButton
+                targetRef={previewRef}
+                onCapture={(dataUrl, meta) => {
+                  setThumb({ dataUrl, isImage: true, ...meta });
+                  setThumbError('');
+                  setIsDirty(true);
+                }}
+                onError={setThumbError}
+              />
+              {thumb.isImage && (
+                <img
+                  src={thumb.dataUrl}
+                  alt="Ảnh xem trước của mô hình"
+                  data-testid="thumb-chip"
+                  className="h-[38px] w-[68px] rounded border border-gray-700 object-cover bg-white"
+                />
+              )}
+              <span className="text-[11px] text-gray-400">
+                {thumb.isImage
+                  ? `${thumb.width}×${thumb.height} · ${Math.round(thumb.bytes / 1024)} KB · thẻ mô hình dùng ảnh này`
+                  : 'Thẻ mô hình đang dùng ảnh mặc định HTML'}
+              </span>
+              {thumbError && <span className="text-[11px] text-red-400">{thumbError}</span>}
+            </div>
             <p className="text-[11px] text-gray-400 mb-2">
               Ngừng gõ 1,2 giây là trang chạy lại trong iframe sandbox — ▶ Chạy để chạy ngay.
               iframe này không có quyền truy cập HeyGeo của bạn, nên trang phải tự kéo thư viện từ CDN (three.js, JSXGraph…).
             </p>
-            <div className="flex-1 min-h-[400px] rounded-xl overflow-hidden bg-white">
+            <div ref={previewRef} className="flex-1 min-h-[400px] rounded-xl overflow-hidden bg-white">
               <GeometryExpressionsViewer
                 key={runSeq}
                 htmlContent={preview}

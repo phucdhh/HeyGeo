@@ -522,7 +522,8 @@ export default async function HelpPage() {
                 <><K>Trang bạn tự viết:</K> chọn loại <K>HTML tự chứa</K> thay vì Geometry Expressions. Cách chạy y hệt nhau, chỉ khác nhãn — mô hình sẽ mang danh mục <K>HTML</K> trong Gallery chứ không bị gán cho Geometry Expressions.</>,
                 <>Toàn bộ HTML được lưu trong mô hình; khi xem, HeyGeo đặt vào <Code>&lt;iframe sandbox="allow-scripts"&gt;</Code> — runtime của GE dùng <Code>eval()</Code> nên cần <Code>allow-scripts</Code>, và không cấp <Code>allow-same-origin</Code> để file nạp không đụng cookie của bạn.</>,
                 <>Kéo điểm, đổi tham số trong hình là do chính trang HTML đó, không phải HeyGeo.</>,
-                <><K>Sửa:</K> nút <K>✏️ Sửa HTML</K> mở <Code>/html?id=…</Code> — editor CodeMirror bên trái, iframe preview bên phải, <K>Ctrl+Enter</K> chạy lại, <K>Ctrl+S</K> lưu. Lưu chỉ thay <Code>htmlContent</Code>, giữ nguyên danh mục và nhãn của mô hình.</>,
+                <><K>Ảnh cho thẻ mô hình:</K> nút <K>📷 Chụp preview</K> trong <Code>/html</Code> lấy đúng khung hình đang chạy (duyệt hỏi phép chia sẻ màn hình, bạn chọn <K>This tab</K>), HeyGeo tự cắt theo khung preview và nén thành WebP tối đa 640×360, dưới 150 KB. Có thể <K>…</K> để chọn một ảnh có sẵn; trang tải lên HTML cũng có ô <K>Ảnh xem trước</K>.</>,
+                <><K>Sửa:</K> nút <K>✏️ Sửa HTML</K> mở <Code>/html?id=…</Code> — editor CodeMirror bên trái, iframe preview bên phải, ngừng gõ 1,2 giây là trang chạy lại, <K>Ctrl+Enter</K> chạy ngay, <K>Ctrl+S</K> lưu. Lưu chỉ thay <Code>htmlContent</Code> và ảnh xem trước, giữ nguyên danh mục và nhãn của mô hình.</>,
                 <><K>Hoặc làm việc với file:</K> <K>📥 Tải xuống HTML</K> rồi sửa bằng trợ lý AI của bạn và <K>🔄 Thay thế file</K>; mở <Code>/html</Code> không kèm <Code>id</Code> để bắt đầu một trang trống.</>,
               ]}
             />

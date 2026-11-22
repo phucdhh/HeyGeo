@@ -316,6 +316,11 @@
     "html_warning_pref": "If the model was authored in one of the existing apps — HeyGeo, Sketchpad, Web Sketchpad, GeoGebra, Geometry Expressions — choose that app's file type instead, so the model is labelled and opened correctly.",
     "html_warning_admin": "A self-written HTML page runs whatever script it contains. An Admin may delete the model if it is suspected of being able to harm the system.",
     "html_warning_confirm": "I understand, upload it",
+    "thumb_label": "Preview image (optional)",
+    "thumb_pick": "Choose image",
+    "thumb_clear": "Use the default image",
+    "thumb_hint": "HeyGeo shrinks it to at most 640×360 and stores it as WebP under 150 KB. Left empty, the model card uses the shared illustration.",
+    "thumb_error": "That image could not be read. Pick a PNG, JPG or WebP file.",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {

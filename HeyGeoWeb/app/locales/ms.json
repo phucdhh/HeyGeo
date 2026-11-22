@@ -316,6 +316,11 @@
     "html_warning_pref": "Jika model itu digubah dalam aplikasi sedia ada — HeyGeo, Sketchpad, Web Sketchpad, GeoGebra, Geometry Expressions — pilih jenis fail aplikasi tersebut supaya model dilabel dan dibuka dengan betul.",
     "html_warning_admin": "Halaman HTML tulisan sendiri menjalankan apa-apa skrip yang terkandung di dalamnya. Admin boleh memadam model HTML jika disyaki boleh membahayakan sistem.",
     "html_warning_confirm": "Saya faham, muat naik",
+    "thumb_label": "Imej pratonton (pilihan)",
+    "thumb_pick": "Pilih imej",
+    "thumb_clear": "Guna imej lalai",
+    "thumb_hint": "HeyGeo mengecilkan imej kepada maksimum 640×360 dan menyimpannya sebagai WebP di bawah 150 KB. Jika dibiarkan kosong, kad model menggunakan ilustrasi bersama.",
+    "thumb_error": "Imej ini tidak dapat dibaca. Pilih fail PNG, JPG atau WebP.",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {

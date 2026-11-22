@@ -316,6 +316,11 @@
     "html_warning_pref": "Si le modèle a été créé dans l'une des applications existantes — HeyGeo, Sketchpad, Web Sketchpad, GeoGebra, Geometry Expressions — choisissez plutôt le type de fichier de cette application, pour que le modèle soit bien étiqueté et ouvert.",
     "html_warning_admin": "Une page HTML écrite par vous exécute tout le script qu'elle contient. Un administrateur peut supprimer le modèle s'il est soupçonné de pouvoir nuire au système.",
     "html_warning_confirm": "Je comprends, téléverser",
+    "thumb_label": "Aperçu (facultatif)",
+    "thumb_pick": "Choisir une image",
+    "thumb_clear": "Utiliser l’image par défaut",
+    "thumb_hint": "HeyGeo réduit l’image à 640×360 au maximum et l’enregistre en WebP de moins de 150 ko. Sans image, la carte du modèle utilise l’illustration commune.",
+    "thumb_error": "Cette image est illisible. Choisissez un fichier PNG, JPG ou WebP.",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {

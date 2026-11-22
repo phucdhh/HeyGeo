@@ -8,6 +8,7 @@ import { detectIs3D } from '@/components/GeoGebraViewer';
 import { parseGsp } from '@/lib/gsp/gspBinary';
 import { gspToHeyGeo } from '@/lib/gsp/gspToHeyGeo';
 import { HTML_THUMB_SVG } from '@/lib/htmlModel';
+import { fileToThumb } from '@/lib/thumbCapture';
 import '@/lib/i18n';
 
 type ModelType = 'heygeo' | 'sketchpad' | 'wsp' | 'geogebra' | 'gx' | 'html';
@@ -37,6 +38,7 @@ export default function NewModelPage() {
   const router = useRouter();
   const { t } = useTranslation();
   const fileRef = useRef<HTMLInputElement>(null);
+  const thumbFileRef = useRef<HTMLInputElement>(null);
 
   const [modelType, setModelType] = useState<ModelType>('heygeo');
   const [form, setForm]           = useState({ title: '', description: '', guide: '' });
@@ -286,6 +288,61 @@ export default function NewModelPage() {
             </div>
           )}
         </div>
+
+        {/* A plain HTML page has nothing HeyGeo can draw, so the author may add its picture */}
+        {modelType === 'html' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('upload.thumb_label')}</label>
+            <div className="flex items-center gap-3">
+              <div className="w-24 h-16 rounded-lg border border-gray-200 bg-white overflow-hidden flex items-center justify-center flex-shrink-0">
+                {thumbnailSvg?.startsWith('data:') ? (
+                  <img src={thumbnailSvg} alt="" className="w-full h-full object-contain" />
+                ) : (
+                  <span className="text-2xl">🌐</span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => thumbFileRef.current?.click()}
+                    className="btn-secondary !py-1.5 !text-xs"
+                  >
+                    {t('upload.thumb_pick')}
+                  </button>
+                  {thumbnailSvg?.startsWith('data:') && (
+                    <button
+                      type="button"
+                      onClick={() => setThumbnailSvg(HTML_THUMB_SVG)}
+                      className="text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      {t('upload.thumb_clear')}
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">{t('upload.thumb_hint')}</p>
+              </div>
+              <input
+                ref={thumbFileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!file) return;
+                  try {
+                    const thumb = await fileToThumb(file);
+                    if (!thumb) setError(t('upload.thumb_error'));
+                    else { setError(''); setThumbnailSvg(thumb.dataUrl); }
+                  } catch {
+                    setError(t('upload.thumb_error'));
+                  }
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Title */}
         <div>

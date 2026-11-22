@@ -316,6 +316,11 @@
     "html_warning_pref": "既存のアプリ — HeyGeo、Sketchpad、Web Sketchpad、GeoGebra、Geometry Expressions — で作成したモデルは、それぞれのファイル形式を選んでください。正しい名前と正しいビューアで開かれます。",
     "html_warning_admin": "自作の HTML ページは、中に含まれるスクリプトを実行します。システムに危害が及ぶ疑いがある場合、Admin はモデルを削除することがあります。",
     "html_warning_confirm": "了解しました。アップロード",
+    "thumb_label": "プレビュー画像（任意）",
+    "thumb_pick": "画像を選択",
+    "thumb_clear": "既定の画像を使う",
+    "thumb_hint": "HeyGeo は画像を最大 640×360 に縮小し、150 KB 未満の WebP で保存します。未指定ならモデルカードは共通のイラストを使います。",
+    "thumb_error": "この画像を読み取れませんでした。PNG・JPG・WebP ファイルを選んでください。",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {

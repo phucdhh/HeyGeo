@@ -316,6 +316,11 @@
     "html_warning_pref": "หากโมเดลนั้นสร้างในแอปที่มีอยู่แล้ว — HeyGeo, Sketchpad, Web Sketchpad, GeoGebra, Geometry Expressions — กรุณาเลือกประเภทไฟล์ของแอปนั้น เพื่อให้โมเดลถูกติดป้ายและเปิดถูกต้อง",
     "html_warning_admin": "หน้า HTML ที่เขียนเองจะรันสคริปต์ใด ๆ ที่มีอยู่ภายใน ผู้ดูแลระบบ (Admin) อาจลบโมเดล HTML ได้ หากสงสัยว่าอาจทำให้เกิดอันตรายต่อระบบ",
     "html_warning_confirm": "เข้าใจแล้ว อัปโหลดต่อ",
+    "thumb_label": "ภาพตัวอย่าง (ไม่บังคับ)",
+    "thumb_pick": "เลือกภาพ",
+    "thumb_clear": "ใช้ภาพเริ่มต้น",
+    "thumb_hint": "HeyGeo ย่อภาพให้เหลือไม่เกิน 640×360 และเก็บเป็น WebP ต่ำกว่า 150 KB หากเว้นว่าง การ์ดโมเดลจะใช้ภาพประกอบทั่วไป",
+    "thumb_error": "อ่านภาพนี้ไม่ได้ กรุณาเลือกไฟล์ PNG, JPG หรือ WebP",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {

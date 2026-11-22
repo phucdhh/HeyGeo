@@ -30,7 +30,7 @@ export default async function HtmlPage({ searchParams }: Props) {
     : { id: params.id, userId: payload.userId };
   const model = await prisma.model.findUnique({
     where: whereClause,
-    select: { id: true, title: true, jsonData: true, description: true, isPublic: true },
+    select: { id: true, title: true, jsonData: true, description: true, isPublic: true, thumbnailSvg: true },
   });
   if (!model) redirect('/dashboard');
 
@@ -44,6 +44,7 @@ export default async function HtmlPage({ searchParams }: Props) {
       initialTitle={model.title}
       initialDescription={model.description ?? ''}
       initialIsPublic={model.isPublic}
+      initialThumbnail={model.thumbnailSvg}
       initialHtml={(model.jsonData as Record<string, unknown>).htmlContent as string}
     />
   );

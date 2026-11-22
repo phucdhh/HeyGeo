@@ -316,6 +316,11 @@
     "html_warning_pref": "Nếu mô hình được soạn trong các ứng dụng có sẵn — HeyGeo, Sketchpad, Web Sketchpad, GeoGebra, Geometry Expressions — hãy chọn đúng kiểu tệp của ứng dụng đó khi tải lên, để mô hình được gắn nhãn và mở đúng cách.",
     "html_warning_admin": "Trang HTML tự viết sẽ chạy mọi đoạn mã nó chứa. Quản trị viên có thể xoá mô hình HTML tự viết nếu nghi ngờ gây hại cho hệ thống.",
     "html_warning_confirm": "Tôi hiểu, tải lên",
+    "thumb_label": "Ảnh xem trước (không bắt buộc)",
+    "thumb_pick": "Chọn ảnh",
+    "thumb_clear": "Dùng ảnh mặc định",
+    "thumb_hint": "HeyGeo thu ảnh về tối đa 640×360 và lưu dạng WebP dưới 150 KB. Để trống thì thẻ mô hình dùng ảnh minh hoạ chung.",
+    "thumb_error": "Không đọc được ảnh này. Hãy chọn file PNG, JPG hoặc WebP.",
     "error_bad_gsp": "Không đọc được đối tượng nào từ file .gsp này."
   },
   "release": {
