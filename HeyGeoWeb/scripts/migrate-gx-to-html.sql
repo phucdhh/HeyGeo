@@ -8,6 +8,9 @@
 -- in-file marker that proves a page came from Geometry Expressions, so this
 -- stays a human call.  Safe to run twice — a row is either 'gx' (to convert)
 -- or 'html' (done).
+--
+-- Checked by hand: none of these accounts' pages mention Geometry Expressions,
+-- and each one is a self-written page (three.js / canvas / Web Sketchpad host).
 
 BEGIN;
 
@@ -15,13 +18,13 @@ BEGIN;
 --
 -- SELECT m.id, m.title, u.username
 -- FROM "Model" m JOIN "User" u ON u.id = m."userId"
--- WHERE u.username = ANY(ARRAY['lethingoclinh258'])
+-- WHERE u.username = ANY(ARRAY['lethingoclinh258', 'phucnguyen04112005'])
 --   AND m."jsonData"->>'__type' = 'gx';
 
 WITH targets AS (
   SELECT m.id
   FROM "Model" m JOIN "User" u ON u.id = m."userId"
-  WHERE u.username = ANY(ARRAY['lethingoclinh258'])
+  WHERE u.username = ANY(ARRAY['lethingoclinh258', 'phucnguyen04112005'])
     AND m."jsonData"->>'__type' = 'gx'
 )
 UPDATE "Model" m

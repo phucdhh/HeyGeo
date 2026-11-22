@@ -12,6 +12,7 @@ SET categories = array_cat(
   -- Append the correct tool category based on __type
   CASE ("jsonData"->>'__type')
     WHEN 'jsxgraph'  THEN ARRAY['JSXGraph']
+    WHEN 'heygeo'    THEN ARRAY['HeyGeo']
     WHEN 'heygeoweb' THEN ARRAY['HeyGeo']
     WHEN 'sketchpad' THEN ARRAY['Sketchpad']
     WHEN 'gsp'       THEN ARRAY['Sketchpad']
