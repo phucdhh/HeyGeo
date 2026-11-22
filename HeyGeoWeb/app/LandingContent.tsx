@@ -87,10 +87,22 @@ export default function LandingContent({ newestModels, popularModels, user }: Pr
                 <Link href="/dashboard" className="text-sm text-amber-200 hover:text-white transition-colors">
                   {t('nav.dashboard')}
                 </Link>
+                <Link href="/help" prefetch={false} className="text-sm text-amber-200 hover:text-white transition-colors">
+                  {t('nav.help')}
+                </Link>
+                <Link href="/gallery" className="text-sm text-amber-200 hover:text-white transition-colors">
+                  {t('nav.gallery')}
+                </Link>
                 <UserAvatar user={user} />
               </>
             ) : (
               <>
+                <Link href="/gallery" className="text-sm text-amber-200 hover:text-white transition-colors">
+                  {t('nav.gallery')}
+                </Link>
+                <Link href="/help" prefetch={false} className="text-sm text-amber-200 hover:text-white transition-colors">
+                  {t('nav.help')}
+                </Link>
                 <Link href="/login" className="text-sm text-amber-200 hover:text-white transition-colors">
                   {t('nav.login')}
                 </Link>

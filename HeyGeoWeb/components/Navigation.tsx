@@ -24,6 +24,9 @@ export default function Navigation({ user }: Props) {
         <div className="flex items-center gap-5">
           <SearchBar />
           <LanguageSwitcher />
+          <Link href="/help" prefetch={false} className="text-sm text-amber-200 hover:text-white transition-colors">
+            {t('nav.help')}
+          </Link>
           {user ? (
             <>
               {user.role === 'ADMIN' && (
