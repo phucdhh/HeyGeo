@@ -9,7 +9,7 @@
  * than patches the frame.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import SaveModelDialog from '@/components/designer/SaveModelDialog';
 import GeometryExpressionsViewer from '@/components/GeometryExpressionsViewer';
 import HtmlCodeEditor, { type HtmlEditorHandle } from './HtmlCodeEditor';
@@ -43,6 +43,9 @@ export default function HtmlStudio({
 
   const [preview, setPreview] = useState(initialHtml);
   const [runSeq,  setRunSeq]  = useState(0);
+  const [code,    setCode]    = useState(initialHtml);
+  const hasTyped = useRef(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [isSaving,       setIsSaving]       = useState(false);
@@ -57,8 +60,24 @@ export default function HtmlStudio({
   }
 
   function run() {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     setPreview(editorRef.current?.getCode() ?? '');
     setRunSeq((n) => n + 1);
+  }
+
+  // ── Auto-run 1.2 s after the last keystroke, like the JSXGraph coder ──────
+  useEffect(() => {
+    if (!hasTyped.current) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(run, 1200);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
+  function handleChange(next: string) {
+    hasTyped.current = true;
+    setCode(next);
+    setIsDirty(true);
   }
 
   function handleSave() {
@@ -139,7 +158,7 @@ export default function HtmlStudio({
 
         <div className="flex-1" />
 
-        <span className="text-gray-600 text-xs hidden sm:inline">Ctrl+Enter để chạy</span>
+        <span className="text-gray-600 text-xs hidden sm:inline">Tự chạy sau 1,2 giây · Ctrl+Enter để chạy ngay</span>
 
         <button
           onClick={run}
@@ -171,7 +190,7 @@ export default function HtmlStudio({
           <HtmlCodeEditor
             ref={editorRef}
             initialCode={initialHtml}
-            onChange={() => setIsDirty(true)}
+            onChange={handleChange}
             onRun={run}
             onSave={handleSave}
           />
@@ -180,8 +199,8 @@ export default function HtmlStudio({
         <div className="flex-1 min-h-0 overflow-auto p-4 bg-gray-800">
           <div className="h-full min-h-[400px] flex flex-col">
             <p className="text-[11px] text-gray-400 mb-2">
-              Trang chạy trong iframe sandbox, không có quyền truy cập HeyGeo của bạn.
-              Thư viện kéo từ CDN (three.js, JSXGraph…) sẽ hiện sau khi bấm ▶ Chạy.
+              Ngừng gõ 1,2 giây là trang chạy lại trong iframe sandbox — ▶ Chạy để chạy ngay.
+              iframe này không có quyền truy cập HeyGeo của bạn, nên trang phải tự kéo thư viện từ CDN (three.js, JSXGraph…).
             </p>
             <div className="flex-1 min-h-[400px] rounded-xl overflow-hidden bg-white">
               <GeometryExpressionsViewer
