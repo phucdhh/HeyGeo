@@ -22,6 +22,9 @@ const WSP_SVG = `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg"><
 // Static placeholder for Geometry Expressions (gx) models
 const GX_SVG = `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="120" fill="#f0fdf9"/><line x1="16" y1="60" x2="184" y2="60" stroke="#99f6e4" stroke-width="1.5"/><line x1="100" y1="8" x2="100" y2="112" stroke="#99f6e4" stroke-width="1.5"/><ellipse cx="100" cy="60" rx="52" ry="30" fill="none" stroke="#14b8a6" stroke-width="2"/><line x1="48" y1="60" x2="152" y2="60" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4,3"/><circle cx="152" cy="60" r="3" fill="#0f766e"/><circle cx="48" cy="60" r="3" fill="#0f766e"/><circle cx="100" cy="30" r="3" fill="#0f766e"/><text x="122" y="56" font-size="9" fill="#0f766e" font-family="serif" font-style="italic">a</text><text x="100" y="116" text-anchor="middle" font-size="9" fill="#0f766e" font-family="sans-serif" font-weight="600">Geometry Expressions</text></svg>`;
 
+// Static placeholder for HTML models authored outside any geometry tool
+const HTML_SVG = `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="120" fill="#f1f5f9"/><rect x="26" y="18" width="148" height="80" rx="8" fill="none" stroke="#64748b" stroke-width="2"/><line x1="26" y1="38" x2="174" y2="38" stroke="#cbd5e1" stroke-width="1.5"/><circle cx="38" cy="28" r="3" fill="#94a3b8"/><circle cx="50" cy="28" r="3" fill="#94a3b8"/><circle cx="62" cy="28" r="3" fill="#94a3b8"/><path d="M 74 58 L 60 72 L 74 86" fill="none" stroke="#0f172a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M 126 58 L 140 72 L 126 86" fill="none" stroke="#0f172a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="112" y1="54" x2="96" y2="90" stroke="#475569" stroke-width="3" stroke-linecap="round"/><text x="100" y="116" text-anchor="middle" font-size="9" fill="#475569" font-family="sans-serif" font-weight="600">HTML</text></svg>`;
+
 // Static placeholder for CindyJS models
 const CINDY_SVG = `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="120" fill="#fff1f2"/><line x1="16" y1="60" x2="184" y2="60" stroke="#fecdd3" stroke-width="1.5"/><line x1="100" y1="8" x2="100" y2="112" stroke="#fecdd3" stroke-width="1.5"/><path d="M100,60 C100,20 160,20 160,60 C160,100 100,100 100,60" fill="none" stroke="#f43f5e" stroke-width="2"/><path d="M100,60 C100,20 40,20 40,60 C40,100 100,100 100,60" fill="none" stroke="#e11d48" stroke-width="2"/><circle cx="100" cy="60" r="3" fill="#be123c"/><circle cx="160" cy="60" r="3" fill="#be123c"/><circle cx="40" cy="60" r="3" fill="#be123c"/><text x="100" y="116" text-anchor="middle" font-size="9" fill="#be123c" font-family="sans-serif" font-weight="600">CindyJS</text></svg>`;
 
@@ -66,6 +69,7 @@ export default function PublicModelCard({
     ?? (modelType === 'geogebra' ? GGB_2D_SVG : null)
     ?? ((modelType === 'sketchpad' || modelType === 'wsp') ? WSP_SVG : null)
     ?? (modelType === 'gx' ? GX_SVG : null)
+    ?? (modelType === 'html' ? HTML_SVG : null)
     ?? (modelType === 'cindy' ? CINDY_SVG : null)
     ?? (modelType === 'mathbox' ? MATHBOX_SVG : null)
     ?? ((!modelType || modelType === 'jsxgraph' || modelType === 'design'

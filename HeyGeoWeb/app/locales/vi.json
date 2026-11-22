@@ -2,6 +2,8 @@
   "nav": {
     "dashboard": "Dashboard",
     "settings": "Cài đặt",
+    "help": "Trợ giúp",
+    "gallery": "Gallery",
     "login": "Đăng nhập",
     "register": "Đăng ký",
     "admin": "★ Admin",
@@ -308,6 +310,12 @@
     "type_geogebra_hint": "Chọn file .ggb xuất từ GeoGebra",
     "type_gx_label": "File HTML (Geometry Expressions)",
     "type_gx_hint": "Chọn file .html xuất từ Geometry Expressions",
+    "type_html_label": "Trang HTML tự chứa",
+    "type_html_hint": "Chọn file .html do bạn tự viết (canvas / SVG / JSXGraph / three.js)",
+    "html_warning_title": "Bạn đang tải lên trang HTML tự viết",
+    "html_warning_pref": "Nếu mô hình được soạn trong các ứng dụng có sẵn — HeyGeo, Sketchpad, Web Sketchpad, GeoGebra, Geometry Expressions — hãy chọn đúng kiểu tệp của ứng dụng đó khi tải lên, để mô hình được gắn nhãn và mở đúng cách.",
+    "html_warning_admin": "Trang HTML tự viết sẽ chạy mọi đoạn mã nó chứa. Quản trị viên có thể xoá mô hình HTML tự viết nếu nghi ngờ gây hại cho hệ thống.",
+    "html_warning_confirm": "Tôi hiểu, tải lên",
     "error_bad_gsp": "Không đọc được đối tượng nào từ file .gsp này."
   },
   "release": {

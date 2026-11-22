@@ -2,6 +2,8 @@
   "nav": {
     "dashboard": "แดชบอร์ด",
     "settings": "การตั้งค่า",
+    "help": "ความช่วยเหลือ",
+    "gallery": "แกลเลอรี",
     "login": "เข้าสู่ระบบ",
     "register": "สมัครสมาชิก",
     "admin": "★ Admin",
@@ -308,6 +310,12 @@
     "type_geogebra_hint": "เลือกไฟล์ .ggb จาก GeoGebra",
     "type_gx_label": "ไฟล์ HTML (Geometry Expressions)",
     "type_gx_hint": "เลือกไฟล์ .html จาก Geometry Expressions",
+    "type_html_label": "หน้า HTML (สมบูรณ์ในไฟล์เดียว)",
+    "type_html_hint": "เลือกไฟล์ .html ที่คุณเขียนเอง (canvas / SVG / JSXGraph / three.js)",
+    "html_warning_title": "คุณกำลังอัปโหลดหน้า HTML ที่เขียนเอง",
+    "html_warning_pref": "หากโมเดลนั้นสร้างในแอปที่มีอยู่แล้ว — HeyGeo, Sketchpad, Web Sketchpad, GeoGebra, Geometry Expressions — กรุณาเลือกประเภทไฟล์ของแอปนั้น เพื่อให้โมเดลถูกติดป้ายและเปิดถูกต้อง",
+    "html_warning_admin": "หน้า HTML ที่เขียนเองจะรันสคริปต์ใด ๆ ที่มีอยู่ภายใน ผู้ดูแลระบบ (Admin) อาจลบโมเดล HTML ได้ หากสงสัยว่าอาจทำให้เกิดอันตรายต่อระบบ",
+    "html_warning_confirm": "เข้าใจแล้ว อัปโหลดต่อ",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {

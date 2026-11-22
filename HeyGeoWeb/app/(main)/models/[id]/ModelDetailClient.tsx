@@ -19,7 +19,7 @@ const MATH_CATEGORIES = [
 ];
 
 const TOOL_CATEGORIES_SET = new Set([
-  'HeyGeo', 'JSXGraph', 'CindyJS', 'MathBox', 'GeoGebra', 'Sketchpad', 'Web Sketchpad', 'Geometry Expressions',
+  'HeyGeo', 'JSXGraph', 'CindyJS', 'MathBox', 'GeoGebra', 'Sketchpad', 'Web Sketchpad', 'Geometry Expressions', 'HTML',
 ]);
 
 function toolLabelFromType(rec: Record<string, unknown>): string | null {
@@ -39,6 +39,7 @@ function toolLabelFromType(rec: Record<string, unknown>): string | null {
     case 'cindy':     return 'CindyJS';
     case 'mathbox':   return 'MathBox';
     case 'gx':        return 'Geometry Expressions';
+    case 'html':      return 'HTML';
     default:          return null;
   }
 }
@@ -51,8 +52,13 @@ function ModelViewer({ data, onGgbReady, onCindyReady }: { data: object; onGgbRe
   if (rec.__type === 'geogebra') {
     return <GeoGebraViewer base64={rec.base64 as string} is3d={rec.is3d as boolean | undefined} onReady={onGgbReady} />;
   }
-  if (rec.__type === 'gx') {
-    return <GeometryExpressionsViewer htmlContent={rec.htmlContent as string} />;
+  if (rec.__type === 'gx' || rec.__type === 'html') {
+    return (
+      <GeometryExpressionsViewer
+        htmlContent={rec.htmlContent as string}
+        label={rec.__type === 'gx' ? 'Geometry Expressions Viewer' : 'HTML model viewer'}
+      />
+    );
   }
   if (rec.__type === 'cindy') {
     return <CindyJSViewer code={rec.code as string} idSuffix="detail" onReady={onCindyReady} />;
@@ -97,11 +103,12 @@ export default function ModelDetailClient({ model: initial, shareUrl: initialSha
   const replaceFileRef    = useRef<HTMLInputElement>(null);
   const replaceJsonRef    = useRef<HTMLInputElement>(null);
 
-  const isGx = (model.jsonData as Record<string, unknown>).__type === 'gx';
-  const autoToolCategory = toolLabelFromType(model.jsonData as Record<string, unknown>);
+  const rec0 = model.jsonData as Record<string, unknown>;
+  const isHtmlPage = rec0.__type === 'gx' || rec0.__type === 'html';
+  const autoToolCategory = toolLabelFromType(rec0);
   const isHeyGeo = autoToolCategory === 'HeyGeo';
 
-  const downloadGx = () => {
+  const downloadHtml = () => {
     const rec = model.jsonData as Record<string, unknown>;
     const html = rec.htmlContent as string;
     const blob = new Blob([html], { type: 'text/html' });
@@ -119,7 +126,9 @@ export default function ModelDetailClient({ model: initial, shareUrl: initialSha
     setReplacing(true);
     setError('');
     const text = await file.text();
-    const newJsonData = { __type: 'gx', htmlContent: text };
+    // Replacing the file must not relabel the model: an authored HTML page stays
+    // HTML, a Geometry Expressions export stays Geometry Expressions.
+    const newJsonData = { __type: rec0.__type === 'gx' ? 'gx' : 'html', htmlContent: text };
     const res = await fetch(`/api/models/${model.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -308,10 +317,10 @@ export default function ModelDetailClient({ model: initial, shareUrl: initialSha
             </>
           )}
 
-          {/* GX-only: download + replace */}
-          {isGx && !editing && (
+          {/* HTML-page models (authored pages and Geometry Expressions exports): download + replace */}
+          {isHtmlPage && !editing && (
             <>
-              <button onClick={downloadGx} className="btn-secondary !py-1.5 !text-xs">
+              <button onClick={downloadHtml} className="btn-secondary !py-1.5 !text-xs">
                 📥 Tải xuống HTML
               </button>
               <button

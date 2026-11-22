@@ -94,12 +94,15 @@ export function toolCategoryFromJson(jsonData: unknown): string | null {
     case 'cindy':     return 'CindyJS';
     case 'mathbox':   return 'MathBox';
     case 'gx':        return 'Geometry Expressions';
+    // A hand-written self-contained HTML page (canvas / three.js / JSXGraph code)
+    // that is not an export of any particular geometry tool.
+    case 'html':      return 'HTML';
     default:          return null;
   }
 }
 
 const TOOL_CATEGORIES_SET = new Set([
-  'HeyGeo', 'JSXGraph', 'CindyJS', 'MathBox', 'GeoGebra', 'Sketchpad', 'Web Sketchpad', 'Geometry Expressions',
+  'HeyGeo', 'JSXGraph', 'CindyJS', 'MathBox', 'GeoGebra', 'Sketchpad', 'Web Sketchpad', 'Geometry Expressions', 'HTML',
 ]);
 
 /**

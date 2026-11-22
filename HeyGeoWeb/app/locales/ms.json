@@ -2,6 +2,8 @@
   "nav": {
     "dashboard": "Papan Pemuka",
     "settings": "Tetapan",
+    "help": "Bantuan",
+    "gallery": "Galeri",
     "login": "Log Masuk",
     "register": "Daftar",
     "admin": "★ Admin",
@@ -308,6 +310,12 @@
     "type_geogebra_hint": "Pilih fail .ggb yang dieksport dari GeoGebra",
     "type_gx_label": "Fail HTML (Geometry Expressions)",
     "type_gx_hint": "Pilih fail .html yang dieksport dari Geometry Expressions",
+    "type_html_label": "Halaman HTML (mandiri)",
+    "type_html_hint": "Pilih fail .html yang anda tulis sendiri (kanvas / SVG / JSXGraph / three.js)",
+    "html_warning_title": "Anda sedang memuat naik halaman HTML tulisan sendiri",
+    "html_warning_pref": "Jika model itu digubah dalam aplikasi sedia ada — HeyGeo, Sketchpad, Web Sketchpad, GeoGebra, Geometry Expressions — pilih jenis fail aplikasi tersebut supaya model dilabel dan dibuka dengan betul.",
+    "html_warning_admin": "Halaman HTML tulisan sendiri menjalankan apa-apa skrip yang terkandung di dalamnya. Admin boleh memadam model HTML jika disyaki boleh membahayakan sistem.",
+    "html_warning_confirm": "Saya faham, muat naik",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {

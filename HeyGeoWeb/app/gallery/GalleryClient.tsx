@@ -30,6 +30,7 @@ const TOOL_CATEGORIES = [
   'Sketchpad',
   'Web Sketchpad',
   'Geometry Expressions',
+  'HTML',
 ];
 
 interface GalleryModel {

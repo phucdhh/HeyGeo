@@ -2,6 +2,8 @@
   "nav": {
     "dashboard": "डैशबोर्ड",
     "settings": "सेटिंग्स",
+    "help": "सहायता",
+    "gallery": "गैलरी",
     "login": "लॉग इन",
     "register": "साइन अप",
     "admin": "★ Admin",
@@ -308,6 +310,12 @@
     "type_geogebra_hint": "GeoGebra से .ggb फ़ाइल चुनें",
     "type_gx_label": "HTML फ़ाइल (Geometry Expressions)",
     "type_gx_hint": "Geometry Expressions से .html फ़ाइल चुनें",
+    "type_html_label": "HTML पृष्ठ (स्व-निहित)",
+    "type_html_hint": "अपने द्वारा रचित .html फ़ाइल चुनें (कैनवास / SVG / JSXGraph / three.js)",
+    "html_warning_title": "आप स्वलिखित HTML पृष्ठ अपलोड कर रहे हैं",
+    "html_warning_pref": "यदि मॉडल किसी मौजूदा ऐप — HeyGeo, Sketchpad, Web Sketchpad, GeoGebra, Geometry Expressions — में बनाया गया है तो उस ऐप का फ़ाइल प्रकार चुनें, ताकि मॉडल सही ढंग से नामित और खोला जाए।",
+    "html_warning_admin": "स्वलिखित HTML पृष्ठ उसमें मौजूद किसी भी स्क्रिप्ट को चलाता है। सिस्टम को नुकसान की आशंका पर Admin मॉडल हटा सकते हैं।",
+    "html_warning_confirm": "समझा, अपलोड करें",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {

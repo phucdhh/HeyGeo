@@ -21,8 +21,13 @@ function ModelViewer({ data, id }: { data: unknown; id?: string }) {
   if (rec.__type === 'geogebra') {
     return <GeoGebraViewer base64={rec.base64 as string} is3d={rec.is3d as boolean | undefined} />;
   }
-  if (rec.__type === 'gx') {
-    return <GeometryExpressionsViewer htmlContent={rec.htmlContent as string} />;
+  if (rec.__type === 'gx' || rec.__type === 'html') {
+    return (
+      <GeometryExpressionsViewer
+        htmlContent={rec.htmlContent as string}
+        label={rec.__type === 'gx' ? 'Geometry Expressions Viewer' : 'HTML model viewer'}
+      />
+    );
   }
   if (rec.__type === 'cindy') {
     return <CindyJSViewer code={rec.code as string} idSuffix="share" />;
@@ -56,6 +61,9 @@ function toolCredit(data: unknown): { label: string; url: string; own?: boolean 
       return { label: 'GeoGebra', url: 'https://www.geogebra.org' };
     case 'gx':
       return { label: 'Geometry Expressions', url: 'https://www.geometryexpressions.com' };
+    case 'html':
+      // An authored page has no single upstream engine to credit.
+      return { label: 'HTML', url: 'https://heygeo.pedu.vn/help', own: true };
     case 'cindy':
     case 'cindyjs':
       return { label: 'CindyJS', url: 'https://cindyjs.org' };

@@ -2,6 +2,8 @@
   "nav": {
     "dashboard": "Tableau de bord",
     "settings": "Paramètres",
+    "help": "Aide",
+    "gallery": "Galerie",
     "login": "Connexion",
     "register": "S'inscrire",
     "admin": "★ Admin",
@@ -308,6 +310,12 @@
     "type_geogebra_hint": "Sélectionner le fichier .ggb exporté depuis GeoGebra",
     "type_gx_label": "Fichier HTML (Geometry Expressions)",
     "type_gx_hint": "Sélectionner le fichier .html exporté depuis Geometry Expressions",
+    "type_html_label": "Page HTML (autonome)",
+    "type_html_hint": "Sélectionner un fichier .html créé par vous (canvas / SVG / JSXGraph / three.js)",
+    "html_warning_title": "Vous téléversez une page HTML écrite par vous",
+    "html_warning_pref": "Si le modèle a été créé dans l'une des applications existantes — HeyGeo, Sketchpad, Web Sketchpad, GeoGebra, Geometry Expressions — choisissez plutôt le type de fichier de cette application, pour que le modèle soit bien étiqueté et ouvert.",
+    "html_warning_admin": "Une page HTML écrite par vous exécute tout le script qu'elle contient. Un administrateur peut supprimer le modèle s'il est soupçonné de pouvoir nuire au système.",
+    "html_warning_confirm": "Je comprends, téléverser",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {

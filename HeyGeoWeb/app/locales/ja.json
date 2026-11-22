@@ -2,6 +2,8 @@
   "nav": {
     "dashboard": "ダッシュボード",
     "settings": "設定",
+    "help": "ヘルプ",
+    "gallery": "ギャラリー",
     "login": "ログイン",
     "register": "新規登録",
     "admin": "★ 管理者",
@@ -308,6 +310,12 @@
     "type_geogebra_hint": "GeoGebra からエクスポートした .ggb ファイルを選択",
     "type_gx_label": "HTML ファイル（Geometry Expressions）",
     "type_gx_hint": "Geometry Expressions からエクスポートした .html ファイルを選択",
+    "type_html_label": "HTML ページ（自己完結）",
+    "type_html_hint": "自分で作成した .html ファイルを選択（canvas / SVG / JSXGraph / three.js）",
+    "html_warning_title": "自作の HTML ページをアップロードしようとしています",
+    "html_warning_pref": "既存のアプリ — HeyGeo、Sketchpad、Web Sketchpad、GeoGebra、Geometry Expressions — で作成したモデルは、それぞれのファイル形式を選んでください。正しい名前と正しいビューアで開かれます。",
+    "html_warning_admin": "自作の HTML ページは、中に含まれるスクリプトを実行します。システムに危害が及ぶ疑いがある場合、Admin はモデルを削除することがあります。",
+    "html_warning_confirm": "了解しました。アップロード",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {

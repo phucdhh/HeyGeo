@@ -115,6 +115,24 @@ function Thumbnail({ jsonData }: { jsonData: unknown }) {
     );
   }
 
+  // Authored HTML model
+  if (rec?.__type === 'html') {
+    return (
+      <svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <rect width="200" height="120" fill="#f1f5f9"/>
+        <rect x="26" y="18" width="148" height="80" rx="8" fill="none" stroke="#64748b" strokeWidth="2"/>
+        <line x1="26" y1="38" x2="174" y2="38" stroke="#cbd5e1" strokeWidth="1.5"/>
+        <circle cx="38" cy="28" r="3" fill="#94a3b8"/>
+        <circle cx="50" cy="28" r="3" fill="#94a3b8"/>
+        <circle cx="62" cy="28" r="3" fill="#94a3b8"/>
+        <path d="M 74 58 L 60 72 L 74 86" fill="none" stroke="#0f172a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M 126 58 L 140 72 L 126 86" fill="none" stroke="#0f172a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+        <line x1="112" y1="54" x2="96" y2="90" stroke="#475569" strokeWidth="3" strokeLinecap="round"/>
+        <text x="100" y="116" textAnchor="middle" fontSize="9" fill="#475569" fontFamily="sans-serif" fontWeight="600">HTML</text>
+      </svg>
+    );
+  }
+
   const data = jsonData as HGData | null;
 
   // Code Mode models: show a "</ >" badge instead of 📐
@@ -363,7 +381,7 @@ export default function ModelCard({ id, title, description, isPublic, viewCount,
                   </Link>
                 );
               }
-              if (modelType === 'gx') {
+              if (modelType === 'gx' || modelType === 'html') {
                 return (
                   <button
                     onClick={() => {

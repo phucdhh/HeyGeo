@@ -9,7 +9,7 @@ import { parseGsp } from '@/lib/gsp/gspBinary';
 import { gspToHeyGeo } from '@/lib/gsp/gspToHeyGeo';
 import '@/lib/i18n';
 
-type ModelType = 'heygeo' | 'sketchpad' | 'wsp' | 'geogebra' | 'gx';
+type ModelType = 'heygeo' | 'sketchpad' | 'wsp' | 'geogebra' | 'gx' | 'html';
 
 const FILE_TYPES: { value: ModelType; accept: string; icon: string }[] = [
   { value: 'heygeo',    accept: '.json,application/json',         icon: '📐' },
@@ -17,6 +17,7 @@ const FILE_TYPES: { value: ModelType; accept: string; icon: string }[] = [
   { value: 'wsp',       accept: '.js,application/javascript', icon: '🌐' },
   { value: 'geogebra',  accept: '.ggb',                       icon: '🔷' },
   { value: 'gx',        accept: '.html,text/html',            icon: '📊' },
+  { value: 'html',      accept: '.html,text/html',            icon: '🧩' },
 ];
 
 // Parse a -json.js file: "var varname = { ... };" → extract the JSON object
@@ -30,6 +31,7 @@ function parseWspJs(text: string, errorMsg: string): object {
 const GEOGEBRA_2D_THUMB_SVG = `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="120" fill="#f0fdf4"/><line x1="18" y1="62" x2="186" y2="62" stroke="#bbf7d0" stroke-width="2"/><line x1="103" y1="6" x2="103" y2="114" stroke="#bbf7d0" stroke-width="2"/><path d="M 22 108 Q 103 6 184 108" fill="none" stroke="#3b82f6" stroke-width="2.5"/><circle cx="103" cy="62" r="28" fill="none" stroke="#22c55e" stroke-width="2"/><circle cx="103" cy="62" r="4" fill="#ef4444"/><circle cx="131" cy="62" r="3" fill="#3b82f6"/><text x="100" y="116" text-anchor="middle" font-size="9" fill="#16a34a" font-family="sans-serif" font-weight="600">GeoGebra</text></svg>`;
 const GEOGEBRA_3D_THUMB_SVG = `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="120" fill="#eff6ff"/><polygon points="100,12 168,52 100,92 32,52" fill="none" stroke="#3b82f6" stroke-width="2"/><line x1="100" y1="12" x2="100" y2="92" stroke="#93c5fd" stroke-width="1.5"/><line x1="32" y1="52" x2="168" y2="52" stroke="#93c5fd" stroke-width="1.5"/><polygon points="100,12 168,52 100,108" fill="#dbeafe" fill-opacity="0.6" stroke="#2563eb" stroke-width="1.5"/><polygon points="100,12 32,52 100,108" fill="#bfdbfe" fill-opacity="0.5" stroke="#2563eb" stroke-width="1.5"/><circle cx="100" cy="108" r="3" fill="#1d4ed8"/><circle cx="100" cy="12" r="3" fill="#1d4ed8"/><text x="100" y="118" text-anchor="middle" font-size="9" fill="#1d4ed8" font-family="sans-serif" font-weight="600">GeoGebra 3D</text></svg>`;
 const GX_THUMB_SVG = `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="120" fill="#fefce8"/><line x1="18" y1="62" x2="186" y2="62" stroke="#fef08a" stroke-width="2"/><line x1="100" y1="6" x2="100" y2="114" stroke="#fef08a" stroke-width="2"/><circle cx="100" cy="62" r="36" fill="none" stroke="#f59e0b" stroke-width="2"/><line x1="64" y1="26" x2="136" y2="98" stroke="#d97706" stroke-width="1.5"/><circle cx="64" cy="26" r="3.5" fill="#b45309"/><circle cx="136" cy="98" r="3.5" fill="#b45309"/><circle cx="100" cy="62" r="3.5" fill="#b45309"/><text x="100" y="116" text-anchor="middle" font-size="9" fill="#b45309" font-family="sans-serif" font-weight="600">Geometry Expressions</text></svg>`;
+const HTML_THUMB_SVG = `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="120" fill="#f1f5f9"/><rect x="26" y="18" width="148" height="80" rx="8" fill="none" stroke="#64748b" stroke-width="2"/><line x1="26" y1="38" x2="174" y2="38" stroke="#cbd5e1" stroke-width="1.5"/><circle cx="38" cy="28" r="3" fill="#94a3b8"/><circle cx="50" cy="28" r="3" fill="#94a3b8"/><circle cx="62" cy="28" r="3" fill="#94a3b8"/><path d="M 74 58 L 60 72 L 74 86" fill="none" stroke="#0f172a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M 126 58 L 140 72 L 126 86" fill="none" stroke="#0f172a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="112" y1="54" x2="96" y2="90" stroke="#475569" stroke-width="3" stroke-linecap="round"/><text x="100" y="116" text-anchor="middle" font-size="9" fill="#475569" font-family="sans-serif" font-weight="600">HTML</text></svg>`;
 
 export default function NewModelPage() {
   const router = useRouter();
@@ -44,6 +46,7 @@ export default function NewModelPage() {
   const [error, setError]         = useState('');
   const [notes, setNotes]         = useState<string[]>([]);
   const [loading, setLoading]     = useState(false);
+  const [htmlWarning, setHtmlWarning] = useState(false);
 
   const currentType = FILE_TYPES.find((ft) => ft.value === modelType)!;
   const currentLabel = t(`upload.type_${modelType}_label` as Parameters<typeof t>[0]);
@@ -56,6 +59,7 @@ export default function NewModelPage() {
     setFileName('');
     setError('');
     setNotes([]);
+    setHtmlWarning(false);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -64,7 +68,7 @@ export default function NewModelPage() {
     setError('');
     setNotes([]);
 
-    if (modelType === 'gx') {
+    if (modelType === 'gx' || modelType === 'html') {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const text = ev.target?.result as string;
@@ -75,8 +79,8 @@ export default function NewModelPage() {
           const autoTitle = (titleMatch?.[1] ?? h1Match?.[1] ?? '').trim();
           if (autoTitle) setForm((f) => ({ ...f, title: autoTitle }));
         }
-        setJsonData({ __type: 'gx', htmlContent: text });
-        setThumbnailSvg(GX_THUMB_SVG);
+        setJsonData({ __type: modelType, htmlContent: text });
+        setThumbnailSvg(modelType === 'gx' ? GX_THUMB_SVG : HTML_THUMB_SVG);
       };
       reader.readAsText(file);
       return;
@@ -173,7 +177,17 @@ export default function NewModelPage() {
     e.preventDefault();
     if (!jsonData) { setError(t('upload.error_no_file')); return; }
     if (!form.title.trim()) { setError(t('upload.error_no_title')); return; }
+    // A plain HTML page runs whatever script it contains, so the user confirms
+    // they really mean this type before it reaches the server.
+    if (modelType === 'html') {
+      if (!htmlWarning) { setHtmlWarning(true); return; }
+      setHtmlWarning(false);
+    }
 
+    await uploadModel();
+  };
+
+  const uploadModel = async () => {
     setLoading(true);
     setError('');
 
@@ -324,6 +338,51 @@ export default function NewModelPage() {
           </Link>
         </div>
       </form>
+
+      {htmlWarning && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onClick={() => setHtmlWarning(false)}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="html-warning-title"
+            className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-3">
+              <span className="text-2xl leading-none">⚠️</span>
+              <h2 id="html-warning-title" className="text-lg font-bold text-gray-900">
+                {t('upload.html_warning_title')}
+              </h2>
+            </div>
+            <div className="space-y-3 text-sm text-gray-700">
+              <p>{t('upload.html_warning_pref')}</p>
+              <p className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800">
+                {t('upload.html_warning_admin')}
+              </p>
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setHtmlWarning(false)}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                {t('upload.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setHtmlWarning(false); void uploadModel(); }}
+                disabled={loading}
+                className="px-4 py-2 text-sm rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-colors disabled:opacity-50"
+              >
+                {loading ? t('upload.submitting') : t('upload.html_warning_confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

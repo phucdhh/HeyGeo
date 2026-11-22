@@ -14,6 +14,16 @@ describe('the tool a saved model names', () => {
     expect(toolCategoryFromJson({ __type: 'geogebra', base64: '' })).toBe('GeoGebra');
   });
 
+  it('tells an authored HTML page apart from a Geometry Expressions export', () => {
+    expect(toolCategoryFromJson({ __type: 'gx', htmlContent: '<!DOCTYPE html>' })).toBe('Geometry Expressions');
+    expect(toolCategoryFromJson({ __type: 'html', htmlContent: '<!DOCTYPE html>' })).toBe('HTML');
+  });
+
+  it('drops the previous tool category when an HTML page changes type', () => {
+    expect(mergeToolCategory(['Hình học không gian', 'Geometry Expressions'], { __type: 'html', htmlContent: '' }))
+      .toEqual(['Hình học không gian', 'HTML']);
+  });
+
   it('falls back to the platform itself for a document with no type', () => {
     expect(toolCategoryFromJson({ elements: [] })).toBe('HeyGeo');
     expect(toolCategoryFromJson({ elements: [], codeMode: true })).toBe('JSXGraph');

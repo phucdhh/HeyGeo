@@ -2,6 +2,8 @@
   "nav": {
     "dashboard": "儀表板",
     "settings": "設定",
+    "help": "說明",
+    "gallery": "展覽館",
     "login": "登入",
     "register": "註冊",
     "admin": "★ 管理員",
@@ -308,6 +310,12 @@
     "type_geogebra_hint": "選擇從 GeoGebra 匯出的 .ggb 檔案",
     "type_gx_label": "HTML 檔案（Geometry Expressions）",
     "type_gx_hint": "選擇從 Geometry Expressions 匯出的 .html 檔案",
+    "type_html_label": "HTML 頁面（自足檔案）",
+    "type_html_hint": "選擇您自行撰寫的 .html 檔案（canvas / SVG / JSXGraph / three.js）",
+    "html_warning_title": "您正在上傳自行撰寫的 HTML 頁面",
+    "html_warning_pref": "如果模型是在現有的應用程式中編寫 — HeyGeo、Sketchpad、Web Sketchpad、GeoGebra、Geometry Expressions — 請選擇該應用程式的檔案類型，模型才會被正確標註與開啟。",
+    "html_warning_admin": "自行撰寫的 HTML 頁面會執行其中包含的任何腳本。若管理員懷疑該模型可能危害系統，可能會將其刪除。",
+    "html_warning_confirm": "我已了解，繼續上傳",
     "error_bad_gsp": "Could not read any objects from this .gsp file."
   },
   "release": {
