@@ -12,6 +12,7 @@ import CindyJSViewer from '@/components/CindyJSViewer';
 import MathboxViewer from '@/components/MathboxViewer';
 import LatexEditor from '@/components/LatexEditor';
 import LatexRenderer from '@/components/LatexRenderer';
+import { htmlEditorUrl, htmlPageType } from '@/lib/htmlModel';
 
 const MATH_CATEGORIES = [
   'Số học', 'Đại số', 'Hình học phẳng', 'Hình học không gian',
@@ -104,7 +105,7 @@ export default function ModelDetailClient({ model: initial, shareUrl: initialSha
   const replaceJsonRef    = useRef<HTMLInputElement>(null);
 
   const rec0 = model.jsonData as Record<string, unknown>;
-  const isHtmlPage = rec0.__type === 'gx' || rec0.__type === 'html';
+  const isHtmlPage = htmlPageType(model.jsonData) !== null;
   const autoToolCategory = toolLabelFromType(rec0);
   const isHeyGeo = autoToolCategory === 'HeyGeo';
 
@@ -317,9 +318,12 @@ export default function ModelDetailClient({ model: initial, shareUrl: initialSha
             </>
           )}
 
-          {/* HTML-page models (authored pages and Geometry Expressions exports): download + replace */}
+          {/* HTML-page models (authored pages and Geometry Expressions exports): edit, download + replace */}
           {isHtmlPage && !editing && (
             <>
+              <Link href={htmlEditorUrl(model.id)} className="btn-primary !py-1.5 !text-xs">
+                ✏️ Sửa HTML
+              </Link>
               <button onClick={downloadHtml} className="btn-secondary !py-1.5 !text-xs">
                 📥 Tải xuống HTML
               </button>

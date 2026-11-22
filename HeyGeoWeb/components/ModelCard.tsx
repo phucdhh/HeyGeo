@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import LatexRenderer from '@/components/LatexRenderer';
 import { sanitizeSvg, isSvgVisuallyEmpty } from '@/lib/sanitizeSvg';
+import { htmlEditorUrl, htmlPageType } from '@/lib/htmlModel';
 
 // ── Mini SVG thumbnail ─────────────────────────────────────────
 interface HGElem {
@@ -381,23 +382,29 @@ export default function ModelCard({ id, title, description, isPublic, viewCount,
                   </Link>
                 );
               }
-              if (modelType === 'gx' || modelType === 'html') {
+              if (htmlPageType(jsonData)) {
                 return (
-                  <button
-                    onClick={() => {
-                      const html = (jsonData as Record<string, unknown>).htmlContent as string;
-                      const blob = new Blob([html], { type: 'text/html' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `${title.replace(/[^a-z0-9]/gi, '_')}.html`;
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    }}
-                    className="btn-primary !py-1.5 !text-xs"
-                  >
-                    📥 Tải xuống
-                  </button>
+                  <>
+                    <Link href={htmlEditorUrl(id)} className="btn-primary !py-1.5 !text-xs">
+                      ✏️ HTML
+                    </Link>
+                    <button
+                      onClick={() => {
+                        const html = (jsonData as Record<string, unknown>).htmlContent as string;
+                        const blob = new Blob([html], { type: 'text/html' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${title.replace(/[^a-z0-9]/gi, '_')}.html`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="btn-secondary !py-1.5 !text-xs"
+                      title="Tải trang HTML về máy"
+                    >
+                      📥
+                    </button>
+                  </>
                 );
               }
               return (

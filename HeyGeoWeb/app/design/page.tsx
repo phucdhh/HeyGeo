@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { verifyToken } from '@/lib/jwt';
 import { prisma } from '@/lib/prisma';
 import DesignStudio from '@/components/designer/DesignStudio';
+import { htmlPageType } from '@/lib/htmlModel';
 import type { HeyGeoData } from '@/components/designer/designTypes';
 
 export const metadata = { title: 'Design – HeyGeo' };
@@ -37,6 +38,9 @@ export default async function DesignPage({ searchParams }: Props) {
       select: { id: true, jsonData: true, description: true, isPublic: true },
     });
     if (model) {
+      // A model that carries a whole HTML page has no elements to design; saving
+      // one here would overwrite the page with an empty board.
+      if (htmlPageType(model.jsonData)) redirect(`/html?id=${model.id}`);
       initialData = model.jsonData as unknown as HeyGeoData;
       modelId = model.id;
       initialDescription = model.description ?? '';

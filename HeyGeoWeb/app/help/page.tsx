@@ -193,8 +193,8 @@ export default async function HelpPage() {
                 ['6', 'Cinderella → CindyJS', '/cindy', 'JavaScript hoặc HTML fragment', 'CindyJS v0.8', 'Có', 'Có (cindyjs.org)'],
                 ['7', 'MathBox (WebGL)', '/mathbox', 'JavaScript', 'three.js + MathBox 2.3.1 (iframe)', 'Có', 'Không'],
                 ['8', 'GeoGebra .ggb', 'GeoGebra → tải lên, hoặc /geogebra', 'base64 của file .ggb', 'Applet GeoGebra', 'Có (/geogebra?id=…)', 'Có (cdn.geogebra.org)'],
-                ['9', 'Geometry Expressions', 'GE → Export HTML → tải lên', 'HTML nguyên vẹn', 'iframe sandbox', 'Không (chỉ xem)', 'Tùy file export'],
-                ['10', 'HTML tự viết', 'Bạn tự viết trang → tải lên', 'HTML nguyên vẹn', 'Trình duyệt của trang (canvas / three.js / JSXGraph…)', 'Không (chỉ xem)', 'Tùy trang'],
+                ['9', 'Geometry Expressions', 'GE → Export HTML → tải lên', 'HTML nguyên vẹn', 'iframe sandbox', 'Có (/html?id=… sửa mã HTML)', 'Tùy file export'],
+                ['10', 'HTML tự viết', 'Bạn tự viết trang → tải lên, hoặc /html', 'HTML nguyên vẹn', 'Trình duyệt của trang (canvas / three.js / JSXGraph…)', 'Có (/html?id=…)', 'Tùy trang'],
               ]}
             />
             <p className="text-xs text-gray-500">
@@ -522,7 +522,8 @@ export default async function HelpPage() {
                 <><K>Trang bạn tự viết:</K> chọn loại <K>HTML tự chứa</K> thay vì Geometry Expressions. Cách chạy y hệt nhau, chỉ khác nhãn — mô hình sẽ mang danh mục <K>HTML</K> trong Gallery chứ không bị gán cho Geometry Expressions.</>,
                 <>Toàn bộ HTML được lưu trong mô hình; khi xem, HeyGeo đặt vào <Code>&lt;iframe sandbox="allow-scripts"&gt;</Code> — runtime của GE dùng <Code>eval()</Code> nên cần <Code>allow-scripts</Code>, và không cấp <Code>allow-same-origin</Code> để file nạp không đụng cookie của bạn.</>,
                 <>Kéo điểm, đổi tham số trong hình là do chính trang HTML đó, không phải HeyGeo.</>,
-                <><K>Chỉ xem:</K> HeyGeo không có editor cho hai loại này. Muốn sửa, sửa trong GE (hoặc trong trình soạn thảo của bạn) rồi export lại; trang chi tiết mô hình có <K>🔄 Thay thế file</K> và <K>📥 Tải xuống HTML</K>.</>,
+                <><K>Sửa:</K> nút <K>✏️ Sửa HTML</K> mở <Code>/html?id=…</Code> — editor CodeMirror bên trái, iframe preview bên phải, <K>Ctrl+Enter</K> chạy lại, <K>Ctrl+S</K> lưu. Lưu chỉ thay <Code>htmlContent</Code>, giữ nguyên danh mục và nhãn của mô hình.</>,
+                <><K>Hoặc làm việc với file:</K> <K>📥 Tải xuống HTML</K> rồi sửa bằng trợ lý AI của bạn và <K>🔄 Thay thế file</K>; mở <Code>/html</Code> không kèm <Code>id</Code> để bắt đầu một trang trống.</>,
               ]}
             />
           </Section>

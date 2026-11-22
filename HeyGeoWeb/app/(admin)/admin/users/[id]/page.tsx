@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { Metadata } from 'next';
+import { htmlEditorUrl, htmlPageType } from '@/lib/htmlModel';
 import UserRoleForm from './UserRoleForm';
 import UserDeleteButton from './UserDeleteButton';
 import AdminNotifyForm from './AdminNotifyForm';
@@ -59,6 +60,7 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
     if (type === 'mathbox') return `/mathbox?id=${m.id}`;
     if (type === 'wsp' || type === 'sketchpad') return `/wsp?id=${m.id}`;
     if (type === 'geogebra') return `/geogebra?id=${m.id}`;
+    if (htmlPageType(m.jsonData)) return htmlEditorUrl(m.id);
     return `/design?id=${m.id}`;
   }
 
@@ -71,6 +73,9 @@ export default async function AdminUserDetailPage({ params }: PageProps) {
     if (type === 'mathbox') return 'MathBox';
     if (type === 'wsp' || type === 'sketchpad') return 'WSP';
     if (type === 'geogebra') return 'GeoGebra';
+    const page = htmlPageType(m.jsonData);
+    if (page === 'gx') return 'Geometry Expressions';
+    if (page) return 'HTML';
     return 'Design';
   }
 
